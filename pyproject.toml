@@ -14,3 +14,12 @@ dependencies = [
     "rapidocr-onnxruntime>=1.4.4",
     "toml>=0.10.2",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.17.3",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
