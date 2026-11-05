@@ -7,6 +7,14 @@ import atexit
 import socket
 import time
 
+# 摇杆坐标的最大值
+STICK_MAX = 0x7FFF
+
+
+def _hex(value: int) -> str:
+    """摇杆坐标转成 sys-botbase 要的十六进制文本，负数写成 -0x...。"""
+    return f"-{abs(value):#x}" if value < 0 else f"{value:#x}"
+
 
 class Switch:
     def __init__(self, host: str, port: int = 6000, timeout: float = 5.0):
@@ -59,6 +67,17 @@ class Switch:
         """
         self._send(f"click {button}")
         time.sleep(delay)
+
+    def stick(self, side: str, x: int, y: int, hold: float):
+        """把摇杆推到 (x, y)，保持 hold 秒，再回中。
+
+        side: LEFT 或 RIGHT。
+        x, y: 范围 -STICK_MAX 到 STICK_MAX，x 正数向右，y 正数向上。
+        hold: 保持的秒数。
+        """
+        self._send(f"setStick {side} {_hex(x)} {_hex(y)}")
+        time.sleep(hold)
+        self._send(f"setStick {side} 0x0 0x0")
 
     def title_id(self) -> str:
         """返回当前前台游戏的 Title ID，16 位十六进制文本。"""

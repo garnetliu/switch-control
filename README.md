@@ -18,7 +18,7 @@ uv sync
 make find
 ```
 
-查找 Switch 的 ip，写入 `.env` 的 `SWITCH_IP`。
+查找 Switch 的 ip，写入 `.env` 的 `SWITCH_IP`，并 ping 一下检查延迟。
 
 ```bash
 make start
