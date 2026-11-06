@@ -6,3 +6,4 @@ logs/
 .idea/
 .env
 state/
+.mcp.json
