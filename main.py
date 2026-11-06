@@ -1,5 +1,3 @@
-import os
-
 from autostep.battle import battle
 from autostep.catch import catch
 from autostep.initialize import initialize
@@ -24,7 +22,7 @@ def main():
         "catch": catch,
         "select_pokemon": select_pokemon,
     }
-    switch.connect(os.environ["SWITCH_IP"], int(os.environ["SWITCH_PORT"]))
+    switch.connect()
     step = "initialize"
     while step is not None:
         log(f"开始 {step}")
