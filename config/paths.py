@@ -8,5 +8,7 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 STATE_FILE = Path(__file__).parent.parent / "state" / "run.json"
 # 日志和出错时的截图
 LOG_DIR = Path(__file__).parent.parent / "logs"
+# 调试用：每次检查截图时框出检查区域的图，环境变量 SAVE_CHECKS=1 时才存，见 lib/debug_checker.py
+CHECK_DIR = LOG_DIR / "checks"
 # 每局结束时的战果截图（带走界面、资料页），用来事后核对闪光判定
 CATCH_DIR = LOG_DIR / "catches"

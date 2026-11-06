@@ -13,6 +13,7 @@ from collections.abc import Callable
 from config.paths import LOG_DIR
 from config.timing import POLL_INTERVAL
 from lib import switch
+from lib.debug_checker import SavingImageChecker, should_save
 from lib.log import log
 from tool.check_image import ImageChecker
 from tool.image import save
@@ -60,5 +61,10 @@ def wait_until(check: Callable[[], bool], timeout: float, what: str) -> None:
 
 
 def capture() -> ImageChecker:
-    """截一张当前画面。使用全局连接，需要先调用 switch.connect。"""
-    return ImageChecker(switch.get().pixel_peek())
+    """截一张当前画面。使用全局连接，需要先调用 switch.connect。
+
+    要存检查区域时（见 lib/debug_checker.py 的 should_save）返回 SavingImageChecker：
+    之后每检查一个区域都会框出来存一张图。
+    """
+    checker = SavingImageChecker if should_save() else ImageChecker
+    return checker(switch.get().pixel_peek())

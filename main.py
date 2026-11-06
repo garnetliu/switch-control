@@ -5,6 +5,7 @@ from autostep.join import join
 from autostep.path import path
 from autostep.select_pokemon import select_pokemon
 from lib import switch
+from lib.debug_checker import set_step
 from lib.env import load_env
 from lib.log import init_log, log
 
@@ -26,6 +27,7 @@ def main():
     step = "initialize"
     while step is not None:
         log(f"开始 {step}")
+        set_step(step)
         step = steps[step]()
     log("结束")
 
