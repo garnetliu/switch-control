@@ -79,6 +79,17 @@ class Run:
         self.start_members: list[dict[str, Any]] = []
         # 扔完球之后各种球还剩几个：{球名: 个数}，读不出的不记
         self.balls: dict[str, int] = {}
+        # 下面这些只用来写每局结束时的战报
+        # 本次启动的第几局
+        self.round = 0
+        # 目标路线的得分
+        self.path_score: float | None = None
+        # 每场对战倒下了几次：{节点序号: 次数}
+        self.battle_faints: dict[int, int] = {}
+        # 每只抓到的宝可梦闪光框占比的最高值：(资料页上的名字, 最高值)，按查的顺序
+        self.shiny_peaks: list[tuple[str, float]] = []
+        # 这一局存下的战果截图
+        self.screenshots: list[str] = []
         # 在哪个节点从研究员那里换来了哪只：{节点序号: name_id}
         self.scientist: dict[int, str] = {}
         # 每个节点遇到的对手：{节点序号: name_id}
@@ -190,6 +201,7 @@ class Run:
             "caught": self.caught,
             "rows": rows,
             "target_path": [[node.row, node.col] for node in self.target_path],
+            "path_score": self.path_score,
             "scientist": {str(index): name_id for index, name_id in self.scientist.items()},
             "opponents": {str(index): name_id for index, name_id in self.opponents.items()},
             "plan": self.plan,
@@ -209,6 +221,7 @@ class Run:
                 int(row), [TypeMatch(type_id, score, tuple(loc)) for type_id, score, loc in matches]
             )
         self.target_path = [self.rows[row][col] for row, col in state["target_path"]]
+        self.path_score = state.get("path_score")
 
     def paths(self, truncate: bool = False) -> list[list[BossNode]]:
         """从起点到首领的所有路线。truncate 为 True 时去掉起点和首领，只留中间三个节点。"""
@@ -231,6 +244,8 @@ class Run:
 
 
 _current: Run | None = None
+# 本次启动开了几局
+_rounds = 0
 
 
 def start(boss: str, plan: dict[str, Any] | None = None) -> Run:
@@ -238,11 +253,16 @@ def start(boss: str, plan: dict[str, Any] | None = None) -> Run:
 
     plan: keep path 时上一局的状态（load 的结果），这一局用它校验画面、沿用结果。
     """
-    global _current
+    global _current, _rounds
+    _rounds += 1
     _current = Run(boss)
+    _current.round = _rounds
     if plan is not None:
         # 上一局自己的 plan 用不到了，不带过来，免得状态文件一层层套下去
         _current.plan = {**plan, "plan": None}
+        # 沿用锁定的图，这一局一开始就是锁定的：中途出错停下时状态文件里也还是锁定，
+        # 下次启动接着刷同一张图（真机上中途崩溃过一次，锁就丢了）
+        _current.keep_path = True
     return _current
 
 

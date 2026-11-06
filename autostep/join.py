@@ -1,38 +1,38 @@
+import time
+from dataclasses import replace
+
 from config.game import BOSS
 from config.layout import (
     ABILITY_RECTS,
     DEN_TEXT_RECT,
     DIALOG_RECT,
+    LABEL_ICON_LOWER,
+    LABEL_ICON_SCORE,
+    LABEL_ICON_UPPER,
     LOBBY_MENU_RECT,
     MOVES_RECTS,
     NAME_RECTS,
     PATH_RECTS,
     POPUP_RECT,
+    ROW_MAX_SPREAD,
     STARTER_PANEL_RECTS,
     STARTER_TEAM_NAME_RECTS,
     YES_NO_RECTS,
 )
+from config.paths import MAP_PAN_DIR
 from config.timing import DEFAULT_TIMEOUT, LOAD_TIMEOUT, TICK_SECONDS
 from lib import data, pokemon, run, switch
-from lib.dialog import advance_until, menu_items, menu_selected
+from lib.dialog import advance_until, menu_last_item, press_until
 from lib.log import log
 from lib.read import read_team
 from lib.run import FIRST_ROW, SECOND_ROW, THIRD_ROW
-from lib.scientist import open_start_dialog
 from lib.scoring import weighted_score
 from lib.wait import capture, wait_for
-from tool.check_image import ImageChecker
-from tool.image import locate_template, text_lines
+from tool.check_image import BASE_SIZE, ImageChecker
+from tool.image import locate_template, save, text_lines
 from tool.text import levenshtein, pad
-from type.image import Hsv, Rect
+from type.image import Rect
 from type.path import TypeMatch
-
-# 路线图上的属性图标是白色的，先按这个颜色范围转成黑白图，再和二值化的图标模板匹配
-ICON_LOWER: Hsv = (0, 0, 200)
-ICON_UPPER: Hsv = (180, 50, 255)
-# 标签区域里认出属性图标的匹配度至少是这么多。真机上认对的都在 0.90 以上，
-# 区域里没有这一层的标签时在 0.24 以下
-MIN_LABEL_SCORE = 0.85
 
 
 def join() -> str:
@@ -70,25 +70,17 @@ def join() -> str:
 def _select_target() -> None:
     """从科学家面前开始对话，在传说菜单里选中 BOSS 并确认，一直到进入选初始宝可梦的界面。
 
-    对话顺序（真机实测）：开场白 →「现在就出发 / 我想听讲解 / 还是先算了」→ 选「现在就出发」
-    →「看来您手边有宝可梦所在位置的记录呢」→「请问您要去找哪个宝可梦呢」→ 传说菜单。
-    有中途退出的罚款时，开场白之前先付罚款，见 lib/scientist.py。
+    对话顺序（真机实测）：（中途退出过时先有罚款或提醒）→ 开场白 →「现在就出发 / 我想听讲解 / 还是先算了」
+    → 选「现在就出发」→「看来您手边有宝可梦所在位置的记录呢」→「请问您要去找哪个宝可梦呢」→ 传说菜单。
     """
-    go = "现在就出发"
-    open_start_dialog()
-    image = advance_until(lambda screen: go in menu_items(screen), f"「{go}」的菜单")
-    if menu_selected(image) != menu_items(image).index(go):
-        raise RuntimeError(f"菜单上光标不在「{go}」上")
-    switch.get().click("A", 0)
-    # 菜单消失才算选好了，否则下面会在还没消失的菜单上再按一次 A
-    wait_for(lambda screen: go not in menu_items(screen), DEFAULT_TIMEOUT, f"「{go}」的菜单消失")
-    # 菜单里能认出最后一项「不指定」，就是传说菜单弹出来了
-    image = advance_until(lambda screen: menu_items(screen)[-1:] == ["不指定"], "传说菜单")
+    # 一直按 A，直到传说菜单弹出来（菜单最后一行是「不指定」）。中途退出的罚款、提醒、开场白，
+    # 开场白菜单上的「现在就出发」（光标默认在它上面）都用 A 过掉
+    image = press_until(lambda screen: menu_last_item(screen) == "不指定", "传说菜单")
     _select_menu_item(image, POPUP_RECT, data.boss_pokemon()[BOSS].name(), "传说菜单")
     switch.get().click("A", 0)
     # 选好传说之后：「要保存目前为止的冒险记录吗？」→「是 / 否」→ 选「是」保存 → 极巨大冒险的大厅
     wait_for(
-        lambda screen: screen.has_text(DIALOG_RECT, "要保存目前为止的冒险记录"),
+        lambda screen: screen.has_text(DIALOG_RECT, "要保存目前为止的"),
         DEFAULT_TIMEOUT,
         "要不要保存的提示",
     )
@@ -127,17 +119,27 @@ def _select_starter() -> None:
     if plan is not None and _same_names(names, plan["candidates"]):
         candidates = [data.rental_pokemon()[name_id] for name_id in plan["candidates"]]
         selection = plan["selection"]
-        log(f"三只的名字 {names} 和上一局一致，直接选上一局选的第 {selection} 个")
+        log(f"三只的名字 {names} 和上一局一致，直接选上一局选的第 {selection + 1} 个")
     else:
         if plan is not None:
             log(f"三只的名字 {names} 和上一局不一致，不再沿用上一局，照常读和算", "WARNING")
             current.plan = None
-        # 名字加上特性、招式一起认，顺序和屏幕上一致
+            current.keep_path = False
+        # 名字加特性就能认出是哪只；名字和特性都一样的（只有野蛮鲈鱼红条纹和蓝条纹）才读招式区分。
+        # 顺序和屏幕上一致
         candidates = []
         for name, ability_rect, moves_rect in zip(names, ABILITY_RECTS, MOVES_RECTS):
-            match = pokemon.identify(
-                name, image.read_text(ability_rect).strip(), image.read_text(moves_rect).strip()
-            )
+            ability = image.read_text(ability_rect)
+            match = pokemon.identify(name, ability)
+            same = [
+                rental
+                for rental in data.rental_pokemon().values()
+                if rental.name() == match.pokemon.name()
+                and rental.ability() == match.pokemon.ability()
+            ]
+            if len(same) > 1:
+                moves = "".join(text for text, _ in text_lines(image, moves_rect))
+                match = pokemon.identify(name, ability, moves)
             level = "WARNING" if match.is_poor else "DEBUG"
             log(f"识别「{match.text}」为 {match.pokemon.name_id}，编辑距离 {match.distance}", level)
             candidates.append(match.pokemon)
@@ -156,8 +158,8 @@ def _select_starter() -> None:
     current.encountered.update(current.candidates)
     current.selection = selection
     _move_starter_cursor(selection)
-    current.pokemon = candidates[selection]
-    log(f"选了第 {selection} 个：{current.pokemon.name_id}")
+    current.pokemon = replace(candidates[selection], hp=1.0)
+    log(f"选了第 {selection + 1} 个：{current.pokemon.name_id}")
     switch.get().click("A", 0)
 
     if current.plan is not None:
@@ -178,11 +180,19 @@ def _read_starter_team(screen: ImageChecker, picked: dict[int, str]) -> bool:
 
     4 行都有名字了返回 True；名单整个空了（界面已经切走）也返回 True，这时 picked 可能不全。
     """
-    texts = [screen.read_text(rect).strip() for rect in STARTER_TEAM_NAME_RECTS]
-    for row, text in enumerate(texts):
+    # 只识别还没读到的行：最后一个队友选完之后名单很快就切走了，每帧都把 4 行识别一遍会赶不上
+    texts = {
+        row: screen.read_text(rect).strip()
+        for row, rect in enumerate(STARTER_TEAM_NAME_RECTS)
+        if row not in picked
+    }
+    for row, text in texts.items():
         if text and text != "选择中":
-            picked.setdefault(row, text)
-    return len(picked) == len(STARTER_TEAM_NAME_RECTS) or (bool(picked) and not any(texts))
+            picked[row] = text
+    if len(picked) == len(STARTER_TEAM_NAME_RECTS):
+        return True
+    # 第 1 行是自己，名单还在时一定有名字；它也没了就是界面已经切走
+    return bool(picked) and not screen.read_text(STARTER_TEAM_NAME_RECTS[0]).strip()
 
 
 def _record_starter_team(picked: dict[int, str]) -> None:
@@ -196,7 +206,8 @@ def _record_starter_team(picked: dict[int, str]) -> None:
         match = pokemon.identify(picked[row])
         level = "WARNING" if match.is_poor else "DEBUG"
         log(f"名单第 {row + 1} 行「{match.text}」认成 {match.pokemon.name_id}", level)
-        members.append(match.pokemon)
+        # 用副本，之后改血量、扣 PP 不会改到共用的数据；刚出发都是满血
+        members.append(replace(match.pokemon, hp=1.0))
     own, *teammates = members
     if current.pokemon is not None and own.name_id != current.pokemon.name_id:
         log(f"名单上自己的是 {own.name_id}，和选的 {current.pokemon.name_id} 不一致", "WARNING")
@@ -231,10 +242,11 @@ def _select_path() -> None:
     adventure_timeout = 60.0
 
     current = run.get()
-    image = wait_for(_map_shown, adventure_timeout, "路线图")
+    image, pan_rows = _watch_intro_pan(adventure_timeout)
     if len(current.team) < 3:
-        # 选宝可梦界面上没读全队伍，在路线图左边的队伍栏上读
-        read_team(image)
+        # 选宝可梦界面上没读全队伍，在路线图左边的队伍栏上读。刚出发大家都是满血，不读血条
+        # （路线图上血条的位置不对，读出来是 67%、17% 之类的错数）
+        read_team(image, hp_rects=None)
     first_row = [_identify_type(image, rect) for rect in PATH_RECTS[FIRST_ROW]]
     plan = current.plan
     if plan is not None:
@@ -254,23 +266,49 @@ def _select_path() -> None:
             "WARNING",
         )
         current.plan = None
+        current.keep_path = False
 
-    # 刚出现时只能看到第 1 层。第 2、3 层要用右摇杆把地图往上滚，分别推 7、8 个 tick（同上游）。
-    # 推完之后等这一层每个标签区域都认出属性、并且和上一层读到的不一样，才算滚到了
     current.update_paths(FIRST_ROW, first_row)
+    if len(pan_rows) == 2:
+        current.update_paths(SECOND_ROW, pan_rows[0])
+        current.update_paths(THIRD_ROW, pan_rows[1])
+        log("开场镜头往上移的时候已经读到第 2、3 层，不用再推摇杆")
+    else:
+        log(f"开场镜头往上移的时候只读到 {len(pan_rows)} 层，推摇杆补读", "WARNING")
+        _scroll_rows(first_row)
+    _choose_target_path()
+
+
+def _scroll_rows(first_row: list[TypeMatch]) -> None:
+    """推右摇杆读第 2、3 层，记到这一局里。开场镜头往上移时没读全才用。
+
+    按固定时间推，滚的距离每次不一样（真机上推过头、标签被下面的文字框挡住过），所以一直按住
+    往上推，这一层 4 列的标签都认出属性、并且和上一层不一样就松开：标签刚进画面就停，不会推过头。
+    """
+    # 推着等一层最多几秒
+    row_timeout = 10.0
+    current = run.get()
     previous = first_row
-    for row, scroll_ticks in ((SECOND_ROW, 7), (THIRD_ROW, 8)):
-        switch.get().stick("RIGHT", 0, switch.STICK_MAX, scroll_ticks * TICK_SECONDS)
+    for row in (SECOND_ROW, THIRD_ROW):
         found: dict[str, list[TypeMatch]] = {}
-        wait_for(
-            lambda screen, row=row, previous=previous, found=found: _row_ready(
-                screen, row, previous, found
-            ),
-            DEFAULT_TIMEOUT,
-            f"路线图滚到第 {row} 层",
-        )
+        switch.get().press_stick("RIGHT", 0, switch.STICK_MAX)
+        try:
+            wait_for(
+                lambda screen, row=row, previous=previous, found=found: _row_ready(
+                    screen, row, previous, found
+                ),
+                row_timeout,
+                f"路线图滚到第 {row} 层",
+            )
+        finally:
+            switch.get().release_stick("RIGHT")
         current.update_paths(row, found["matches"])
         previous = found["matches"]
+
+
+def _choose_target_path() -> None:
+    """画出读到的路线图，给每条路线打分，把分数最高的记为这一局的目标路线。"""
+    current = run.get()
     log(f"路线形状: {current.path_type}")
     for line in _path_diagram():
         log(line)
@@ -291,6 +329,7 @@ def _select_path() -> None:
     for index, (path, score) in enumerate(zip(names, path_scores)):
         log(f"路线 {index}: {_route_name(path)}，得分 {score:.3f}", "DEBUG")
     current.target_path = current.paths()[best]
+    current.path_score = path_scores[best]
     log(f"选了路线 {best}：{_route_name(names[best])}，得分 {path_scores[best]:.3f}")
 
 
@@ -354,8 +393,39 @@ def _map_shown(screen: ImageChecker) -> bool:
     这时推摇杆不起作用（真机上因此读错过）。岔路提示是镜头停在起点之后才出现的。
     """
     return screen.has_text(DEN_TEXT_RECT, "要走哪条路") and all(
-        _identify_type(screen, rect).score >= MIN_LABEL_SCORE for rect in PATH_RECTS[FIRST_ROW]
+        _identify_type(screen, rect).score >= LABEL_ICON_SCORE for rect in PATH_RECTS[FIRST_ROW]
     )
+
+
+def _watch_intro_pan(timeout: float) -> tuple[ImageChecker, list[list[TypeMatch]]]:
+    """从选完宝可梦开始一直截图，直到路线图回到底部、出现「要走哪条路？」，返回那时的截图和
+    开场镜头往上移时依次读到的几层（最多两层：第 2 层、第 3 层）。
+
+    冒险开场时镜头会自己从起点往上移到首领，再回到底部。往上移的时候，第 2、3 层的标签会依次
+    经过 PATH_RECTS 里的检测框：4 个都认出属性、并且属性和上一组不同，就记成新的一层。
+    每一帧都存进 MAP_PAN_DIR，写明这一帧认出了什么（调试用）。
+    """
+    rows: list[list[TypeMatch]] = []
+    MAP_PAN_DIR.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    while True:
+        image = capture()
+        if _map_shown(image):
+            return image, rows
+        matches = [_identify_type(image, rect) for rect in PATH_RECTS[SECOND_ROW]]
+        types = [match.type_id if match.score >= LABEL_ICON_SCORE else "-" for match in matches]
+        new_row = (
+            "-" not in types
+            and _same_row(matches)
+            and (not rows or types != [m.type_id for m in rows[-1]])
+        )
+        if new_row and len(rows) < 2:
+            rows.append(matches)
+            log(f"开场镜头往上移，读到第 {len(rows) + 1} 层: {types}")
+        stamp = f"{time.strftime('%H%M%S')}-{int(time.time() * 10) % 10}"
+        save(image, str(MAP_PAN_DIR / f"{stamp}-{'-'.join(types)}.jpg"))
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"等了 {timeout} 秒，路线图一直没有出现")
 
 
 def _row_ready(
@@ -366,12 +436,22 @@ def _row_ready(
     满足时把这一层读到的结果放进 found["matches"]。
     """
     matches = [_identify_type(screen, rect) for rect in PATH_RECTS[row]]
-    if any(match.score < MIN_LABEL_SCORE for match in matches):
+    if any(match.score < LABEL_ICON_SCORE for match in matches) or not _same_row(matches):
         return False
     if [(m.type_id, m.location) for m in matches] == [(m.type_id, m.location) for m in previous]:
         return False
     found["matches"] = matches
     return True
+
+
+def _same_row(matches: list[TypeMatch]) -> bool:
+    """认出的几个标签高度相近，是同一层的：最高和最低差不超过 ROW_MAX_SPREAD。
+
+    检测框从 0.30 到 0.92 那么高，镜头移动时一帧里可能一列是这一层、另一列是下一层。
+    location 是图标在检测框里的像素位置，同一层的检测框上沿相同，可以直接比。
+    """
+    heights = [match.location[1] for match in matches]
+    return max(heights) - min(heights) <= ROW_MAX_SPREAD * BASE_SIZE[1]
 
 
 def _route_name(path: list[str]) -> str:
@@ -411,7 +491,7 @@ def _identify_type(image: ImageChecker, rect: Rect) -> TypeMatch:
     """认出 rect 区域里节点图标的属性，返回匹配度最高的那个。"""
     best = TypeMatch("", -1.0, (0, 0))
     for type_id, icon in data.type_icons().items():
-        score, location = locate_template(image, rect, icon, ICON_LOWER, ICON_UPPER)
+        score, location = locate_template(image, rect, icon, LABEL_ICON_LOWER, LABEL_ICON_UPPER)
         if score > best.score:
             best = TypeMatch(type_id, score, location)
     return best

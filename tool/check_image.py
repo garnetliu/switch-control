@@ -19,6 +19,8 @@ from type.image import Hsv, Rect
 BASE_SIZE = (1920, 1080)
 # 行或列的平均亮度不超过这个值，当作黑边
 BLACK_BAR = 8
+# 只识别一行字时，置信度低于这个值就当作区域里没有字
+MIN_TEXT_SCORE = 0.5
 # 选中项比其他项至少暗这么多，才认为有明确的选中项
 MIN_HIGHLIGHT_GAP = 40
 # 黑屏：亮度（V）不超过 DARK_VALUE 的像素占比至少这么多，并且亮度的标准差不超过 DARK_STD
@@ -72,9 +74,17 @@ class ImageChecker:
     # ---- 文字 ----
 
     def read_text(self, rect: Rect) -> str:
-        """识别区域内的文字，多行按从上到下的顺序拼接，没有文字返回空字符串。"""
-        result, _ = _ocr()(self._crop(self._bgr, rect))
-        return "".join(line[1] for line in result or [])
+        """识别区域内的一行文字，没有文字返回空字符串。
+
+        区域里要正好是一行字：只识别、不先检测文字在哪里，比检测加识别快几十倍
+        （真机截图上 0.01 秒对 0.5 秒）。识别结果的置信度低于 MIN_TEXT_SCORE 时当作没有字，
+        所以空的区域也能直接用来判断「有没有字」。要读多行的区域用 tool/image.py 的 text_lines。
+        """
+        result, _ = _ocr()(self._crop(self._bgr, rect), use_det=False, use_cls=False, use_rec=True)
+        if not result:
+            return ""
+        text, score = result[0]
+        return text.strip() if score >= MIN_TEXT_SCORE else ""
 
     def has_text(self, rect: Rect, text: str, min_similarity: float = 0.8) -> bool:
         """区域内识别到的文字里，有没有 text。

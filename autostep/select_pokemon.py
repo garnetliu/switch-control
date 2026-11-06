@@ -15,22 +15,29 @@ from config.layout import (
     SHINY_RECT,
     SUMMARY_NAME_LABEL_RECT,
     SUMMARY_NAME_RECT,
+    SUMMARY_SPRITE_RECT,
+    YES_NO_RECTS,
 )
 from config.paths import CATCH_DIR
 from config.timing import DEFAULT_TIMEOUT, LOAD_TIMEOUT, TICK_SECONDS
-from lib import run, switch
-from lib.dialog import advance_until
+from lib import data, run, switch
+from lib.dialog import advance_until, press_until
 from lib.game import restart
-from lib.log import log
-from lib.scientist import START_TEXT
-from lib.wait import capture, wait_for
+from lib.log import log, take_warnings
+from lib.wait import act_until, capture, wait_for
 from tool.check_image import ImageChecker
 from tool.image import save, text_lines
 
 # 带走界面的标题
 RESULT_TEXT = "选1只要带回去的宝可梦"
-# 打赢之后科学家问要不要记录位置。待实测
-RECORD_TEXT = "记录"
+# 资料页闪光框里高饱和像素的占比（0 到 255）超过 SHINY_MIN 就是闪光；超过 SHINY_MAX 说明画面不是资料页
+SHINY_MIN, SHINY_MAX = 10, 100
+# 列表上按 B 之后的确认「不带宝可梦回去了，你确定吗？」（真机实测）
+LEAVE_TEXT = "不带宝可梦回去"
+# 结算对话里科学家说的「辛苦了。」，之后才问要不要保留位置记录或者结束对话（真机实测）
+THANKS_TEXT = "辛苦了"
+# 打赢之后科学家问「您需要我为您保留×××所在位置的记录吗？」（真机实测），关键词取第一行的
+RECORD_TEXT = "为您保留"
 
 
 def select_pokemon() -> str | None:
@@ -47,8 +54,10 @@ def select_pokemon() -> str | None:
     if current.num_caught == 0:
         log("一只都没抓到")
         if _update_keep_path():
+            _report()
             _restart_same_seed()
             return "join"
+        _report()
         run.save()
         return "join" if _back_to_scientist() else None
 
@@ -62,10 +71,12 @@ def select_pokemon() -> str | None:
         # 带走了，这张图就打完了，下一局是新的图
         current.keep_path = False
     elif _update_keep_path():
+        _report()
         _restart_same_seed()
         return "join"
     else:
         _leave()
+    _report()
     if shiny == 3:
         # 闪光的神兽带走了，这只刷完了，清掉所有状态
         log("带走了闪光的神兽，清掉所有状态")
@@ -88,6 +99,68 @@ def select_pokemon() -> str | None:
     return "join"
 
 
+def _report() -> None:
+    """把这一局的战报写进日志，格式是固定的：
+
+    第 N 轮（本次启动）战报：胜/负，倒下 X 次，Y 分钟，抓到 n/4
+    路线：A → B → C（得分 S），首发 英文名（第 k 位）
+    逐关：每一关的对手、抓到的；首领抓到还是团灭、这一关倒下几次
+    闪光（逐只）：中文名 非闪光（峰值 / 阈值）
+    锁定、截图、异常（这一局记过的警告）
+    """
+    current = run.get()
+    names = data.type_names()
+    won = current.num_caught == 4
+    minutes = (time.time() - current.started) / 60
+    route = [node.name for node in current.target_path[1:-1]]
+    score = f"（得分 {current.path_score:.3f}）" if current.path_score is not None else ""
+    starter = current.start_members[0]["name_id"] if current.start_members else "?"
+    selection = current.selection + 1 if current.selection is not None else "?"
+    lines = [
+        (
+            f"第 {current.round} 轮（本次启动）战报：{'胜' if won else '负'}，"
+            f"倒下 {4 - current.lives} 次，{minutes:.1f} 分钟，抓到 {current.num_caught}/4"
+        ),
+        f"路线：{' → '.join(names.get(t, t) for t in route)}{score}，首发 {starter}（第 {selection} 位）",
+        "逐关：",
+    ]
+    for index in range(1, len(current.target_path)):
+        opponent = current.opponents.get(index)
+        battle = index - 1
+        if index == len(current.target_path) - 1:
+            label, kind = "首领 ", current.boss
+        else:
+            label, kind = (
+                f"第{index}关",
+                f"{opponent or '?'}（{names.get(current.target_path[index].name, '')}）",
+            )
+        if battle < current.num_caught:
+            caught = current.caught[battle]
+            pokemon = data.boss_pokemon().get(caught) or data.rental_pokemon().get(caught)
+            result = f"抓到 {pokemon.name() if pokemon else caught}"
+        elif index in current.battle_faints:
+            result = "团灭"
+        else:
+            result = "没打到"
+        faints = current.battle_faints.get(index)
+        extra = f"，倒下 {faints} 次" if faints else ""
+        lines.append(f"  {label} {kind:24} {result}{extra}")
+    peaks = "；".join(
+        f"{name} {'闪光' if SHINY_MIN < peak <= SHINY_MAX else '非闪光'}（{peak:.1f} / {SHINY_MIN}）"
+        for name, peak in current.shiny_peaks
+    )
+    lines.append(f"闪光（逐只）：{peaks or '没有查'}")
+    if current.plan is not None:
+        lock = "keep path 局，继续锁定" if current.keep_path else "keep path 局，已解锁"
+    else:
+        lock = "锁定这张图（之后 keep path）" if current.keep_path else "不锁定"
+    lines.append(f"锁定：{lock}")
+    lines.append(f"截图：{'，'.join(current.screenshots) or '无'}")
+    warnings = take_warnings()
+    lines.append(f"异常：{'；'.join(warnings) if warnings else '无'}")
+    log("\n" + "\n".join(lines))
+
+
 def _find_shiny() -> int | None:
     """打开资料页，从最后抓到的那只（打赢了就是首领）开始一只只往前查闪光，
     返回第一只闪光在列表上的位置（从 0 开始，和抓到的顺序一致），都不是返回 None。
@@ -98,26 +171,38 @@ def _find_shiny() -> int | None:
     current = run.get()
     sw = switch.get()
     last = current.num_caught - 1
-    sw.stick("LEFT", 0, switch.STICK_MAX, TICK_SECONDS)
-    wait_for(
-        lambda screen: screen.selected(list(RESULT_ROW_RECTS[: last + 1])) == last,
-        DEFAULT_TIMEOUT,
-        "列表光标移到最后一只",
-    )
+    # 推摇杆移光标：列表刚出来时会被吞掉（真机上光标没动、超时过），没反应就再推一次。
+    # 按 A 不能重按：菜单要 1.3 秒才出来，选中项还会闪（认出来和认不出来一帧一帧交替），
+    # 重按过一次，第二下 A 直接在菜单上点了「选择」，差点把不是闪光的首领带走（真机上发生过）
+    rows = list(RESULT_ROW_RECTS[: last + 1])
+    if capture().selected(rows) != last:
+        act_until(
+            lambda: sw.stick("LEFT", 0, switch.STICK_MAX, TICK_SECONDS),
+            lambda screen: screen.selected(rows) == last,
+            "列表光标移到最后一只",
+            interval=2.0,
+        )
     sw.click("A", 0)
     wait_for(lambda screen: _menu_selected(screen) == 0, DEFAULT_TIMEOUT, "选择 / 查看能力 / 取消")
-    sw.stick("LEFT", 0, -switch.STICK_MAX, TICK_SECONDS)
-    wait_for(lambda screen: _menu_selected(screen) == 1, DEFAULT_TIMEOUT, "光标移到「查看能力」")
+    act_until(
+        lambda: sw.stick("LEFT", 0, -switch.STICK_MAX, TICK_SECONDS),
+        lambda screen: _menu_selected(screen) == 1,
+        "光标移到「查看能力」",
+        interval=2.0,
+    )
     sw.click("A", 0)
+    # 资料页上左边的文字先出来，右边的宝可梦要晚一点才画出来（真机上截到过空的），等它出来再截图、查闪光
     image = wait_for(
-        lambda screen: screen.has_text(SUMMARY_NAME_LABEL_RECT, "名字"), LOAD_TIMEOUT, "资料页"
+        lambda screen: screen.has_text(SUMMARY_NAME_LABEL_RECT, "名字") and _sprite_shown(screen),
+        LOAD_TIMEOUT,
+        "资料页和上面的宝可梦",
     )
 
     for index in range(last, -1, -1):
         name = image.read_text(SUMMARY_NAME_RECT).strip()
         if index == last:
             _save_screenshot(image, "summary")
-        if _is_shiny():
+        if _is_shiny(name):
             log(
                 f"闪光！第 {index + 1} 只 {current.caught[index]}（资料页上是「{name}」）",
                 "WARNING",
@@ -125,100 +210,157 @@ def _find_shiny() -> int | None:
             return index
         log(f"第 {index + 1} 只「{name}」不是闪光")
         if index > 0:
-            sw.stick("LEFT", 0, switch.STICK_MAX, TICK_SECONDS)
-            image = wait_for(
+            # 名字一换就算推成功了，不等宝可梦画出来，免得等的时候又推一次跳过一只
+            act_until(
+                lambda: sw.stick("LEFT", 0, switch.STICK_MAX, TICK_SECONDS),
                 lambda screen, before=name: (
                     screen.read_text(SUMMARY_NAME_RECT).strip() not in ("", before)
                 ),
-                DEFAULT_TIMEOUT,
                 "资料页换到前一只",
+                interval=2.0,
             )
+            image = wait_for(_sprite_shown, DEFAULT_TIMEOUT, "资料页上的宝可梦")
     return None
 
 
-def _is_shiny() -> bool:
+def _sprite_shown(screen: ImageChecker) -> bool:
+    """资料页右边的宝可梦画出来了：区域里既不是白色、也不是浅青色背景的像素占比超过 0.05。
+
+    真机上宝可梦没出来时是 0，出来之后 0.11 到 0.32。
+    """
+    white = screen.color_ratio(SUMMARY_SPRITE_RECT, (0, 0, 200), (180, 29, 255))
+    background = screen.color_ratio(SUMMARY_SPRITE_RECT, (75, 30, 190), (105, 255, 255))
+    return 1 - white - background > 0.05
+
+
+def _is_shiny(name: str) -> bool:
     """资料页上的闪光标志：照搬上游，闪光框里高饱和像素的占比（0 到 255）超过 10。
 
     沿用旧项目的两条保护：连看几帧，任何一帧是闪光就算（漏掉闪光无法挽回，误报只是停下来）；
     占比超过 100 说明画面根本不是资料页（真闪光约 27），这一帧不算。
+    name 是资料页上的名字，和看到的最高占比一起记进这一局，写战报用。
     """
     # 连看几帧
     frames = 3
-    # 闪光的最低占比、不是资料页的最高占比（0 到 255）
-    threshold, invalid = 10, 100
 
+    peak = 0.0
+    shiny = False
     for _ in range(frames):
         value = capture().color_ratio(SHINY_RECT, (0, 100, 20), (180, 255, 255)) * 255
         log(f"闪光框的占比 {value:.1f}", "DEBUG")
-        if threshold < value <= invalid:
-            return True
-    return False
+        peak = max(peak, value)
+        if SHINY_MIN < value <= SHINY_MAX:
+            shiny = True
+            break
+    run.get().shiny_peaks.append((name, peak))
+    return shiny
 
 
 def _take(index: int) -> None:
     """带走第 index 只：资料页按 B 回到列表，A 弹出菜单，在「选择」上按 A，把确认的对话推进完。
 
+    照上游：资料页上按一次截图键，回到列表后再按一次，两张都存进 Switch 自己的相册
+    （上游 auto_max_lair.py 的 push_buttons((p, 1), (b, 3), (p, 1))，p 就是截图键）。
     待实测：还没遇到过闪光，带走的对话怎么走没见过。
     """
     current = run.get()
     sw = switch.get()
+    _save_screenshot(capture(), "shiny-summary")
+    sw.click("CAPTURE", 0)
+    log("闪光的资料页存进了 Switch 相册")
     sw.click("B", 0)
-    wait_for(
-        lambda screen: screen.selected(list(RESULT_ROW_RECTS[: current.num_caught])) == index,
+    image = wait_for(
+        lambda screen: (
+            screen.has_text(RESULT_TITLE_RECT, RESULT_TEXT)
+            and screen.selected(list(RESULT_ROW_RECTS[: current.num_caught])) == index
+        ),
         DEFAULT_TIMEOUT,
         "回到列表，光标在要带走的那只上",
     )
+    _save_screenshot(image, "shiny-list")
+    sw.click("CAPTURE", 0)
+    log("带走列表存进了 Switch 相册")
     sw.click("A", 0)
     wait_for(lambda screen: _menu_selected(screen) == 0, DEFAULT_TIMEOUT, "光标在「选择」上")
-    sw.click("A", 0)
-    wait_for(
-        lambda screen: not screen.has_text(RESULT_TITLE_RECT, RESULT_TEXT),
-        DEFAULT_TIMEOUT,
-        "带走界面消失",
-    )
+    # 选择之后上游连按了 4 次 A，中间应该还有确认，确认默认在「是」上；所以一直按 A 到列表消失
+    press_until(lambda screen: not screen.has_text(RESULT_TITLE_RECT, RESULT_TEXT), "带走界面消失")
     log(f"带走了 {current.caught[index]}")
 
 
 def _leave() -> None:
-    """不带走：资料页按 B 回到列表，再按 B 退出。照搬上游。待实测"""
+    """不带走：资料页按 B 回到列表，列表上按 B 会问「不带宝可梦回去了，你确定吗？」，
+    确认光标在「是」上再按 A（真机实测）。
+    """
     sw = switch.get()
     sw.click("B", 0)
     wait_for(
-        lambda screen: not screen.has_text(SUMMARY_NAME_LABEL_RECT, "名字"),
+        lambda screen: (
+            not screen.has_text(SUMMARY_NAME_LABEL_RECT, "名字")
+            and screen.has_text(RESULT_TITLE_RECT, RESULT_TEXT)
+        ),
         DEFAULT_TIMEOUT,
         "回到列表",
     )
     sw.click("B", 0)
-    wait_for(
-        lambda screen: not screen.has_text(RESULT_TITLE_RECT, RESULT_TEXT),
+    image = wait_for(
+        lambda screen: (
+            screen.has_text(DIALOG_RECT, LEAVE_TEXT) and screen.selected(list(YES_NO_RECTS)) >= 0
+        ),
         DEFAULT_TIMEOUT,
-        "带走界面消失",
+        "不带走的确认",
+    )
+    if image.selected(list(YES_NO_RECTS)) != 0:
+        raise RuntimeError("不带走的确认上光标不在「是」上")
+    sw.click("A", 0)
+    # 确认之后列表还会留一会儿，结算对话接着出现，所以等的是确认的问话消失
+    wait_for(
+        lambda screen: not screen.has_text(DIALOG_RECT, LEAVE_TEXT),
+        DEFAULT_TIMEOUT,
+        "不带走的确认消失",
     )
     log("一只都不带走")
 
 
 def _back_to_scientist() -> bool:
-    """按 A 推进结算的对话，直到科学家的开场白出现，再按 B 退出对话。照搬上游。
+    """带走或不带走之后，按 A 推进结算的对话，直到对话结束、回到科学家面前。
 
-    打赢之后中途会问要不要记录位置：RECORD_LOCATION 为 True 时按 A 记录；
-    为 False 时停在这一步，返回 False。待实测：结算的对话还没在真机上走过。
+    对话顺序（真机实测）：「把捉到的宝可梦和之前租用的宝可梦」→「……都交给了研究员！」
+    → 结算画面「下一步」→「辛苦了。」→ 打赢时科学家还会问
+    「您需要我为您保留×××所在位置的记录吗？」，再按一次 A 才弹出「是 / 否」。
+    要不要保留按 RECORD_LOCATION：True 选「是」；False 停在这一步，返回 False，等人决定。
     """
-    image = advance_until(
-        lambda screen: (
-            screen.has_text(DIALOG_RECT, START_TEXT)
-            or (not RECORD_LOCATION and screen.has_text(DIALOG_RECT, RECORD_TEXT))
-        ),
-        "科学家的开场白",
+    # 结算画面「下一步」和「辛苦了。」之间有一段转场，对话框是空的（真机上遇到过），
+    # 所以先推进到「辛苦了。」，之后对话框空了才是真的说完了
+    advance_until(
+        lambda screen: screen.has_text(DIALOG_RECT, THANKS_TEXT),
+        "「辛苦了。」",
         max_presses=30,
         timeout=LOAD_TIMEOUT,
     )
-    if not image.has_text(DIALOG_RECT, START_TEXT):
-        log("科学家问要不要记录位置，配置是不自动记录，停下来等人决定", "WARNING")
-        return False
-    advance_until(
-        lambda screen: not screen.read_text(DIALOG_RECT), "对话框消失", button="B", max_presses=5
+    image = advance_until(
+        lambda screen: _record_question_shown(screen) or not screen.read_text(DIALOG_RECT),
+        "结算对话结束，或者问要不要保留位置记录",
     )
+    if not _record_question_shown(image):
+        return True
+    if not RECORD_LOCATION:
+        log("科学家问要不要保留位置记录，配置是不自动选，停下来等人决定", "WARNING")
+        return False
+    if image.selected(list(YES_NO_RECTS)) != 0:
+        raise RuntimeError("保留位置记录的菜单上光标不在「是」上")
+    switch.get().click("A", 0)
+    # 问话还在时就推进，会在它上面再按一次 A
+    wait_for(
+        lambda screen: not screen.has_text(DIALOG_RECT, RECORD_TEXT), DEFAULT_TIMEOUT, "问话消失"
+    )
+    advance_until(lambda screen: not screen.read_text(DIALOG_RECT), "对话结束", max_presses=10)
+    log("保留了位置记录")
     return True
+
+
+def _record_question_shown(screen: ImageChecker) -> bool:
+    """科学家问要不要保留位置记录，并且「是 / 否」已经弹出来了。"""
+    return screen.has_text(DIALOG_RECT, RECORD_TEXT) and screen.selected(list(YES_NO_RECTS)) >= 0
 
 
 def _update_keep_path() -> bool:
@@ -271,4 +413,5 @@ def _save_screenshot(image: ImageChecker, kind: str) -> None:
     save(image, str(path))
     for old in sorted(CATCH_DIR.glob("*.jpg"))[:-keep]:
         old.unlink()
+    run.get().screenshots.append(str(path))
     log(f"战果截图: {path}", "DEBUG")

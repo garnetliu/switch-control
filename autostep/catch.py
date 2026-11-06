@@ -24,17 +24,19 @@ from lib.scoring import evaluate_average_matchup, evaluate_matchup, weighted_sco
 from lib.wait import wait_for
 from tool.check_image import ImageChecker
 from tool.image import text_lines
+from tool.text import similarity
 from type.pokemon import Pokemon
 
 
 def catch() -> str:
     """打赢之后抓：选好配置里的球扔出去，抓到普通对手时再决定要不要换成它。照搬上游。
 
-    开始时游戏要停在「捕捉 / 不捕捉」上，见 battle。使用全局连接，需要先调用 switch.connect。
+    开始时游戏在打赢后的「×××变得虚弱了」上，见 battle：先等「捕捉 / 不捕捉」出来。使用全局连接，需要先调用 switch.connect。
     返回下一步的名字：抓的是普通对手返回 "path"，首领（第 4 只）返回 "select_pokemon"。
     """
     current = run.get()
     boss = current.num_caught == 3
+    wait_for(_catch_menu_shown, DEFAULT_TIMEOUT, "「捕捉 / 不捕捉」")
     if boss and not CATCH_BOSS:
         _skip_boss()
         log("不抓首领，这一局结束")
@@ -52,8 +54,15 @@ def catch() -> str:
         return "select_pokemon"
 
     # 抓的动画大约 25 秒，之后才出现换不换的界面
+    # 选项比新卡片上的字先画出来，太早读会读成空白（真机上读到过「  滴焰」），等名字和特性都读得出
     image = wait_for(
-        lambda screen: screen.has_text(SWAP_OPTION_RECTS[0], "替换"), 60, "换不换的界面"
+        lambda screen: (
+            screen.has_text(SWAP_OPTION_RECTS[0], "替换")
+            and bool(screen.read_text(CAUGHT_NAME_RECT).strip())
+            and bool(screen.read_text(CAUGHT_ABILITY_RECT).strip())
+        ),
+        60,
+        "换不换的界面",
     )
     _swap(image)
     return "path"
@@ -77,6 +86,13 @@ def _skip_boss() -> None:
         DEFAULT_TIMEOUT,
         "「捕捉 / 不捕捉」消失",
     )
+
+
+def _catch_menu_shown(screen: ImageChecker) -> bool:
+    """「捕捉 / 不捕捉」，光标在「捕捉」上：照搬上游，选中的一行是黑底、另一行是白底。"""
+    black = screen.color_ratio(CATCH_BLACK_RECT, (0, 0, 0), (180, 10, 10)) > 200 / 255
+    white = screen.color_ratio(CATCH_WHITE_RECT, (0, 0, 250), (180, 10, 255)) > 200 / 255
+    return black and white
 
 
 def _select_ball(ball: str) -> None:
@@ -175,8 +191,13 @@ def _swap(image: ImageChecker) -> None:
             DEFAULT_TIMEOUT,
             "光标移到「维持现状继续前进」上",
         )
-    elif not marker_shown(image, SWAP_CURSOR_RECTS[0]):
-        raise RuntimeError("换不换的界面上光标不在「我想替换同行宝可梦」上")
+    else:
+        # 界面刚出来时光标「>」可能还没画出来，等它出现在第一项左边
+        wait_for(
+            lambda screen: marker_shown(screen, SWAP_CURSOR_RECTS[0]),
+            DEFAULT_TIMEOUT,
+            "光标在「我想替换同行宝可梦」上",
+        )
     switch.get().click("A", 0)
     log(f"决定{'换成 ' + caught.name_id if take else '不换，继续用 ' + own.name_id}")
 
@@ -190,15 +211,39 @@ def _swap(image: ImageChecker) -> None:
         return
     taker = result.split("决定", 1)[0]
     players = [image.read_text(rect).strip() for rect in SWAP_PLAYER_RECTS]
-    if taker not in players:
+    slot = _player_slot(taker, players)
+    if slot is None:
         log(f"认不出是谁带走的，列表上的玩家是 {players}", "WARNING")
         return
-    slot = players.index(taker)
     if slot == 0:
         current.pokemon = caught
     else:
         team[slot - 1] = caught
     log(f"{taker} 带走了 {caught.name_id}，队伍: {[m.name_id for m in [current.pokemon, *team]]}")
+
+
+def _player_slot(taker: str, players: list[str]) -> int | None:
+    """结果里的名字 taker 是列表上第几个玩家（0 是自己），认不出返回 None。
+
+    列表上的名字框会把旁边的图标认成字，真机上「翔子」读成了「長翔子頭」，所以不要求完全相等：
+    先找互相包含的，正好一个就是它；否则取相似度最高的：至少 min_similarity，并且比第二名高出
+    min_lead（真机上「贤利」读成了「肾利」，相似度 0.5，其他人都是 0）。
+    """
+    # 相似度至少这么多、比第二名至少高这么多，才算同一个名字
+    min_similarity, min_lead = 0.5, 0.2
+
+    # 结果文字开头会多认出「■」之类的符号（真机上「■翔子」），只留文字再比
+    taker = re.sub(r"[^\w]", "", taker)
+    players = [re.sub(r"[^\w]", "", name) for name in players]
+    if not taker:
+        return None
+    contained = [i for i, name in enumerate(players) if name and (taker in name or name in taker)]
+    if len(contained) == 1:
+        return contained[0]
+    scores = [similarity(taker, name) for name in players]
+    ranked = sorted(range(len(players)), key=lambda i: scores[i], reverse=True)
+    best, second = scores[ranked[0]], scores[ranked[1]] if len(ranked) > 1 else 0.0
+    return ranked[0] if best >= min_similarity and best - second >= min_lead else None
 
 
 def _read_caught(image: ImageChecker) -> Pokemon:

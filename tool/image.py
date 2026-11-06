@@ -18,9 +18,22 @@ def crop(image: ImageChecker, rect: Rect) -> np.ndarray:
     return image._crop(image._bgr, rect)
 
 
+def mask(image: ImageChecker, rect: Rect, lower: Hsv, upper: Hsv) -> np.ndarray:
+    """区域里颜色在 lower 到 upper（HSV）之间的像素，返回同样大小的布尔数组。"""
+    return cv2.inRange(image._crop(image._hsv, rect), lower, upper) > 0
+
+
 def save(image: ImageChecker, path: str) -> None:
     """把截图（去黑边、缩放到 1920x1080 之后的）存成图片文件，格式按扩展名。"""
     cv2.imwrite(path, image._bgr)
+
+
+def read_line(image: ImageChecker, rect: Rect) -> str:
+    """只识别、不检测文字位置：rect 里要正好是一行字。比 ImageChecker.read_text 快几十倍
+    （真机截图上 0.01 秒对 0.5 秒），适合框好的固定位置，比如菜单的某一行。读不出返回空字符串。
+    """
+    result, _ = _ocr()(crop(image, rect), use_det=False, use_cls=False, use_rec=True)
+    return result[0][0].strip() if result else ""
 
 
 def text_lines(image: ImageChecker, rect: Rect) -> list[tuple[str, Rect]]:

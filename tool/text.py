@@ -1,4 +1,6 @@
+import re
 import unicodedata
+from difflib import SequenceMatcher
 
 
 def levenshtein(a: str, b: str) -> int:
@@ -24,3 +26,22 @@ def pad(text: str, width: int, fill: str = " ") -> str:
 def display_width(text: str) -> int:
     """text 在终端里占几列：全角字符（中文等）算 2 列，其他算 1 列。"""
     return sum(2 if unicodedata.east_asian_width(char) in ("W", "F") else 1 for char in text)
+
+
+def similarity(a: str, b: str) -> float:
+    """两段文字有多像，0 到 1，1 是完全一样。"""
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def contains(found: str, text: str, min_similarity: float = 0.8) -> bool:
+    """识别出的文字 found 里有没有 text，规则和 ImageChecker.has_text 一样：
+
+    去掉空白和标点后，在 found 里滑动一个和 text 等长的窗口，任何一处的相似度达到 min_similarity 就算有。
+    同一块区域要和好几个关键词比时，先识别一次再用它比，不用每个关键词都重新识别。
+    """
+    found, text = (re.sub(r"[\s，。！？、,.!?…：:]", "", value) for value in (found, text))
+    window = len(text)
+    return any(
+        SequenceMatcher(None, found[start : start + window], text).ratio() >= min_similarity
+        for start in range(max(1, len(found) - window + 1))
+    )

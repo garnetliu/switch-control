@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 
 _logger: logging.Logger | None = None
+# 上次 take_warnings 之后记过的 WARNING 和 ERROR，用来写进每局的战报
+_warnings: list[str] = []
 
 
 def init_log(name: str | None = None) -> None:
@@ -49,3 +51,12 @@ def log(message: str, level: str = "INFO") -> None:
     init_log()
     assert _logger is not None
     _logger.log(logging.getLevelName(level.upper()), message)
+    if level.upper() in ("WARNING", "ERROR"):
+        _warnings.append(message)
+
+
+def take_warnings() -> list[str]:
+    """上次调用之后记过的 WARNING 和 ERROR，取出后清空。"""
+    taken = list(_warnings)
+    _warnings.clear()
+    return taken
