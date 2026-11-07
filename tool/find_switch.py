@@ -8,6 +8,8 @@ import sys
 import time
 from pathlib import Path
 
+ENV_FILE = Path(__file__).parent.parent / ".env"
+
 
 def _local_prefix() -> str:
     """默认路由所在网卡的 /24 网段前三段，例如 192.168.1。
@@ -37,8 +39,8 @@ def find_switch(rounds: int = 3) -> str | None:
     Switch 的 WiFi 省电时回 ARP 很慢，一轮里可能漏掉，所以没找到就再扫，最多 rounds 轮。
 
     macOS 27 起，第三方程序（包括 uv 装的 Python）读到的 ARP 表是空的，只有系统自带的
-    /usr/bin/python3 读得到。所以这个文件，以及它导入的 lib/env.py、lib/log.py、tool/ping.py，
-    都只能用标准库和系统 Python 3.9 支持的语法，并且要用系统 Python 运行，
+    /usr/bin/python3 读得到。所以这个文件要用系统 Python 运行，并且只用 Python 3.9 支持的语法；
+    用到的 python-dotenv 也要装在系统 Python 里（python3 -m pip install --user python-dotenv），
     见下面的 main。
     """
     mac = _normalize_mac(os.environ["SWITCH_MAC"])
@@ -69,7 +71,8 @@ def main():
     过程写入终端和 logs/ 下带时间戳的日志文件，见 lib/log.py。
     """
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    from lib.env import load_env, set_env
+    from dotenv import load_dotenv, set_key
+
     from lib.log import init_log, log
     from tool.ping import ping
 
@@ -77,13 +80,13 @@ def main():
     max_ping_ms = 150
 
     init_log("find")
-    load_env()
+    load_dotenv()
     log(f"正在查找 MAC 为 {os.environ['SWITCH_MAC']} 的 Switch ...")
     ip = find_switch()
     if ip is None:
         log("找不到 Switch", "ERROR")
         sys.exit(1)
-    set_env("SWITCH_IP", ip)
+    set_key(ENV_FILE, "SWITCH_IP", ip)
     log(f"找到 Switch: {ip}，已写入 .env")
 
     delay = ping(ip)

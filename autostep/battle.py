@@ -6,24 +6,19 @@ from config.layout import (
     BATTLE_LINE2_RECT,
     BATTLE_SYMBOL_RECT,
     BATTLE_TEXT_RECT,
-    DETAIL_ABILITY_LABEL_RECT,
-    DETAIL_NAME_RECT,
-    DETAIL_TYPES_RECT,
     DYNAMAX_BUTTON_RECT,
     DYNAMAX_CURSOR_RECT,
-    INFO_OPPONENT_RECT,
     MOVE_CURSOR_RECTS,
+    RESULT_TITLE_RECT,
     TARGET_CURSOR_RECT,
 )
-from config.paths import BATTLE_DIR
 from config.timing import DEFAULT_TIMEOUT, POLL_INTERVAL, TICK_SECONDS
-from lib import data, pokemon, run, switch
+from lib import data, pkhex, run, switch
 from lib.dialog import marker_shown
 from lib.log import log
 from lib.scoring import select_best_move, transform_ditto
-from lib.wait import capture, wait_for
+from lib.wait import act_until, capture, wait_for
 from tool.check_image import ImageChecker
-from tool.image import save, text_lines
 from type.pokemon import Pokemon
 
 # 打赢时战斗文字的第二行「现在是使用精灵球的好机会！」（第一行是「×××变得虚弱了！」，真机截图），之后问要不要抓
@@ -31,10 +26,16 @@ WEAK_TEXT = "使用精灵球的好机会"
 # 倒下时先出「×××倒下了！」，接着出「上空的风暴变强了！」或「风暴变得越来越强了！！」（真机截图）
 DOWN_TEXT = "倒下了"
 FAINT_TEXT = "风暴"
+# 输掉（4 次倒下或者打满回合）时没有要不要抓的界面，结算完直接到「选 1 只带回去」的列表
+RESULT_TEXT = "选1只要带回去的宝可梦"
+OPPONENT_ADDRESS = 0x886A95B8
+# 队伍 P1–P4：自己 + 3 个队友。选初始界面读不到，战斗开始后才有效（实测）
+LAIR_PARTY_ADDRESSES = (0x886B67C8, 0x886BC348, 0x886B9588, 0x886BF108)
+PK8_SIZE = 0x158
 
 
 def battle() -> str:
-    """一场对战：每次出现战斗菜单就认出对手（只认一次）、选招式出招，然后等这一回合打完。
+    """一场对战：从内存识别对手、选招式出招，然后等这一回合打完。
 
     开始时游戏在这场对战开场的「×××出现了！」上，见 path：先等战斗菜单出来，等的时候也读战斗文字，
     开场时特性带来的天气、场地（比如电气制造者）就是这时出现的。使用全局连接，需要先调用 switch.connect。
@@ -49,6 +50,7 @@ def battle() -> str:
     log(f"第 {current.num_caught + 1} 场对战开始，节点是 {current.current_node}")
     # 开场到战斗菜单出来，真机上二十多秒
     wait_for(_battle_ready, 60, "战斗菜单")
+    _read_team()
     lives_before = current.lives
     state = "fight"
     turn = 0
@@ -70,25 +72,53 @@ def battle() -> str:
             if current.opponent is None:
                 _check_opponent()
             _choose_move()
-        state = _wait_turn(f"{current.num_caught + 1}-{turn:02d}")
+        state = _wait_turn()
+
+
+def _read_team() -> None:
+    """从战斗内存读 P1–P4，把队友补进这一局。选初始界面读不到队伍地址，第一场战斗才有效。
+
+    P1 是自己，P2–P4 是队友；这一局已经有队友（keep path 沿用上一局）就不再读。
+    """
+    current = run.get()
+    if current.team:
+        return
+    raw = [switch.get().peek(address, PK8_SIZE) for address in LAIR_PARTY_ADDRESSES]
+    records = pkhex.parse_pk8_batch(raw)
+    members = []
+    for record in records:
+        member = pkhex.match_pokemon(record, list(data.rental_pokemon().values()))
+        if member is None:
+            raise RuntimeError(
+                f"战斗内存里的队伍记录识别不了：species={record.get('species')} "
+                f"form={record.get('form', 0)} moves={record.get('moves')}"
+            )
+        members.append(replace(member, hp=1.0))
+    own, *teammates = members
+    if current.pokemon is not None and own.name_id != current.pokemon.name_id:
+        log(
+            f"内存里的自己 {own.name_id} 和选的 {current.pokemon.name_id} 不一致，用内存里的",
+            "WARNING",
+        )
+    current.pokemon, current.team = own, teammates
+    current.record_start()
+    log(f"从战斗内存读到队伍: {[m.name_id for m in [own, *teammates]]}")
 
 
 def _check_opponent() -> None:
     """认出这场的对手，记到这一局里。
 
-    第 4 场是首领，不用看。keep path 时上一局在这个节点遇到过的对手就是它，不用看。
-    其他时候打开对手的详细页，读名字和属性。
+    每场都从战斗内存读取；上一局记录只用于对照，不代替当前读取结果。
     """
     current = run.get()
     index = current.current_index
     planned = (current.plan or {}).get("opponents", {}).get(str(index))
-    if current.num_caught == 3:
-        opponent = data.boss_pokemon()[current.boss]
-    elif planned in data.rental_pokemon():
-        opponent = data.rental_pokemon()[planned]
-        log(f"沿用上一局在这里遇到的对手 {planned}")
-    else:
-        opponent = _read_opponent()
+    expected = current.boss if current.num_caught == 3 else planned
+    opponent = _read_opponent(expected)
+    if planned is not None and opponent.name_id != planned:
+        log(f"内存读到的对手 {opponent.name_id} 和上一局记录 {planned} 不同", "WARNING")
+    if current.num_caught == 3 and opponent.name_id != current.boss:
+        log(f"内存读到的首领 {opponent.name_id} 和目标 {current.boss} 不同", "WARNING")
     current.opponents[index] = opponent.name_id
     node_type = current.current_node.name
     if (
@@ -113,48 +143,36 @@ def _check_opponent() -> None:
     current.opponent = opponent
 
 
-def _read_opponent() -> Pokemon:
-    """打开对手的详细页读名字和属性，认出是哪只，再退回战斗菜单。
+def _read_opponent(expected_name: str | None = None) -> Pokemon:
+    """从战斗中的 PK8 内存记录识别对手。"""
+    raw = switch.get().peek(OPPONENT_ADDRESS, PK8_SIZE)
+    record = pkhex.parse_pk8_batch([raw])[0]
+    candidates = [*data.rental_pokemon().values(), *data.boss_pokemon().values()]
+    opponent = pkhex.match_pokemon(record, candidates)
+    if opponent is not None:
+        log(
+            f"从内存读取对手：{opponent.name_id}，"
+            f"species={record['species']} form={record.get('form', 0)}"
+        )
+        return opponent
 
-    战斗菜单上按 Y 打开场上宝可梦一览，A 打开自己这只的详细页，L 切到对手的详细页（真机实测）。
-    """
-    sw = switch.get()
-    sw.click("Y", 0)
-    wait_for(lambda screen: _info_shown(screen), DEFAULT_TIMEOUT, "宝可梦一览")
-    sw.click("A", 0)
-    wait_for(
-        lambda screen: screen.has_text(DETAIL_ABILITY_LABEL_RECT, "特性"),
-        DEFAULT_TIMEOUT,
-        "自己这只的详细页",
+    if expected_name is not None:
+        expected = data.boss_pokemon().get(expected_name) or data.rental_pokemon().get(
+            expected_name
+        )
+        if (
+            expected is not None
+            and record.get("checksumValid")
+            and (record.get("species"), record.get("form", 0))
+            == pkhex.pokemon_species_form(expected)
+        ):
+            log(f"内存记录校验有效且物种/形态匹配 {expected_name}，使用本地招式数据", "WARNING")
+            return expected
+    raise RuntimeError(
+        f"无法从战斗内存识别对手：checksum={record.get('checksumValid')} "
+        f"species={record.get('species')} form={record.get('form', 0)} "
+        f"moves={record.get('moves')}"
     )
-    sw.click("L", 0)
-    # 对手的详细页上没有「特性」，并且名字读得出来
-    image = wait_for(
-        lambda screen: (
-            not screen.has_text(DETAIL_ABILITY_LABEL_RECT, "特性")
-            and bool(screen.read_text(DETAIL_NAME_RECT))
-        ),
-        DEFAULT_TIMEOUT,
-        "对手的详细页",
-    )
-    name = image.read_text(DETAIL_NAME_RECT).strip()
-    by_name = {zh: type_id for type_id, zh in data.type_names().items()}
-    # 属性标签左边的图标也会被读成字，只留认得出的属性名
-    type_ids = [
-        by_name[text] for text, _ in text_lines(image, DETAIL_TYPES_RECT) if text in by_name
-    ]
-    match = pokemon.identify(name, type_ids=type_ids)
-    log(
-        f"对手详细页上读到「{name}」{type_ids}，认成 {match.pokemon.name_id}",
-        "WARNING" if match.is_poor else "DEBUG",
-    )
-
-    # 详细页 → 一览 → 战斗菜单
-    sw.click("B", 0)
-    wait_for(lambda screen: _info_shown(screen), DEFAULT_TIMEOUT, "回到宝可梦一览")
-    sw.click("B", 0)
-    wait_for(_fight_shown, DEFAULT_TIMEOUT, "回到战斗菜单")
-    return match.pokemon
 
 
 def _choose_move() -> None:
@@ -189,14 +207,15 @@ def _choose_move() -> None:
     log(f"用第 {best + 1} 个招式 {move.name()}（得分 {score:.2f}）")
     _move_cursor_to(best)
 
-    switch.get().click("A", 0)
-    # 招式列表消失、或者出现了选目标的界面，就是选好了。选目标由 _wait_turn 处理：
+    # 一直按 A，直到招式列表消失（选招式的那几行），或者出现选目标的界面，就是选好了。
+    # 按键会被游戏吞掉，吞多久和加载有关，所以不限制按的次数。选目标由 _wait_turn 处理：
     # 招式列表比选目标的界面先消失（真机上中间有几帧两个都没有），在这里等会把它漏掉。
     # 选目标的界面上我方卡片的名字条会落进招式光标的检测框，看起来像招式列表还在，所以两个都要看
-    wait_for(
+    act_until(
+        lambda: switch.get().click("A", 0),
         lambda screen: _move_cursor(screen) < 0 or _target_shown(screen),
-        DEFAULT_TIMEOUT,
         "招式列表消失",
+        interval=2.0,
     )
     # 对手有压迫感特性时每次扣 2 点 PP
     own.pp[best] -= 2 if opponent.ability_name_id == "pressure" else 1
@@ -253,7 +272,7 @@ def _cheer() -> None:
     log("应援")
 
 
-def _wait_turn(tag: str) -> str:
+def _wait_turn() -> str:
     """一直看画面，等这一回合打完，返回接下来是什么：fight 战斗菜单、cheer 应援菜单、
     catch 打赢了（要不要抓）、loss 输了（4 条命都没了）。
 
@@ -261,25 +280,18 @@ def _wait_turn(tag: str) -> str:
     每一帧都读战斗文字，天气和场地变了就记下来，见 _update_field。
     倒下的计数：先看到「倒下了」记一只待扣，接着看到「风暴」才扣 1 条命，扣完清掉；没有待扣时的
     「风暴」是同一行字又读了一次，不算。命数减到 0 就是输了。打满 10 回合没打完也会输，那时的文字还没见过，待实测。
-    等的时候每秒截一张图存进 BATTLE_DIR，文件名以 tag（第几场-第几回合）开头：打赢、倒下、
-    打满 10 回合这些画面还要照着截图核对。
     """
     # 一回合最多等几秒：真机上一回合（四只各出一招）约 66 秒
     turn_timeout = 180.0
 
     current = run.get()
     deadline = time.monotonic() + turn_timeout
-    saved_at = 0.0
     # 看到了「倒下了」、还没看到它后面那行「风暴」
     down_pending = False
     while True:
         if time.monotonic() >= deadline:
             raise TimeoutError(f"等了 {turn_timeout} 秒，这一回合还没打完")
         screen = capture()
-        if time.monotonic() - saved_at >= 1:
-            BATTLE_DIR.mkdir(parents=True, exist_ok=True)
-            save(screen, str(BATTLE_DIR / f"{tag}-{time.strftime('%Y%m%d-%H%M%S')}.jpg"))
-            saved_at = time.monotonic()
         if _fight_shown(screen):
             return "fight"
         if _cheer_shown(screen):
@@ -289,8 +301,11 @@ def _wait_turn(tag: str) -> str:
             log(
                 f"打赢了：{screen.read_text(BATTLE_TEXT_RECT)}{screen.read_text(BATTLE_LINE2_RECT)}"
             )
-            save(screen, str(BATTLE_DIR / f"{tag}-{time.strftime('%Y%m%d-%H%M%S')}-win.jpg"))
             return "catch"
+        if screen.has_text(RESULT_TITLE_RECT, RESULT_TEXT):
+            # 输掉时不会出要不要抓的界面，直接到「选 1 只带回去」的列表（真机上因此空等过 180 秒）
+            log("到带走界面，这一局结束了")
+            return "loss"
         if _target_shown(screen):
             # 选目标的界面，光标默认就在该选的目标上：打对手的在对手上，作用于我方全体的在我方卡片上
             switch.get().click("A", 0)
@@ -361,11 +376,6 @@ def _battle_ready(screen: ImageChecker) -> bool:
         return True
     _update_field(screen.read_text(BATTLE_TEXT_RECT))
     return False
-
-
-def _info_shown(screen: ImageChecker) -> bool:
-    """按 Y 打开的场上宝可梦一览开着：最上面对手那张白色卡片在。"""
-    return screen.color_ratio(INFO_OPPONENT_RECT, (0, 0, 225), (180, 25, 255)) > 0.8
 
 
 def _fight_shown(screen: ImageChecker) -> bool:

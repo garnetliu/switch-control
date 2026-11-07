@@ -129,6 +129,14 @@ class ImageChecker:
         """区域内指定颜色的像素占比是否超过 min_ratio。"""
         return self.color_ratio(rect, lower, upper) > min_ratio
 
+    def edge_ratio(self, rect: Rect) -> float:
+        """区域内 Canny 边缘像素的占比，0 到 1。
+
+        空白、渐变、大块纯色接近 0，有轮廓和细节的地方更高。用来看画面里的东西有没有画出来。
+        """
+        edges = cv2.Canny(self._crop(self._gray, rect), 50, 150)
+        return float((edges > 0).mean())
+
     def is_black(self) -> bool:
         """是不是黑屏：几乎整张图都很暗，而且亮度很均匀。只看当前这一张。"""
         value = self._hsv[:, :, 2]

@@ -1,15 +1,21 @@
 import time
+import unicodedata
+from time import sleep
 
 from config.game import (
     BASE_BALL,
     LEGENDARY_BALL,
+    LOCK_EARLY_FAILS,
     LOCK_MAX_FAINTS,
     LOCK_MAX_MINUTES,
+    LOCK_MIN_WIN_RATE,
+    LOCK_WINDOW_ROUNDS,
     RECORD_LOCATION,
 )
 from config.layout import (
     DIALOG_RECT,
     RESULT_MENU_RECT,
+    RESULT_PREVIEW_RECT,
     RESULT_ROW_RECTS,
     RESULT_TITLE_RECT,
     SHINY_RECT,
@@ -24,12 +30,16 @@ from lib import data, run, switch
 from lib.dialog import advance_until, press_until
 from lib.game import restart
 from lib.log import log, take_warnings
+from lib.notify import send
 from lib.wait import act_until, capture, wait_for
 from tool.check_image import ImageChecker
-from tool.image import save, text_lines
+from tool.image import save, small_difference, text_lines
 
 # 带走界面的标题
 RESULT_TEXT = "选1只要带回去的宝可梦"
+# 列表左侧预览和初始画面的差别（缩小到 16×16 后的灰度差）：同一只的动画 1.4 以下，
+# 宝可梦画出来或者换成另一只 5 以上。不要用原尺寸逐像素差：预览里的宝可梦在动，差值和空背景差不多
+PREVIEW_MIN_DIFF = 3
 # 资料页闪光框里高饱和像素的占比（0 到 255）超过 SHINY_MIN 就是闪光；超过 SHINY_MAX 说明画面不是资料页
 SHINY_MIN, SHINY_MAX = 10, 100
 # 列表上按 B 之后的确认「不带宝可梦回去了，你确定吗？」（真机实测）
@@ -61,10 +71,7 @@ def select_pokemon() -> str | None:
         run.save()
         return "join" if _back_to_scientist() else None
 
-    image = wait_for(
-        lambda screen: screen.has_text(RESULT_TITLE_RECT, RESULT_TEXT), 60, "带走宝可梦的界面"
-    )
-    _save_screenshot(image, "list")
+    wait_for(lambda screen: screen.has_text(RESULT_TITLE_RECT, RESULT_TEXT), 60, "带走宝可梦的界面")
     shiny = _find_shiny()
     if shiny is not None:
         _take(shiny)
@@ -106,7 +113,7 @@ def _report() -> None:
     路线：A → B → C（得分 S），首发 英文名（第 k 位）
     逐关：每一关的对手、抓到的；首领抓到还是团灭、这一关倒下几次
     闪光（逐只）：中文名 非闪光（峰值 / 阈值）
-    锁定、截图、异常（这一局记过的警告）
+    锁定、异常（这一局记过的警告）
     """
     current = run.get()
     names = data.type_names()
@@ -124,16 +131,17 @@ def _report() -> None:
         f"路线：{' → '.join(names.get(t, t) for t in route)}{score}，首发 {starter}（第 {selection} 位）",
         "逐关：",
     ]
+    stages = []
     for index in range(1, len(current.target_path)):
         opponent = current.opponents.get(index)
         battle = index - 1
         if index == len(current.target_path) - 1:
-            label, kind = "首领 ", current.boss
+            label = "首领"
+            kind = f"{current.boss}（{_type_names(current.boss)}）"
         else:
-            label, kind = (
-                f"第{index}关",
-                f"{opponent or '?'}（{names.get(current.target_path[index].name, '')}）",
-            )
+            label = f"第{index}关"
+            node_type = names.get(current.target_path[index].name, "?")
+            kind = f"{opponent or '?'}（{_type_names(opponent, node_type)}）"
         if battle < current.num_caught:
             caught = current.caught[battle]
             pokemon = data.boss_pokemon().get(caught) or data.rental_pokemon().get(caught)
@@ -143,22 +151,57 @@ def _report() -> None:
         else:
             result = "没打到"
         faints = current.battle_faints.get(index)
-        extra = f"，倒下 {faints} 次" if faints else ""
-        lines.append(f"  {label} {kind:24} {result}{extra}")
-    peaks = "；".join(
-        f"{name} {'闪光' if SHINY_MIN < peak <= SHINY_MAX else '非闪光'}（{peak:.1f} / {SHINY_MIN}）"
-        for name, peak in current.shiny_peaks
-    )
-    lines.append(f"闪光（逐只）：{peaks or '没有查'}")
+        if faints:
+            result += f"，倒下 {faints} 次"
+        stages.append((label, kind, result))
+    label_width = max(_display_width(label) for label, _, _ in stages) + 2
+    kind_width = max(_display_width(kind) for _, kind, _ in stages) + 2
+    for label, kind, result in stages:
+        lines.append(f"  {_pad(label, label_width)}{_pad(kind, kind_width)}{result}")
+    lines.append("闪光（逐只）：")
+    if current.shiny_peaks:
+        name_width = max(_display_width(name) for name, _ in current.shiny_peaks) + 2
+        for name, peak in current.shiny_peaks:
+            status = "闪光" if SHINY_MIN < peak <= SHINY_MAX else "非闪光"
+            lines.append(f"  {_pad(name, name_width)}{status}（{peak:.1f} / {SHINY_MIN}）")
+    else:
+        lines.append("  没有查")
     if current.plan is not None:
-        lock = "keep path 局，继续锁定" if current.keep_path else "keep path 局，已解锁"
+        recent = current.lock_results[-LOCK_WINDOW_ROUNDS:]
+        rate = recent.count(True) / len(recent) * 100 if recent else 0
+        lock = (
+            f"keep path 局，{len(current.lock_results)} 局，最近 {len(recent)} 局胜率 {rate:.0f}%，"
+            f"{'继续锁定' if current.keep_path else '已解锁'}"
+        )
     else:
         lock = "锁定这张图（之后 keep path）" if current.keep_path else "不锁定"
     lines.append(f"锁定：{lock}")
-    lines.append(f"截图：{'，'.join(current.screenshots) or '无'}")
     warnings = take_warnings()
     lines.append(f"异常：{'；'.join(warnings) if warnings else '无'}")
-    log("\n" + "\n".join(lines))
+    report = "\n".join(lines)
+    log("\n" + report)
+    send("```\n" + report + "\n```", files=current.screenshots)
+
+
+def _display_width(text: str) -> int:
+    """等宽字体下的显示宽度，中文和全角字符算 2 列。"""
+    return sum(2 if unicodedata.east_asian_width(char) in ("W", "F") else 1 for char in text)
+
+
+def _pad(text: str, width: int) -> str:
+    """按显示宽度补空格，让等宽字体里的列对齐。"""
+    return text + " " * max(0, width - _display_width(text))
+
+
+def _type_names(name_id: str | None, fallback: str = "?") -> str:
+    """宝可梦的属性，双属性用 / 连起来；查不到用 fallback。"""
+    if not name_id:
+        return fallback
+    pokemon = data.boss_pokemon().get(name_id) or data.rental_pokemon().get(name_id)
+    if pokemon is None:
+        return fallback
+    names = data.type_names()
+    return "/".join(names.get(type_id, type_id) for type_id in pokemon.type_ids)
 
 
 def _find_shiny() -> int | None:
@@ -171,17 +214,31 @@ def _find_shiny() -> int | None:
     current = run.get()
     sw = switch.get()
     last = current.num_caught - 1
+    rows = list(RESULT_ROW_RECTS[: last + 1])
+    reference = capture()
     # 推摇杆移光标：列表刚出来时会被吞掉（真机上光标没动、超时过），没反应就再推一次。
     # 按 A 不能重按：菜单要 1.3 秒才出来，选中项还会闪（认出来和认不出来一帧一帧交替），
     # 重按过一次，第二下 A 直接在菜单上点了「选择」，差点把不是闪光的首领带走（真机上发生过）
-    rows = list(RESULT_ROW_RECTS[: last + 1])
-    if capture().selected(rows) != last:
+    if reference.selected(rows) != last:
         act_until(
             lambda: sw.stick("LEFT", 0, switch.STICK_MAX, TICK_SECONDS),
             lambda screen: screen.selected(rows) == last,
             "列表光标移到最后一只",
             interval=2.0,
         )
+        image = wait_for(
+            lambda screen: (
+                screen.selected(rows) == last
+                and _preview_shown(screen)
+                and small_difference(reference, screen, RESULT_PREVIEW_RECT) >= PREVIEW_MIN_DIFF
+            ),
+            DEFAULT_TIMEOUT,
+            "最后一只的左侧预览",
+        )
+    else:
+        # 光标本来就在最后一只上（上一只也停在这里），预览不用等
+        image = reference
+    _save_screenshot(image, "list")
     sw.click("A", 0)
     wait_for(lambda screen: _menu_selected(screen) == 0, DEFAULT_TIMEOUT, "选择 / 查看能力 / 取消")
     act_until(
@@ -201,6 +258,7 @@ def _find_shiny() -> int | None:
     for index in range(last, -1, -1):
         name = image.read_text(SUMMARY_NAME_RECT).strip()
         if index == last:
+            sleep(0.2)
             _save_screenshot(image, "summary")
         if _is_shiny(name):
             log(
@@ -224,13 +282,21 @@ def _find_shiny() -> int | None:
 
 
 def _sprite_shown(screen: ImageChecker) -> bool:
-    """资料页右边的宝可梦画出来了：区域里既不是白色、也不是浅青色背景的像素占比超过 0.05。
+    """资料页右边的宝可梦画出来了：区域里 Canny 边缘的占比超过 0.002。
 
-    真机上宝可梦没出来时是 0，出来之后 0.11 到 0.32。
+    宝可梦没出来时是白色圆和浅青色渐变，边缘是 0（真机实测）；画出来之后 0.01 左右。
+    不要按颜色判断：白色的宝可梦（托戈德玛尔）会被当成空白，等 10 秒超时。
     """
-    white = screen.color_ratio(SUMMARY_SPRITE_RECT, (0, 0, 200), (180, 29, 255))
-    background = screen.color_ratio(SUMMARY_SPRITE_RECT, (75, 30, 190), (105, 255, 255))
-    return 1 - white - background > 0.05
+    return screen.edge_ratio(SUMMARY_SPRITE_RECT) > 0.002
+
+
+def _preview_shown(screen: ImageChecker) -> bool:
+    """带走列表左边的宝可梦预览画出来了：不是粉色背景的像素占比超过 0.02。
+
+    真机上空背景是纯粉色渐变（0），宝可梦画出来是 0.07 到 0.19。
+    """
+    background = screen.color_ratio(RESULT_PREVIEW_RECT, (140, 80, 0), (180, 255, 255))
+    return 1 - background > 0.02
 
 
 def _is_shiny(name: str) -> bool:
@@ -265,7 +331,9 @@ def _take(index: int) -> None:
     """
     current = run.get()
     sw = switch.get()
-    _save_screenshot(capture(), "shiny-summary")
+    # 资料页和列表都要等宝可梦画出来再存图、按 Switch 的截图键
+    image = wait_for(_sprite_shown, DEFAULT_TIMEOUT, "资料页上的宝可梦")
+    _save_screenshot(image, "shiny-summary")
     sw.click("CAPTURE", 0)
     log("闪光的资料页存进了 Switch 相册")
     sw.click("B", 0)
@@ -273,6 +341,7 @@ def _take(index: int) -> None:
         lambda screen: (
             screen.has_text(RESULT_TITLE_RECT, RESULT_TEXT)
             and screen.selected(list(RESULT_ROW_RECTS[: current.num_caught])) == index
+            and _preview_shown(screen)
         ),
         DEFAULT_TIMEOUT,
         "回到列表，光标在要带走的那只上",
@@ -284,38 +353,43 @@ def _take(index: int) -> None:
     wait_for(lambda screen: _menu_selected(screen) == 0, DEFAULT_TIMEOUT, "光标在「选择」上")
     # 选择之后上游连按了 4 次 A，中间应该还有确认，确认默认在「是」上；所以一直按 A 到列表消失
     press_until(lambda screen: not screen.has_text(RESULT_TITLE_RECT, RESULT_TEXT), "带走界面消失")
-    log(f"带走了 {current.caught[index]}")
+    name_id = current.caught[index]
+    pokemon = data.boss_pokemon().get(name_id) or data.rental_pokemon().get(name_id)
+    log(f"带走了 {name_id}")
+    send(
+        f"闪光！第 {current.round} 轮带走了 {pokemon.name() if pokemon else name_id}"
+        f"（第 {index + 1} 只）"
+    )
 
 
 def _leave() -> None:
     """不带走：资料页按 B 回到列表，列表上按 B 会问「不带宝可梦回去了，你确定吗？」，
     确认光标在「是」上再按 A（真机实测）。
+
+    列表刚出来时会吞按键（真机上按一次 B 没反应，等 10 秒超时），所以每步都按到画面变化为止。
     """
     sw = switch.get()
-    sw.click("B", 0)
-    wait_for(
+    act_until(
+        lambda: sw.click("B", 0),
         lambda screen: (
             not screen.has_text(SUMMARY_NAME_LABEL_RECT, "名字")
             and screen.has_text(RESULT_TITLE_RECT, RESULT_TEXT)
         ),
-        DEFAULT_TIMEOUT,
         "回到列表",
     )
-    sw.click("B", 0)
-    image = wait_for(
+    image = act_until(
+        lambda: sw.click("B", 0),
         lambda screen: (
             screen.has_text(DIALOG_RECT, LEAVE_TEXT) and screen.selected(list(YES_NO_RECTS)) >= 0
         ),
-        DEFAULT_TIMEOUT,
         "不带走的确认",
     )
     if image.selected(list(YES_NO_RECTS)) != 0:
         raise RuntimeError("不带走的确认上光标不在「是」上")
-    sw.click("A", 0)
     # 确认之后列表还会留一会儿，结算对话接着出现，所以等的是确认的问话消失
-    wait_for(
+    act_until(
+        lambda: sw.click("A", 0),
         lambda screen: not screen.has_text(DIALOG_RECT, LEAVE_TEXT),
-        DEFAULT_TIMEOUT,
         "不带走的确认消失",
     )
     log("一只都不带走")
@@ -366,23 +440,48 @@ def _record_question_shown(screen: ImageChecker) -> bool:
 def _update_keep_path() -> bool:
     """查完闪光、没有可带走的之后，决定下一局要不要 keep path，记到这一局里，返回决定。
 
-    这一局已经是 keep path（在锁定的图上开局）就不用再判断，继续锁定。
-    否则照旧项目的规则：打赢、倒下不超过 LOCK_MAX_FAINTS 次、用时不超过 LOCK_MAX_MINUTES 分钟，
-    就锁定这张图。
+    锁定的图：只看向这张图的胜负统计，见 _should_unlock；赢了的局不管用了多久、倒下几次都保持。
+    没锁定的图：打赢、倒下不超过 LOCK_MAX_FAINTS 次、用时不超过 LOCK_MAX_MINUTES 分钟，就锁定这张图。
     """
     current = run.get()
-    if current.plan is not None:
-        current.keep_path = True
-        return True
     won = current.num_caught == 4
     faints = 4 - current.lives
     minutes = (time.time() - current.started) / 60
+    if current.plan is not None:
+        current.lock_results.append(won)
+        current.keep_path = not _should_unlock()
+        recent = current.lock_results[-LOCK_WINDOW_ROUNDS:]
+        rate = recent.count(True) / len(recent) * 100
+        log(
+            f"这一局 {current.path_name()}：{'赢' if won else '输'}，倒下 {faints} 次，"
+            f"用时 {minutes:.1f} 分钟，这张图打了 {len(current.lock_results)} 局，"
+            f"最近 {len(recent)} 局胜率 {rate:.0f}%，"
+            f"{'解锁' if not current.keep_path else '继续锁定'}"
+        )
+        return current.keep_path
     current.keep_path = won and faints <= LOCK_MAX_FAINTS and minutes <= LOCK_MAX_MINUTES
+    if current.keep_path:
+        # 锁定这一局算这张图的第 1 局，是按打赢锁的
+        current.lock_results = [True]
     log(
         f"这一局 {current.path_name()}：{'赢' if won else '输'}，倒下 {faints} 次，"
         f"用时 {minutes:.1f} 分钟，{'锁定这张图' if current.keep_path else '不锁定'}"
     )
     return current.keep_path
+
+
+def _should_unlock() -> bool:
+    """这张锁定的图是不是该扔了。
+
+    打满 LOCK_WINDOW_ROUNDS 局之前只看失败次数，失败 LOCK_EARLY_FAILS 次就扔；
+    打满之后看最近 LOCK_WINDOW_ROUNDS 局的胜率，低于 LOCK_MIN_WIN_RATE 就扔。
+    """
+    current = run.get()
+    results = current.lock_results
+    if len(results) < LOCK_WINDOW_ROUNDS:
+        return results.count(False) >= LOCK_EARLY_FAILS
+    window = results[-LOCK_WINDOW_ROUNDS:]
+    return window.count(True) / len(window) < LOCK_MIN_WIN_RATE
 
 
 def _restart_same_seed() -> None:

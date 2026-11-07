@@ -6,8 +6,10 @@
 
 import atexit
 import os
+import signal
 import socket
 import struct
+import threading
 import time
 
 import usb.core
@@ -15,6 +17,11 @@ import usb.util
 
 # 摇杆坐标的最大值
 STICK_MAX = 0x7FFF
+
+
+def _exit_on_signal(signum: int, _frame):
+    """收到终止信号时走正常退出流程，让 atexit 注册的 close 把 USB 关掉。"""
+    raise SystemExit(128 + signum)
 
 
 def _hex(value: int) -> str:
@@ -27,6 +34,11 @@ class Switch:
 
     def _send(self, cmd: str):
         raise NotImplementedError
+
+    def _request_bytes(self, cmd: str) -> bytes:
+        """发一条需要返回数据的命令，并收完整返回。"""
+        self._send(cmd)
+        return self._read_bytes()
 
     def click(self, button: str, delay: float = 0.15):
         """按一下按键（按下再松开），然后等 delay 秒。
@@ -73,8 +85,7 @@ class Switch:
         tries = 3
 
         for _ in range(tries):
-            self._send("pixelPeek")
-            data = self._read_bytes()
+            data = self._request_bytes("pixelPeek")
             if data:
                 return data
         raise ConnectionError(f"截图连着 {tries} 次都是空的")
@@ -84,13 +95,11 @@ class Switch:
 
         和 title_id 一样要挂调试器，读的时候游戏会停一下。
         """
-        self._send(f"peek {offset:#x} {size:#x}")
-        return self._read_bytes()
+        return self._request_bytes(f"peek {offset:#x} {size:#x}")
 
     def peek_main(self, offset: int, size: int) -> bytes:
         """读游戏主程序（main）上 offset 处的 size 个字节。"""
-        self._send(f"peekMain {offset:#x} {size:#x}")
-        return self._read_bytes()
+        return self._request_bytes(f"peekMain {offset:#x} {size:#x}")
 
     def pointer_peek(self, jumps: list[int], size: int) -> bytes:
         """按指针链读 size 个字节。
@@ -98,8 +107,9 @@ class Switch:
         jumps 是 [main 上的偏移, 中间的偏移..., 最后的偏移]，例如 [[main+A]+B]+C 写成 [A, B, C]：
         从 main+A 读出地址，加 B 再读出地址，最后加 C 不再读地址，直接读数据。
         """
-        self._send(f"pointerPeek {size:#x} " + " ".join(f"{jump:#x}" for jump in jumps))
-        return self._read_bytes()
+        return self._request_bytes(
+            f"pointerPeek {size:#x} " + " ".join(f"{jump:#x}" for jump in jumps)
+        )
 
     def _read_bytes(self) -> bytes:
         """收一条有数据的返回。"""
@@ -164,37 +174,105 @@ class UsbSwitch(Switch):
 
     # usb-botbase 的 USB 设备号
     VENDOR_ID, PRODUCT_ID = 0x057E, 0x3000
+    RECONNECT_TIMEOUT = 30
 
     def __init__(self, timeout: float = 5.0):
-        """找到 usb-botbase 并占用它的接口。找不到抛 ConnectionError。"""
+        """找到 usb-botbase 并占用它的接口。找不到抛 ConnectionError。
+
+        上次退出时复位过设备的话，要等它重新枚举，这里最多等 5 秒。
+        """
         self.timeout_ms = int(timeout * 1000)
-        self.device = usb.core.find(idVendor=self.VENDOR_ID, idProduct=self.PRODUCT_ID)
-        if self.device is None:
+        self.device = None
+        self.out = None
+        self.into = None
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                self._open()
+                return
+            except (usb.core.USBError, ConnectionError):
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.5)
+
+    def _open(self):
+        device = usb.core.find(idVendor=self.VENDOR_ID, idProduct=self.PRODUCT_ID)
+        if device is None:
             raise ConnectionError("找不到 usb-botbase：USB 线连着吗？Switch 上的插件启动了吗？")
-        self.device.set_configuration()
-        interface = self.device.get_active_configuration()[(0, 0)]
-        self.out = usb.util.find_descriptor(
+        device.set_configuration()
+        interface = device.get_active_configuration()[(0, 0)]
+        out = usb.util.find_descriptor(
             interface,
             custom_match=lambda e: (
                 usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT
             ),
         )
-        self.into = usb.util.find_descriptor(
+        into = usb.util.find_descriptor(
             interface,
             custom_match=lambda e: (
                 usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN
             ),
         )
+        if out is None or into is None:
+            raise ConnectionError("usb-botbase 没有找到收发端点")
+        self.device = device
+        self.out = out
+        self.into = into
+
+    def _reconnect(self):
+        """USB 断开后等设备重新出现，最多等 RECONNECT_TIMEOUT 秒。"""
+        self.close()
+        deadline = time.monotonic() + self.RECONNECT_TIMEOUT
+        last_error = None
+        while True:
+            try:
+                self._open()
+                return
+            except (usb.core.USBError, ConnectionError) as exc:
+                last_error = exc
+            if time.monotonic() >= deadline:
+                raise ConnectionError(
+                    f"USB 连接断开，{self.RECONNECT_TIMEOUT} 秒内没有重新连上"
+                ) from last_error
+            time.sleep(1)
 
     def close(self):
+        # 进程可能是在发命令的中途退出的，botbase 会一直等剩下的字节，不复位的话下次写入会超时。
+        # 复位会让设备重新枚举，所以 __init__ 里要等它一会儿。
         if self.device is not None:
-            usb.util.dispose_resources(self.device)
-            self.device = None
+            try:
+                self.device.reset()
+            except usb.core.USBError:
+                pass
+            try:
+                usb.util.dispose_resources(self.device)
+            except usb.core.USBError:
+                pass
+        self.device = None
+        self.out = None
+        self.into = None
 
-    def _send(self, cmd: str):
+    def _send_once(self, cmd: str):
         data = cmd.encode()
         self.out.write(struct.pack("<I", len(data) + 2), self.timeout_ms)
         self.out.write(data, self.timeout_ms)
+
+    def _send(self, cmd: str):
+        try:
+            self._send_once(cmd)
+        except usb.core.USBError:
+            self._reconnect()
+            self._send_once(cmd)
+
+    def _request_bytes(self, cmd: str) -> bytes:
+        for attempt in range(2):
+            try:
+                return super()._request_bytes(cmd)
+            except usb.core.USBError as exc:
+                if attempt:
+                    raise ConnectionError("USB 连接反复断开，重连后仍然没有返回") from exc
+                self._reconnect()
+        raise AssertionError("unreachable")
 
     def _receive(self) -> bytes:
         """收一次返回：先收长度，再把数据收完。超时抛 usb.core.USBTimeoutError。"""
@@ -223,7 +301,7 @@ _instance: Switch | None = None
 def connect() -> Switch:
     """按 .env 的配置建立全局唯一的连接，程序退出时自动关闭。重复调用会抛 RuntimeError。
 
-    SWITCH_CONNECTION=usb 走 USB；否则走 Wi-Fi，用 SWITCH_IP、SWITCH_PORT。需要先调用 load_env。
+    SWITCH_CONNECTION=usb 走 USB；否则走 Wi-Fi，用 SWITCH_IP、SWITCH_PORT。需要先调用 load_dotenv。
     """
     global _instance
     if _instance is not None:
@@ -233,6 +311,10 @@ def connect() -> Switch:
     else:
         sw = WifiSwitch(os.environ["SWITCH_IP"], int(os.environ["SWITCH_PORT"]))
     atexit.register(sw.close)
+    if threading.current_thread() is threading.main_thread():
+        # SIGKILL 拦不住；SIGTERM、SIGHUP 转成正常退出，退出时 atexit 会关掉 USB
+        for sig in (signal.SIGTERM, signal.SIGHUP):
+            signal.signal(sig, _exit_on_signal)
     _instance = sw
     return sw
 

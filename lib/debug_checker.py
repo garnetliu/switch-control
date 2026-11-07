@@ -26,6 +26,11 @@ def set_step(step: str) -> None:
     _step = step
 
 
+def current_step() -> str:
+    """返回 main.py 当前正在执行的步骤名。"""
+    return _step
+
+
 def should_save() -> bool:
     """这一步要不要存检查区域：环境变量 SAVE_CHECKS=1，并且这一步在 SAVE_CHECK_STEPS 里。"""
     return os.environ.get("SAVE_CHECKS") == "1" and _step in SAVE_CHECK_STEPS

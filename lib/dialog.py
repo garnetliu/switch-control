@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 
 from config.layout import DIALOG_RECT, MENU_BOX_RECT, MENU_LAST_ITEM_RECT, POPUP_RECT
-from config.timing import DEFAULT_TIMEOUT, POLL_INTERVAL
+from config.timing import ACT_TIMEOUT, DEFAULT_TIMEOUT, POLL_INTERVAL
 from lib import switch
 from lib.log import log
 from lib.wait import capture, save_timeout_frames
@@ -52,28 +52,29 @@ def press_until(
     done: Callable[[ImageChecker], bool],
     what: str,
     button: str = "A",
-    max_presses: int = 100,
-    interval: float = 0.5,
+    timeout: float = ACT_TIMEOUT,
 ) -> ImageChecker:
-    """一直按 button，直到 done(截图) 为真，返回那张截图。不认中间出现的是什么对话，也不等翻页。
+    """一直按 button，直到 done(截图) 为真，返回那张截图。
 
-    按一次之后的 interval 秒里一直看画面，满足了就不再按，免得按在要等的菜单上；没满足就再按。
+    不认中间出现的是什么对话，也不等翻页：按一次隔 POLL_INTERVAL 再看画面，没满足就接着按。
     按键偶尔会被游戏吞掉（USB 真机上连着好几次没反应），所以不等画面变化，只管接着按。
-    按了 max_presses 次还没满足抛 RuntimeError。what: 在等什么，写进报错里。
+    每次按之前都先判定，已经满足就不再按，不会按在要等的菜单上。
+    超过 timeout 秒还没满足，存下开始等时和最后一帧的截图，抛 TimeoutError。
+    what: 在等什么，写进日志和报错里。
     """
-    for _ in range(max_presses):
+    deadline = time.monotonic() + timeout
+    first = None
+    while True:
         screen = capture()
+        first = first or screen
         if done(screen):
             return screen
+        if time.monotonic() >= deadline:
+            save_timeout_frames(first, screen)
+            raise TimeoutError(f"等了 {timeout} 秒，按 {button} 一直没有等到：{what}")
         log(f"按 {button}（在等{what}）", "DEBUG")
         switch.get().click(button, 0)
-        deadline = time.monotonic() + interval
-        while time.monotonic() < deadline:
-            screen = capture()
-            if done(screen):
-                return screen
-            time.sleep(POLL_INTERVAL)
-    raise RuntimeError(f"按了 {max_presses} 次 {button}，还是没等到{what}")
+        time.sleep(POLL_INTERVAL)
 
 
 def menu_last_item(screen: ImageChecker) -> str:

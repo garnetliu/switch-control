@@ -65,6 +65,8 @@ class Run:
         # 已经出现过的宝可梦，之后不会再作为对手出现
         self.encountered: set[str] = set()
         self.path_type: str | None = None
+        # seed 对应的普通遭遇宝可梦，按路线图层和列排列
+        self.path_opponents: dict[int, list[str]] = {}
         self.target_path: list[BossNode] = []
         # 现在走到目标路线上的第几个节点，0 是起点
         self.current_index = 0
@@ -102,10 +104,14 @@ class Run:
         self.field = Field()
         # 下一局要不要沿用这一局的结果（keep path），由一局结束时的步骤决定
         self.keep_path = False
+        # 锁定这张图之后每一局是赢是输，用来判断要不要解锁
+        self.lock_results: list[bool] = []
         # 这一局开始的时间（time.time()）
         self.started = time.time()
         # 三只可选的租借宝可梦，顺序和屏幕上一致；选中的是第几个
         self.candidates: list[str] = []
+        # 租借界面出现过的所有候选，包括选走后补入的宝可梦
+        self.rental_pool: list[str] = []
         self.selection: int | None = None
         # keep path 时上一局的状态（to_dict 的结果），用来校验画面、沿用结果；没有就是 None
         self.plan: dict[str, Any] | None = None
@@ -192,7 +198,9 @@ class Run:
         return {
             "boss": self.boss,
             "keep_path": self.keep_path,
+            "lock_results": self.lock_results,
             "candidates": self.candidates,
+            "rental_pool": self.rental_pool,
             "selection": self.selection,
             # 出发时的队伍，没记下（还没出发）就是现在的
             "pokemon": start[0] if start else None,
@@ -200,6 +208,7 @@ class Run:
             "encountered": sorted(self.encountered),
             "caught": self.caught,
             "rows": rows,
+            "path_opponents": {str(row): names for row, names in self.path_opponents.items()},
             "target_path": [[node.row, node.col] for node in self.target_path],
             "path_score": self.path_score,
             "scientist": {str(index): name_id for index, name_id in self.scientist.items()},
@@ -263,6 +272,7 @@ def start(boss: str, plan: dict[str, Any] | None = None) -> Run:
         # 沿用锁定的图，这一局一开始就是锁定的：中途出错停下时状态文件里也还是锁定，
         # 下次启动接着刷同一张图（真机上中途崩溃过一次，锁就丢了）
         _current.keep_path = True
+        _current.lock_results = list(plan.get("lock_results", []))
     return _current
 
 

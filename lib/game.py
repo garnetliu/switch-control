@@ -12,14 +12,13 @@ from lib.dialog import press_until
 from lib.log import log
 from lib.wait import capture, wait_for
 from tool.check_image import ImageChecker
-from tool.image import text_lines
 
 # 《宝可梦 剑》《宝可梦 盾》的 Title ID
 GAME_TITLE_IDS = ("0100ABF008968000", "01008DB008C2C000")
 
 
 def restart() -> None:
-    """关掉游戏再重新打开，一直到回到游戏里、可以操作为止（站在场景里、没有对话框）。
+    """关掉游戏再重新打开，直到开场画面变黑并停止按键。
 
     做法：HOME 菜单上按 Y 切换用户，要先关掉正在运行的软件，确认框默认选中「关闭」，按 A；
     关掉之后出现选用户的界面，按 A 用默认选中的用户，游戏就直接重新启动了。
@@ -36,8 +35,6 @@ def restart() -> None:
         lambda screen: screen.has_text(CLOSE_DIALOG_RECT, "将关闭软件"),
         "切换用户前关闭软件的确认框",
         button="Y",
-        max_presses=10,
-        interval=1.0,
     )
     sw.click("A", 0)
     wait_for(
@@ -52,29 +49,18 @@ def restart() -> None:
 
 
 def _enter_game() -> None:
-    """游戏启动之后，一直到回到游戏里、没有对话框。
-
-    开机的黑屏和 logo 过去、出现彩色画面（开场动画或标题画面）就按一次 A，直接进游戏。
-    之后不再多按：存档位置就在科学家面前，多按的 A 会和她说上话，
-    一路把罚款对话推下去，在「是 / 否」上直接选了「是」（真机上发生过）。
-    万一那一下 A 只跳到了标题画面，就在标题画面上再按一次。
-    """
+    """等开场彩色画面出现后持续按 A，每次截图检查，画面变黑就停止。"""
     # 从开始启动到出现彩色画面，最多等几秒（不跳过开场动画时实测约 15 秒）
     boot_timeout = 60.0
-    # 在彩色画面上最多按几次 A
-    max_presses = 3
-
-    wait_for(lambda screen: _game_running() and _colorful(screen), boot_timeout, "开场的彩色画面")
-    for _ in range(max_presses):
+    screen = wait_for(
+        lambda screen: _game_running() and _colorful(screen), boot_timeout, "开场的彩色画面"
+    )
+    presses = 0
+    while not screen.is_black():
         switch.get().click("A", 0)
-        screen = wait_for(
-            lambda screen: _in_game(screen) or _title_shown(screen),
-            LOAD_TIMEOUT,
-            "进入游戏或者标题画面",
-        )
-        if _in_game(screen):
-            return
-    raise RuntimeError(f"在标题画面上按了 {max_presses} 次 A，还是没进游戏")
+        presses += 1
+        screen = capture()
+    log(f"画面变黑，停止按 A（共按 {presses} 次）")
 
 
 def _home_shown(screen: ImageChecker) -> bool:
@@ -99,10 +85,3 @@ def _colorful(screen: ImageChecker) -> bool:
 def _in_game(screen: ImageChecker) -> bool:
     """站在场景里、没有对话框：左下角有 Y 通信图标。"""
     return screen.match_template(Y_COMM_RECT, data.misc_icons()["y_comm"]) >= 0.85
-
-
-def _title_shown(screen: ImageChecker) -> bool:
-    """标题画面：下方有「请按A键继续游戏」。位置没量过，所以在下方一整块里检测文字再找。"""
-    return any(
-        "请按A键继续游戏" in text for text, _ in text_lines(screen, ((0.1, 0.75), (0.9, 1.0)))
-    )

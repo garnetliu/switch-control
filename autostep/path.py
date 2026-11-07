@@ -14,7 +14,6 @@ from config.layout import (
     LABEL_ICON_UPPER,
     PATH_TEXT_RECT,
 )
-from config.paths import UNKNOWN_DIR
 from config.timing import DEFAULT_TIMEOUT, LOAD_TIMEOUT, POLL_INTERVAL, TICK_SECONDS
 from lib import data, run, switch
 from lib.dialog import advance_until
@@ -23,7 +22,7 @@ from lib.read import read_team
 from lib.scoring import evaluate_matchup, weighted_score
 from lib.wait import capture, wait_for
 from tool.check_image import ImageChecker
-from tool.image import find_templates, mask, save
+from tool.image import find_templates, mask
 from tool.text import contains
 from type.image import Rect
 
@@ -73,27 +72,13 @@ def path() -> str:
 
 
 def _watch(condition: Callable[[ImageChecker], bool], timeout: float, what: str) -> ImageChecker:
-    """和 wait_for 一样等 condition，等的时候没满足条件的画面每秒存一张进 UNKNOWN_DIR，
-    用来事后看路上出现过哪些还没处理的界面（比如背包客的道具没认出来）。超时抛 TimeoutError。
-    """
-    # 最少隔几秒存一张
-    save_interval = 1.0
-
-    UNKNOWN_DIR.mkdir(parents=True, exist_ok=True)
+    """不停截图直到 condition 满足，超时抛 TimeoutError。"""
     deadline = time.monotonic() + timeout
-    saved_at = 0.0
     while True:
         image = capture()
         if condition(image):
             return image
-        now = time.monotonic()
-        if now - saved_at >= save_interval:
-            save(
-                image,
-                str(UNKNOWN_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}-{int(now * 10) % 10}.jpg"),
-            )
-            saved_at = now
-        if now >= deadline:
+        if time.monotonic() >= deadline:
             raise TimeoutError(f"等了 {timeout} 秒，画面一直没有出现：{what}")
         time.sleep(POLL_INTERVAL)
 
@@ -105,7 +90,7 @@ def _choose_fork(image: ImageChecker) -> None:
     只看标签正下方那一块：光标移过来时，推之前没有白色、推之后有，白色像素几乎全变（真机上 100%），
     没操作时最多变 0.7%（雾不是白色）。
     先找出下一层的属性标签，从左到右就是这一层的第 0、1、2…列。读路线图时镜头停在了上面几层，
-    这时看不到这些标签：往左推一下，镜头会回到岔路口，光标本来就在最左边，不会动（待实测）。
+    这时看不到这些标签：按住右摇杆往下推，镜头会回到岔路口，再松开。
     """
     current = run.get()
     offset = current.next_fork_offset()
@@ -113,20 +98,31 @@ def _choose_fork(image: ImageChecker) -> None:
     row_types = [node.name for node in current.rows[target.row]]
     labels = _fork_labels(image, row_types)
     if labels is None:
-        log("看不到下一层的属性标签，往左推一下让镜头回到岔路口", "DEBUG")
-        switch.get().stick("LEFT", -switch.STICK_MAX, 0, TICK_SECONDS)
+        # 镜头停在了上面几层，看不到下一层的标签：右摇杆往下推，把镜头带回岔路口。
+        # 界面上右摇杆是上下移镜头，左摇杆是选路的，推左摇杆镜头不会动（真机上因此空等到超时）
+        log("看不到下一层的属性标签，右摇杆往下推让镜头回到岔路口", "DEBUG")
+        switch.get().press_stick("RIGHT", 0, -switch.STICK_MAX)
         found: dict[str, list[tuple[int, int]]] = {}
-        wait_for(
-            lambda screen: _store(found, _fork_labels(screen, row_types)),
-            DEFAULT_TIMEOUT,
-            "岔路口下一层的属性标签",
-        )
-        labels = found["labels"]
-    screen = wait_for(
-        lambda screen: _cursor_column(screen, labels) is not None,
-        DEFAULT_TIMEOUT,
-        "岔路口的光标",
-    )
+        try:
+            wait_for(
+                lambda screen: _store(found, _fork_labels(screen, row_types)),
+                DEFAULT_TIMEOUT,
+                "岔路口下一层的属性标签",
+            )
+        finally:
+            switch.get().release_stick("RIGHT")
+    # 光标和标签要用同一帧的位置：镜头移动时找到的标签位置会偏，拿偏掉的位置去找光标会一直找不到
+    latest: dict[str, list[tuple[int, int]]] = {}
+
+    def cursor_shown(screen: ImageChecker) -> bool:
+        frame_labels = _fork_labels(screen, row_types)
+        if frame_labels is None or _cursor_column(screen, frame_labels) is None:
+            return False
+        latest["labels"] = frame_labels
+        return True
+
+    screen = wait_for(cursor_shown, DEFAULT_TIMEOUT, "岔路口的光标")
+    labels = latest["labels"]
     column = _cursor_column(screen, labels)
     assert column is not None
     log(f"光标在第 {column + 1} 列，目标是第 {target.col + 1} 列", "DEBUG")

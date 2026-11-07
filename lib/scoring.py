@@ -8,6 +8,7 @@
 from collections.abc import Iterable
 from dataclasses import replace
 
+from lib.log import log
 from type.battle import Field
 from type.pokemon import Move, Pokemon
 
@@ -89,12 +90,17 @@ def evaluate_average_matchup(
 def select_best_move(
     attacker: Pokemon, defender: Pokemon, field: Field, teammates: Iterable[Pokemon] = ()
 ) -> tuple[int, str, float]:
-    """attacker 对 defender 用哪个招式最好：返回招式的序号、name_id、分数。没 PP 的招式不算。"""
+    """attacker 对 defender 用哪个招式最好：返回招式的序号、name_id、分数。没 PP 的招式不算。
+
+    极巨化时分数是按极巨招式算的，日志里的名字也用极巨招式的名字。
+    """
     teammates = list(teammates)
+    moves = attacker.max_moves if attacker.dynamax else attacker.moves
     best_index, best_name_id, best_score = 0, "", -100.0
-    for index, move in enumerate(attacker.moves):
+    for index, move in enumerate(moves):
         if attacker.pp[index] > 0:
             score = move_score(attacker, index, defender, teammates, field)
+            log(f"第 {index + 1} 个招式 {move.name()}（得分 {score:.2f}）")
             if score > best_score:
                 best_index, best_name_id, best_score = index, move.name_id, score
     return best_index, best_name_id, best_score

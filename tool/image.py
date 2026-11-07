@@ -64,6 +64,19 @@ def difference(a: ImageChecker, b: ImageChecker, rect: Rect) -> float:
     return float(np.abs(gray_a - gray_b).mean())
 
 
+def small_difference(a: ImageChecker, b: ImageChecker, rect: Rect, size: int = 16) -> float:
+    """区域缩到 size×size 后的灰度差：平均每像素差多少，0 到 255。
+
+    预览里的宝可梦一直在动，逐像素差会被动画干扰：同一只隔一秒能差 7 左右，空背景换成
+    宝可梦也只差 9。缩小后动画被平均掉：同一只 1.4 以下，画出来或者换一只 5 以上。
+    """
+    gray_a = a._crop(a._gray, rect)
+    gray_b = b._crop(b._gray, rect)
+    small_a = cv2.resize(gray_a, (size, size), interpolation=cv2.INTER_AREA).astype(np.int16)
+    small_b = cv2.resize(gray_b, (size, size), interpolation=cv2.INTER_AREA).astype(np.int16)
+    return float(np.abs(small_a - small_b).mean())
+
+
 def locate_template(
     image: ImageChecker,
     rect: Rect,
