@@ -104,6 +104,8 @@ class Run:
         self.field = Field()
         # 下一局要不要沿用这一局的结果（keep path），由一局结束时的步骤决定
         self.keep_path = False
+        # 这一局的冒险 seed，用来判断下一局是不是同一张图
+        self.seed: int | None = None
         # 锁定这张图之后每一局是赢是输，用来判断要不要解锁
         self.lock_results: list[bool] = []
         # 这一局开始的时间（time.time()）
@@ -197,6 +199,7 @@ class Run:
         }
         return {
             "boss": self.boss,
+            "seed": self.seed,
             "keep_path": self.keep_path,
             "lock_results": self.lock_results,
             "candidates": self.candidates,
@@ -268,7 +271,9 @@ def start(boss: str, plan: dict[str, Any] | None = None) -> Run:
     _current.round = _rounds
     if plan is not None:
         # 上一局自己的 plan 用不到了，不带过来，免得状态文件一层层套下去
-        _current.plan = {**plan, "plan": None}
+        _current.plan = {**plan, "plan": None, "seed": None}
+        # 上一局的 seed 拿来和这局比较，比较完这一局会用自己的
+        _current.seed = plan.get("seed")
         # 沿用锁定的图，这一局一开始就是锁定的：中途出错停下时状态文件里也还是锁定，
         # 下次启动接着刷同一张图（真机上中途崩溃过一次，锁就丢了）
         _current.keep_path = True

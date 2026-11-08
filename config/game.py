@@ -2,8 +2,8 @@
 
 # 游戏的语言，对应数据文件里 names、abilities 的键
 LANGUAGE = "zh-Hans"
-# 要找的传说宝可梦，数据文件里的 name_id
-BOSS = "tapu-koko"
+# 要找的传说宝可梦，数据文件里的 name_id。不在传说菜单里时改成刷菜单的第一项（见 join._select_target）
+BOSS = "solgaleo"
 # 抓普通对手用的球、抓首领用的球，写游戏里显示的球名
 BASE_BALL = "究极球"
 LEGENDARY_BALL = "究极球"

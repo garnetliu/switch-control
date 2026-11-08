@@ -73,8 +73,8 @@ def _table() -> list[list]:
     return json.loads((DATA_DIR / "lair_pokemon.json").read_text(encoding="utf-8"))["rows"]
 
 
-def encounters(seed: int, partners: int = CPU_PARTNERS) -> list[list]:
-    """返回 seed 对应的 10 个普通遭遇，顺序按第 1、2、4、4 个节点排列。"""
+def _picks(seed: int, partners: int = CPU_PARTNERS) -> list[list]:
+    """按 seed 依次抽取：前 6 个是租借候选，后 10 个是普通遭遇。"""
     rows = _table()
     rng = _Xoroshiro(seed)
     picked: list[list] = []
@@ -113,7 +113,17 @@ def encounters(seed: int, partners: int = CPU_PARTNERS) -> list[list]:
         row = pick()
         if row[4] != row[5]:
             rng.next_u32()
-    return picked[6:]
+    return picked
+
+
+def encounters(seed: int, partners: int = CPU_PARTNERS) -> list[list]:
+    """返回 seed 对应的 10 个普通遭遇，顺序按第 1、2、4、4 个节点排列。"""
+    return _picks(seed, partners)[6:]
+
+
+def rental_candidates(seed: int, partners: int = CPU_PARTNERS) -> list[str]:
+    """返回 seed 对应的 6 只租借候选，前 3 只是初始界面上的候选。"""
+    return [encounter_name_id(row) for row in _picks(seed, partners)[:6]]
 
 
 def encounter_name_id(row: list) -> str:

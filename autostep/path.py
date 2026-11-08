@@ -3,8 +3,6 @@ from collections.abc import Callable
 from dataclasses import replace
 from itertools import combinations
 
-import numpy as np
-
 from config.layout import (
     BACKPACKER_ITEM_RECTS,
     BACKPACKER_RECT,
@@ -17,12 +15,13 @@ from config.layout import (
 from config.timing import DEFAULT_TIMEOUT, LOAD_TIMEOUT, POLL_INTERVAL, TICK_SECONDS
 from lib import data, run, switch
 from lib.dialog import advance_until
+from lib.game_state import GameState
 from lib.log import log
 from lib.read import read_team
 from lib.scoring import evaluate_matchup, weighted_score
-from lib.wait import capture, wait_for
+from lib.wait import capture, save_timeout_frames, wait_for
 from tool.check_image import ImageChecker
-from tool.image import find_templates, mask
+from tool.image import find_templates
 from tool.text import contains
 from type.image import Rect
 
@@ -41,7 +40,7 @@ BERRY_TEXT = "树果"
 CURSOR_LOWER, CURSOR_UPPER = (0, 0, 220), (180, 40, 255)
 
 
-def path() -> str:
+def path(game: GameState) -> str:
     """在冒险的路上一直看画面，看到什么就交给对应的处理函数，处理完接着看，
     直到画面下方的黑框里出现「×××出现了！」，也就是进入了战斗。
 
@@ -111,32 +110,32 @@ def _choose_fork(image: ImageChecker) -> None:
             )
         finally:
             switch.get().release_stick("RIGHT")
+
     # 光标和标签要用同一帧的位置：镜头移动时找到的标签位置会偏，拿偏掉的位置去找光标会一直找不到
-    latest: dict[str, list[tuple[int, int]]] = {}
-
-    def cursor_shown(screen: ImageChecker) -> bool:
+    def cursor_column(screen: ImageChecker) -> int | None:
         frame_labels = _fork_labels(screen, row_types)
-        if frame_labels is None or _cursor_column(screen, frame_labels) is None:
-            return False
-        latest["labels"] = frame_labels
-        return True
+        return None if frame_labels is None else _cursor_column(screen, frame_labels)
 
-    screen = wait_for(cursor_shown, DEFAULT_TIMEOUT, "岔路口的光标")
-    labels = latest["labels"]
-    column = _cursor_column(screen, labels)
+    first = wait_for(
+        lambda screen: cursor_column(screen) is not None, DEFAULT_TIMEOUT, "岔路口的光标"
+    )
+    column = cursor_column(first)
     assert column is not None
     log(f"光标在第 {column + 1} 列，目标是第 {target.col + 1} 列", "DEBUG")
+    deadline = time.monotonic() + DEFAULT_TIMEOUT * 3
     while column != target.col:
         step = 1 if target.col > column else -1
-        below = _below_label(labels[column + step])
-        before = mask(screen, below, CURSOR_LOWER, CURSOR_UPPER)
         switch.get().stick("LEFT", step * switch.STICK_MAX, 0, TICK_SECONDS)
-        screen = wait_for(
-            lambda screen, below=below, before=before: _cursor_arrived(screen, below, before),
-            DEFAULT_TIMEOUT,
-            f"光标移到第 {column + step + 1} 列的标签下面",
-        )
-        column += step
+        moved = _wait_column_change(row_types, column)
+        if moved is None:
+            # 推了光标没动，多半是这次输入被游戏吞了，再推一次
+            if time.monotonic() >= deadline:
+                save_timeout_frames(first, capture())
+                raise TimeoutError(
+                    f"等了 {DEFAULT_TIMEOUT * 3} 秒，光标一直没有移到第 {target.col + 1} 列"
+                )
+            continue
+        column = moved
     switch.get().click("A", 0)
     current.advance()
     log(f"选了从左数第 {offset + 1} 条路，走向 {current.current_node}")
@@ -189,6 +188,20 @@ def _fork_labels(screen: ImageChecker, row_types: list[str]) -> list[tuple[int, 
     return [(x, y) for x, y, _ in best]
 
 
+def _wait_column_change(row_types: list[str], column: int, timeout: float = 1.5) -> int | None:
+    """等光标挪到别的列，返回新的列号；超时还在原来那一列（或者认不出来）返回 None。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        screen = capture()
+        labels = _fork_labels(screen, row_types)
+        if labels is not None:
+            now = _cursor_column(screen, labels)
+            if now is not None and now != column:
+                return now
+        time.sleep(POLL_INTERVAL)
+    return None
+
+
 def _below_label(label: tuple[int, int]) -> Rect:
     """属性标签正下方光标会出现的那一块（比例坐标）。label 是标签左边属性图标左上角的像素位置。
 
@@ -208,13 +221,6 @@ def _cursor_column(screen: ImageChecker, labels: list[tuple[int, int]]) -> int |
         for label in labels
     ]
     return shown.index(True) if shown.count(True) == 1 else None
-
-
-def _cursor_arrived(screen: ImageChecker, below: Rect, before: np.ndarray) -> bool:
-    """光标移到了 below 这一块：现在有白色，并且白色像素和推之前比变了 60% 以上。"""
-    after = mask(screen, below, CURSOR_LOWER, CURSOR_UPPER)
-    union = (before | after).sum()
-    return after.mean() > 0.02 and union > 0 and (before ^ after).sum() / union > 0.6
 
 
 def _meet_scientist(image: ImageChecker) -> None:

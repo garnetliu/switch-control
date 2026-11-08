@@ -15,9 +15,11 @@ from config.layout import (
 from config.timing import DEFAULT_TIMEOUT, POLL_INTERVAL, TICK_SECONDS
 from lib import data, pkhex, run, switch
 from lib.dialog import marker_shown
+from lib.game_state import GameState
 from lib.log import log
 from lib.scoring import select_best_move, transform_ditto
 from lib.wait import act_until, capture, wait_for
+from tool import pk8
 from tool.check_image import ImageChecker
 from type.pokemon import Pokemon
 
@@ -31,10 +33,9 @@ RESULT_TEXT = "选1只要带回去的宝可梦"
 OPPONENT_ADDRESS = 0x886A95B8
 # 队伍 P1–P4：自己 + 3 个队友。选初始界面读不到，战斗开始后才有效（实测）
 LAIR_PARTY_ADDRESSES = (0x886B67C8, 0x886BC348, 0x886B9588, 0x886BF108)
-PK8_SIZE = 0x158
 
 
-def battle() -> str:
+def battle(game: GameState) -> str:
     """一场对战：从内存识别对手、选招式出招，然后等这一回合打完。
 
     开始时游戏在这场对战开场的「×××出现了！」上，见 path：先等战斗菜单出来，等的时候也读战斗文字，
@@ -83,11 +84,9 @@ def _read_team() -> None:
     current = run.get()
     if current.team:
         return
-    raw = [switch.get().peek(address, PK8_SIZE) for address in LAIR_PARTY_ADDRESSES]
-    records = pkhex.parse_pk8_batch(raw)
+    records = pk8.read(LAIR_PARTY_ADDRESSES, data.rental_pokemon().values())
     members = []
-    for record in records:
-        member = pkhex.match_pokemon(record, list(data.rental_pokemon().values()))
+    for _, record, member in records:
         if member is None:
             raise RuntimeError(
                 f"战斗内存里的队伍记录识别不了：species={record.get('species')} "
@@ -145,10 +144,8 @@ def _check_opponent() -> None:
 
 def _read_opponent(expected_name: str | None = None) -> Pokemon:
     """从战斗中的 PK8 内存记录识别对手。"""
-    raw = switch.get().peek(OPPONENT_ADDRESS, PK8_SIZE)
-    record = pkhex.parse_pk8_batch([raw])[0]
     candidates = [*data.rental_pokemon().values(), *data.boss_pokemon().values()]
-    opponent = pkhex.match_pokemon(record, candidates)
+    _, record, opponent = pk8.read([OPPONENT_ADDRESS], candidates)[0]
     if opponent is not None:
         log(
             f"从内存读取对手：{opponent.name_id}，"

@@ -65,6 +65,16 @@ class ImageChecker:
         self._hsv = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2HSV)
         self._gray = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2GRAY)
 
+    @property
+    def bgr(self) -> np.ndarray:
+        """去黑边、缩放到 1920x1080 之后的彩色图（BGR）。"""
+        return self._bgr
+
+    def crop(self, rect: Rect, channel: str = "bgr") -> np.ndarray:
+        """按比例裁剪截图。channel: bgr（彩色）、gray（灰度）或 hsv。"""
+        image = {"bgr": self._bgr, "gray": self._gray, "hsv": self._hsv}[channel]
+        return self._crop(image, rect)
+
     @staticmethod
     def _crop(img: np.ndarray, rect: Rect) -> np.ndarray:
         h, w = img.shape[:2]

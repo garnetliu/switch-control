@@ -5,25 +5,24 @@ from dataclasses import replace
 from config.game import BOSS
 from config.layout import (
     DEN_TEXT_RECT,
-    DIALOG_RECT,
     LABEL_ICON_LOWER,
     LABEL_ICON_SCORE,
     LABEL_ICON_UPPER,
     LOBBY_MENU_RECT,
-    NAME_RECTS,
     PATH_RECTS,
     POPUP_RECT,
     ROW_MAX_SPREAD,
     STARTER_PANEL_RECTS,
-    YES_NO_RECTS,
 )
-from config.timing import DEFAULT_TIMEOUT, LOAD_TIMEOUT, TICK_SECONDS
-from lib import data, lair, pkhex, run, switch
-from lib.dialog import advance_until, menu_last_item, press_until
+from config.timing import LOAD_TIMEOUT
+from lib import data, lair, run, switch
+from lib.dialog import menu_last_item, press_until
+from lib.game_state import GameState
 from lib.log import log
 from lib.run import FIRST_ROW, SECOND_ROW, THIRD_ROW
 from lib.scoring import weighted_score
 from lib.wait import capture, wait_for
+from tool import pk8
 from tool.check_image import BASE_SIZE, ImageChecker
 from tool.image import locate_template, text_lines
 from tool.text import levenshtein, pad
@@ -31,16 +30,14 @@ from type.image import Rect
 from type.path import TypeMatch
 
 RENTAL_CANDIDATE_ADDRESSES = (0x83E93070, 0x83E93300, 0x83E93590)
-PK8_SIZE = 0x158
-RENTAL_MEMORY_POLL_INTERVAL = 0.25
 
 
-def join() -> str:
+def join(game: GameState) -> str:
     """开一局极巨大冒险：选目标传说、选初始宝可梦、选路线。
 
     开始时游戏要停在科学家面前、没有对话框，见 initialize。
     使用全局连接，需要先调用 switch.connect。
-    要找的传说见 config/game.py 的 BOSS。
+    要找的传说见 config/game.py 的 BOSS；菜单里没有它时选菜单第一项，见 _select_target。
     会用 run.start 开新的一局，读到的信息都记在这一局里。
     返回下一步的名字 "path"，在岔路口移动光标、走上目标路线是 path 的事。
 
@@ -48,47 +45,49 @@ def join() -> str:
     候选和上一局一致且上一局已保存完整候选池，才沿用上一局的选择、队伍和路线。
     """
     state = run.load()
+    boss = _select_target()
     keep = (
         state is not None
         and state["keep_path"]
-        and state["boss"] == BOSS
+        and state["boss"] == boss
         and state["selection"] is not None
         and state["target_path"]
     )
-    run.start(BOSS, state if keep else None)
+    run.start(boss, state if keep else None)
     if keep:
         log("keep path：沿用上一局的结果，只核对选初始和选路线时的画面")
-    _select_target()
-    reader = _select_starter()
-    _select_path(reader)
+    _select_starter()
+    _select_path()
     run.get().record_start()
     run.save()
     return "path"
 
 
-def _select_target() -> None:
+def _select_target() -> str:
     """从科学家面前开始对话，在传说菜单里选中 BOSS 并确认，一直到进入选初始宝可梦的界面。
 
     initialize 已经处理过中途退出的罚款和提醒，并关掉了对话框；这里按 A 重新开始对话：
     开场白 →「现在就出发 / 我想听讲解 / 还是先算了」→ 选「现在就出发」→
     「看来您手边有宝可梦所在位置的记录呢」→「请问您要去找哪个宝可梦呢」→ 传说菜单。
+    返回选的是哪只神兽（name_id）。
+
+    BOSS 不在菜单里（刷到闪光带走之后那只就不在列表里了，或者存档改过）时，改成选菜单的第一项，
+    这一局就刷它；菜单里全是「不指定」时抛 RuntimeError。
     """
-    # TODO: 传说菜单里没有任何神兽线路（只有「不指定」）的情况还没测试
     # 一直按 A，直到传说菜单弹出来（菜单最后一行是「不指定」）。开场白会重新出现，
     # 连同菜单上默认选中的「现在就出发」一起用 A 过掉
     image = press_until(lambda screen: menu_last_item(screen) == "不指定", "传说菜单")
-    _select_menu_item(image, POPUP_RECT, data.boss_pokemon()[BOSS].name(), "传说菜单")
-    switch.get().click("A", 0)
-    # 选好传说之后：「要保存目前为止的冒险记录吗？」→「是 / 否」→ 选「是」保存 → 极巨大冒险的大厅
-    wait_for(
-        lambda screen: screen.has_text(DIALOG_RECT, "要保存目前为止的"),
-        DEFAULT_TIMEOUT,
-        "要不要保存的提示",
-    )
-    image = advance_until(lambda screen: screen.selected(list(YES_NO_RECTS)) >= 0, "保存的是 / 否")
-    if image.selected(list(YES_NO_RECTS)) != 0:
-        raise RuntimeError("要不要保存的菜单上光标不在「是」上")
-    switch.get().click("A", 0)
+    bosses = data.boss_pokemon()
+    wanted = bosses[BOSS].name()
+    try:
+        _select_menu_item(image, POPUP_RECT, wanted, "选择传说Boss")
+        boss = BOSS
+    except RuntimeError:
+        boss = _select_first_item(image, "选择传说Boss")
+        log(f"传说菜单里没有「{wanted}」，这一局改成刷「{bosses[boss].name()}」", "WARNING")
+    # 选好传说之后：「要保存目前为止的冒险记录吗？」→「是 / 否」→ 选「是」保存。
+    # 一直按 A 到画面变黑（保存中）就停，参考 lib/game.py 的 _enter_game
+    press_until(lambda screen: screen.is_black(), "保存时画面变黑")
     # 保存要几秒。大厅里选「发起单人挑战！」，队友由电脑来当
     solo = "发起单人挑战！"
     image = wait_for(
@@ -98,178 +97,150 @@ def _select_target() -> None:
     )
     _select_menu_item(image, LOBBY_MENU_RECT, solo, "大厅菜单")
     switch.get().click("A", 0)
+    return boss
 
 
-def _select_starter() -> "_RentalPoolReader":
-    """从内存读取三只租借宝可梦，选择得分最高的，返回租借候选池的读取器。
+def _select_starter() -> None:
+    """从内存读取三只租借宝可梦，选择得分最高的。
 
     屏幕只用来看光标停在哪只上；宝可梦信息都从内存读取。队友等第一场战斗再读（见 battle._read_team），
     选初始界面读不到队伍地址。
     """
-    # 开始时还剩 3 个对手要打、最后还有 1 个首领。首领更难，权重更大
-    rental_weight, boss_weight = 3, 2
-
-    current = run.get()
-    # 名字区域用来确认租借界面已经画出来；宝可梦信息从内存读取。
-    # 不能用面板高亮判断：界面刚切出来时面板还在淡入，选中位置会看错，选到别的宝可梦
-    wait_for(lambda screen: all(_read_names(screen)), LOAD_TIMEOUT, "选宝可梦的界面")
-    plan = current.plan
-    reader = _RentalPoolReader()
-    candidates = reader.read_initial()
-    initial_names = [candidate.name_id for candidate in candidates]
-    plan_pool = plan.get("rental_pool", plan["candidates"]) if plan is not None else []
-    keep_plan = (
-        plan is not None and initial_names == plan["candidates"] and len(set(plan_pool)) >= 6
+    # 不能用面板高亮判断界面是否出来：刚切出来时面板还在淡入，选中位置会看错
+    wait_for(
+        lambda screen: screen.has_text(((0.015, 0.068), (0.14, 0.122)), "按顺序选择"),
+        LOAD_TIMEOUT,
+        "选宝可梦的界面",
     )
 
-    if keep_plan:
-        selection = plan["selection"]
-        log(f"内存读到的三只 {initial_names} 和上一局一致，直接选上一局选的第 {selection + 1} 个")
+    current = run.get()
+    seed = _read_seed()
+
+    if seed == current.seed:
+        _reuse_starter()
     else:
-        if plan is not None:
-            reason = (
-                f"内存读到的三只 {initial_names} 和上一局 {plan['candidates']} 不一致"
-                if initial_names != plan["candidates"]
-                else "上一局没有记录完整的租借候选池"
-            )
-            log(f"{reason}，不再沿用上一局，照常计算", "WARNING")
+        if current.plan is not None:
+            log("seed 和上一局不一致，不再沿用上一局，照常计算", "WARNING")
             current.plan = None
             current.keep_path = False
-        scores = []
-        for candidate in candidates:
-            score = weighted_score(
-                data.rental_scores()[candidate.name_id],
-                rental_weight,
-                data.boss_matchups()[candidate.name_id][current.boss],
-                boss_weight,
-            )
-            log(f"{candidate.name_id} 的得分 {score:.2f}", "DEBUG")
-            scores.append(score)
-        selection = scores.index(max(scores))
-    current.candidates = initial_names
-    if keep_plan:
-        for name_id in plan_pool:
-            reader.add_name(name_id)
-    current.rental_pool = reader.names
-    current.encountered.update(current.rental_pool)
-    current.selection = selection
+        _assign_new_starter(seed)
+
+    selection = current.selection
+    assert selection is not None
     _move_starter_cursor(selection)
-    current.pokemon = replace(candidates[selection], hp=1.0)
-    log(f"选了第 {selection + 1} 个：{current.pokemon.name_id}")
     switch.get().click("A", 0)
 
-    if current.plan is not None:
-        # 同一个种子，队友选的也和上一局一样。刚开局都是满血
-        current.restore_team(current.plan, full_hp=True)
-        log(f"沿用上一局的队伍: {[m.name_id for m in [current.pokemon, *current.team]]}")
-    return reader
 
-
-class _RentalPoolReader:
-    """读取三个租借槽，并记录队友选择期间补入的宝可梦。"""
-
-    def __init__(self) -> None:
-        self.names: list[str] = []
-        self._last_raw: list[bytes | None] = [None] * len(RENTAL_CANDIDATE_ADDRESSES)
-        self._last_scan = 0.0
-
-    def add_name(self, name_id: str) -> None:
-        if name_id not in self.names:
-            self.names.append(name_id)
-
-    def read_initial(self):
-        raw_records = [
-            switch.get().peek(address, PK8_SIZE) for address in RENTAL_CANDIDATE_ADDRESSES
-        ]
-        parsed = pkhex.parse_pk8_batch(raw_records)
-        candidates = [self._match_record(record) for record in parsed]
-        if any(candidate is None for candidate in candidates):
-            raise RuntimeError("租借候选内存记录校验失败，未选择宝可梦")
-        self._last_raw = raw_records
-        self._last_scan = time.monotonic()
-        result = [candidate for candidate in candidates if candidate is not None]
-        for candidate in result:
-            self.add_name(candidate.name_id)
-            log(f"内存读取候选：{candidate.name_id}")
-        return result
-
-    def scan(self, force: bool = False) -> None:
-        now = time.monotonic()
-        if not force and now - self._last_scan < RENTAL_MEMORY_POLL_INTERVAL:
-            return
-        self._last_scan = now
-        raw_records = [
-            switch.get().peek(address, PK8_SIZE) for address in RENTAL_CANDIDATE_ADDRESSES
-        ]
-        changed = [
-            (index, raw) for index, raw in enumerate(raw_records) if raw != self._last_raw[index]
-        ]
-        self._last_raw = raw_records
-        if not changed:
-            return
-
-        parsed = pkhex.parse_pk8_batch([raw for _, raw in changed])
-        for (slot, _), record in zip(changed, parsed):
-            candidate = self._match_record(record)
-            if candidate is None or candidate.name_id in self.names:
-                continue
-            self.add_name(candidate.name_id)
-            run.get().encountered.add(candidate.name_id)
-            log(f"候选槽 {slot + 1} 更新，内存读到：{candidate.name_id}")
-
-    @staticmethod
-    def _match_record(record):
-        return pkhex.match_pokemon(record, data.rental_pokemon().values())
-
-
-def _read_names(screen: ImageChecker) -> list[str]:
-    """读选宝可梦界面上三只的名字，顺序和屏幕上一致，读不出的是空字符串。"""
-    return [screen.read_text(rect).strip() for rect in NAME_RECTS]
-
-
-def _select_path(reader: _RentalPoolReader) -> None:
-    """等路线图出现，读出整张路线图，给每条路线打分，把分数最高的记为这一局的目标路线。
-
-    只决定走哪条，真正在岔路口移动光标是下一步 path 的事。
-    keep path 时第 1 层和上一局一致，就直接沿用上一局的整张路线图和目标路线，不滚地图也不打分。
-    """
-    # 选好宝可梦之后要读盘进入冒险，是流程里最长的一次等待（上游盲等 22 秒）
-    adventure_timeout = 60.0
-
-    current = run.get()
+def _read_seed() -> int:
+    """读这一局的冒险 seed。"""
     seed_raw = switch.get().peek(lair.SEED_ADDRESS, 8)
     if len(seed_raw) != 8:
         raise RuntimeError(f"路线 seed 读取长度错误：{len(seed_raw)}")
-    seed = int.from_bytes(seed_raw, "little")
+    return int.from_bytes(seed_raw, "little")
+
+
+def _reuse_starter() -> None:
+    """seed 和 boss 都和上一局一样，只打日志，沿用上一局的选择和队伍。"""
+    current = run.get()
+    plan = current.plan
+    assert plan is not None
+    seed = current.seed
+    assert seed is not None
+    current.candidates = plan["candidates"]
+    current.selection = plan["selection"]
+    current.restore_team(plan, full_hp=True)
+    assert current.pokemon is not None
+    log(
+        f"沿用上一局的 seed {seed:016X} 和 boss {current.boss}，"
+        f"选第 {current.selection + 1} 个：{current.pokemon.name_id}"
+    )
+
+
+def _assign_new_starter(seed: int) -> None:
+    """seed 不一样时重新算：把 6 只候选写进这一局，读当前三只，算分选一只。"""
+    current = run.get()
+    current.seed = seed
+    current.rental_pool = lair.rental_candidates(seed)
+    current.encountered.update(current.rental_pool)
+    log(f"seed {seed:016X} 对应的租借候选：{current.rental_pool}")
+
+    # 选宝可梦的界面刚出来时，候选记录可能还没写进内存（真机上碰到过一次校验失败），过一会儿重读
+    for attempt in range(6):
+        records = pk8.read(RENTAL_CANDIDATE_ADDRESSES, data.rental_pokemon().values())
+        if all(candidate is not None for _, _, candidate in records):
+            break
+        time.sleep(0.5)
+    else:
+        raise RuntimeError("租借候选内存记录校验失败，未选择宝可梦")
+    candidates = [candidate for _, _, candidate in records if candidate is not None]
+    for candidate in candidates:
+        log(f"内存读取候选：{candidate.name_id}")
+    # seed 读错时算出来的候选和画面上不是同一组，之后路线图的属性也和 seed 对不上（读不出层），
+    # 提前停下，别进到冒险里再崩
+    expected = current.rental_pool[:3]
+    if [candidate.name_id for candidate in candidates] != expected:
+        raise RuntimeError(
+            f"seed {seed:016X} 算出来的候选是 {expected}，"
+            f"和内存读到的 {[candidate.name_id for candidate in candidates]} 对不上"
+        )
+
+    # 开始时还剩 3 个对手要打、最后还有 1 个首领。首领更难，权重更大
+    scores = []
+    for candidate in candidates:
+        score = weighted_score(
+            data.rental_scores()[candidate.name_id],
+            3,
+            data.boss_matchups()[candidate.name_id][current.boss],
+            2,
+        )
+        log(f"{candidate.name_id} 的得分 {score:.2f}", "DEBUG")
+        scores.append(score)
+    selection = scores.index(max(scores))
+
+    current.candidates = [candidate.name_id for candidate in candidates]
+    current.selection = selection
+    current.pokemon = replace(candidates[selection], hp=1.0)
+    log(f"选了第 {selection + 1} 个：{current.pokemon.name_id}")
+
+
+def _select_path() -> None:
+    """等路线图出现，读出整张路线图，给每条路线打分，把分数最高的记为这一局的目标路线。
+
+    只决定走哪条，真正在岔路口移动光标是下一步 path 的事。
+    """
+    current = run.get()
+    # _select_starter 已经比较过 seed 和 boss：一样时 plan 还在，不一样时已经清掉
+    if current.plan is not None:
+        _reuse_path()
+    else:
+        _assign_new_path()
+
+
+def _reuse_path() -> None:
+    """seed 和 boss 都和上一局一样，直接沿用上一局的路线，不读地图、不算分。"""
+    current = run.get()
+    plan = current.plan
+    assert plan is not None
+    seed = current.seed
+    assert seed is not None
+    current.path_opponents = {
+        int(row): names for row, names in plan.get("path_opponents", {}).items()
+    }
+    if not current.path_opponents:
+        current.path_opponents = lair.encounter_rows_by_layer(seed)
+    current.restore_paths(plan)
+    log(f"沿用上一局的路线（{current.path_type}），seed {seed:016X}")
+
+
+def _assign_new_path() -> None:
+    """seed 不一样时：看队友选择，按 seed 算遭遇，读整张路线图并选一条。"""
+    current = run.get()
+    seed = current.seed
+    assert seed is not None
     current.path_opponents = lair.encounter_rows_by_layer(seed)
     log(f"从 seed {seed:016X} 读取路线遭遇：{current.path_opponents}")
-    image, pan_rows = _watch_intro_pan(adventure_timeout, reader)
-    current.rental_pool = reader.names
-    current.encountered.update(current.rental_pool)
-    if len(current.rental_pool) < 6:
-        raise RuntimeError(
-            f"租借界面只读到 {len(current.rental_pool)} 种候选，未达到 6 种：{current.rental_pool}"
-        )
-    log(f"租借界面出现过的候选：{current.rental_pool}")
+    image, pan_rows = _watch_intro_pan(60)
     first_row = [_identify_type(image, rect) for rect in PATH_RECTS[FIRST_ROW]]
-    plan = current.plan
-    if plan is not None:
-        planned = [type_id for type_id, _, _ in plan["rows"][str(FIRST_ROW)]]
-        if [match.type_id for match in first_row] == planned:
-            current.restore_paths(plan)
-            log(f"路线图第 1 层和上一局一致，沿用上一局的路线图（{current.path_type}）")
-            for line in _path_diagram():
-                log(line)
-            _choose_target_path()
-            return
-        log(
-            f"路线图第 1 层 {[m.type_id for m in first_row]} 和上一局 {planned} 不一致，"
-            "不再沿用上一局，照常读整张路线图",
-            "WARNING",
-        )
-        current.plan = None
-        current.keep_path = False
-
     current.update_paths(FIRST_ROW, first_row)
     second = pan_rows.get(SECOND_ROW)
     third = pan_rows.get(THIRD_ROW)
@@ -372,22 +343,50 @@ def _select_menu_item(image: ImageChecker, area: Rect, target: str, what: str) -
     if not lines:
         raise RuntimeError(f"{what}里读不到任何选项")
     texts, rects = [text for text, _ in lines], [rect for _, rect in lines]
-    selected = image.selected(rects)
     # 菜单有几项就最多移几次，移满一圈还没选中说明菜单里没有它
     for _ in range(len(lines)):
+        selected = image.selected(rects)
         # 直接比较已经读出的文字，编辑距离不超过 target 长度的三分之一就算是它。
         # 不能对单独一行的区域再识别一次：区域贴着文字，边缘的字容易认错
         if selected >= 0 and levenshtein(texts[selected], target) <= len(target) / 3:
             log(f"{what}选中了「{texts[selected]}」")
             return
-        switch.get().stick("LEFT", 0, -switch.STICK_MAX, TICK_SECONDS)
-        image = wait_for(
+        image = press_until(
             lambda screen, before=selected: screen.selected(rects) not in (before, -1),
-            DEFAULT_TIMEOUT,
             f"{what}的光标移到下一项",
+            button="DDOWN",
         )
-        selected = image.selected(rects)
     raise RuntimeError(f"{what}里找不到「{target}」，读到的选项: {texts}")
+
+
+def _select_first_item(image: ImageChecker, what: str) -> str:
+    """菜单里没有 BOSS 时选菜单的第一项，返回它的 name_id。
+
+    先按 DUP 把光标移到最上面那一项，再从上往下找第一项能认出来的神兽（「不指定」不算）。
+    认是哪只和 _select_menu_item 一样按名字的编辑距离判断。
+    """
+    bosses = data.boss_pokemon()
+    for _ in range(10):
+        lines = text_lines(image, POPUP_RECT)
+        if not lines:
+            raise RuntimeError(f"{what}里读不到任何选项")
+        rects = [rect for _, rect in lines]
+        selected = image.selected(rects)
+        if selected == 0:
+            break
+        if selected < 0:
+            raise RuntimeError(f"{what}里认不出光标在哪一项上")
+        image = press_until(
+            lambda screen, before=selected, rects=rects: screen.selected(rects) not in (before, -1),
+            f"{what}的光标移到上一项",
+            button="DUP",
+        )
+    texts = [text for text, _ in text_lines(image, POPUP_RECT)]
+    for text in texts:
+        name = min(bosses, key=lambda name_id: levenshtein(bosses[name_id].name(), text))
+        if levenshtein(bosses[name].name(), text) <= len(bosses[name].name()) / 3:
+            return name
+    raise RuntimeError(f"{what}里的选项一个都认不出是哪个神兽: {texts}")
 
 
 def _move_starter_cursor(target: int) -> None:
@@ -403,11 +402,10 @@ def _move_starter_cursor(target: int) -> None:
             return
         if selected < 0:
             raise RuntimeError("选宝可梦的界面上认不出光标在哪只上")
-        switch.get().stick("LEFT", 0, -switch.STICK_MAX, TICK_SECONDS)
-        image = wait_for(
+        image = press_until(
             lambda screen, before=selected: screen.selected(rects) not in (before, -1),
-            DEFAULT_TIMEOUT,
             "选宝可梦的光标移到下一只",
+            button="DDOWN",
         )
         selected = image.selected(rects)
     if selected != target:
@@ -425,24 +423,19 @@ def _map_shown(screen: ImageChecker) -> bool:
     )
 
 
-def _watch_intro_pan(
-    timeout: float, reader: _RentalPoolReader
-) -> tuple[ImageChecker, dict[int, list[TypeMatch]]]:
+def _watch_intro_pan(timeout: float) -> tuple[ImageChecker, dict[int, list[TypeMatch]]]:
     """从选完宝可梦开始一直截图，直到路线图回到底部、出现「要走哪条路？」，返回那时的截图和
     开场镜头移动时读到的标签（按层存，没读到的层没有 key）。
 
     冒险开场时镜头会自己上下移动，第 2、3 层的标签会经过 PATH_RECTS 里的检测框：
     4 个都认出属性、是同一层、并且能和 seed 里这一层遇到的宝可梦对上，就记成这一层。
     用 seed 判断是哪一层，不按先后顺序：镜头有时会先经过第 3 层。
-    队友选择期间顺便扫描三个租借槽，把补进来的候选记进 reader（界面切走后地址就无效了）。
     """
     rows: dict[int, list[TypeMatch]] = {}
     deadline = time.monotonic() + timeout
     while True:
         image = capture()
-        reader.scan()
         if _map_shown(image):
-            reader.scan(force=True)
             return image, rows
         matches = [_identify_type(image, rect) for rect in PATH_RECTS[SECOND_ROW]]
         types = [match.type_id if match.score >= LABEL_ICON_SCORE else "-" for match in matches]
@@ -533,12 +526,11 @@ def _route_name(path: list[str]) -> str:
 
 
 def _path_diagram() -> list[str]:
-    """把当前这一局的路线图画成 4 行中文，用来写日志，画法照搬上游。"""
+    """把当前这一局的路线图画成 4 行，用来写日志，画法照搬上游。节点名用英文，首领用中文。"""
     current = run.get()
-    names = data.type_names()
     # 每个节点占 8 列，不够的用横线补齐
     first, second, third = (
-        [pad(names.get(node.name, node.name), 8, "─") for node in current.rows[row]]
+        [pad(node.name.replace("-", " ").title(), 8, "─") for node in current.rows[row]]
         for row in (FIRST_ROW, SECOND_ROW, THIRD_ROW)
     )
     # 第 1、2 层之间和第 2、3 层之间的连线，按路线形状不同
@@ -550,7 +542,7 @@ def _path_diagram() -> list[str]:
     first_links, second_links = links[current.path_type or "2x2"]
     boss = data.boss_pokemon()[current.boss].name()
     sections = (
-        [f"      ┌{first[0]}", pad("起点", 5, "─") + "─┤        ", f"      └{first[1]}", " " * 15],
+        [f"      ┌{first[0]}", pad("Start", 5, "─") + "─┤        ", f"      └{first[1]}", " " * 15],
         first_links,
         second,
         second_links,

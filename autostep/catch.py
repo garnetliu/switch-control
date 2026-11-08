@@ -19,6 +19,7 @@ from config.layout import (
 from config.timing import DEFAULT_TIMEOUT, TICK_SECONDS
 from lib import data, pokemon, run, switch
 from lib.dialog import marker_shown
+from lib.game_state import GameState
 from lib.log import log
 from lib.scoring import evaluate_average_matchup, evaluate_matchup, weighted_score
 from lib.wait import wait_for
@@ -28,7 +29,7 @@ from tool.text import similarity
 from type.pokemon import Pokemon
 
 
-def catch() -> str:
+def catch(game: GameState) -> str:
     """打赢之后抓：选好配置里的球扔出去，抓到普通对手时再决定要不要换成它。照搬上游。
 
     开始时游戏在打赢后的「×××变得虚弱了」上，见 battle：先等「捕捉 / 不捕捉」出来。使用全局连接，需要先调用 switch.connect。

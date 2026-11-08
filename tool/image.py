@@ -1,8 +1,7 @@
 """截图的通用操作，补充 ImageChecker 没有的读取方式。
 
-ImageChecker 没有对外提供像素数据，这里直接读它内部已经去黑边、缩放到 1920x1080 的图
-（_bgr、_gray、_hsv）、裁剪方法 _crop 和文字识别 _ocr。
-_crop 通过截图对象调用，lib/debug_checker.py 的子类可以在裁剪时把区域存下来。
+ImageChecker 通过 bgr 属性提供彩色图，通过 crop 裁剪 bgr、gray、hsv 三种图；
+文字识别用 _ocr。crop 通过截图对象调用，lib/debug_checker.py 的子类可以在裁剪时把区域存下来。
 所以区域坐标和识别结果都和 ImageChecker 自己的方法完全一致。
 """
 
@@ -15,17 +14,17 @@ from type.image import Hsv, Rect
 
 def crop(image: ImageChecker, rect: Rect) -> np.ndarray:
     """区域的彩色（BGR）图片。"""
-    return image._crop(image._bgr, rect)
+    return image.crop(rect)
 
 
 def mask(image: ImageChecker, rect: Rect, lower: Hsv, upper: Hsv) -> np.ndarray:
     """区域里颜色在 lower 到 upper（HSV）之间的像素，返回同样大小的布尔数组。"""
-    return cv2.inRange(image._crop(image._hsv, rect), lower, upper) > 0
+    return cv2.inRange(image.crop(rect, "hsv"), lower, upper) > 0
 
 
 def save(image: ImageChecker, path: str) -> None:
     """把截图（去黑边、缩放到 1920x1080 之后的）存成图片文件，格式按扩展名。"""
-    cv2.imwrite(path, image._bgr)
+    cv2.imwrite(path, image.bgr)
 
 
 def read_line(image: ImageChecker, rect: Rect) -> str:
@@ -41,7 +40,7 @@ def text_lines(image: ImageChecker, rect: Rect) -> list[tuple[str, Rect]]:
 
     返回的区域是整张截图上的比例坐标，可以直接交给 ImageChecker 的其他方法。
     """
-    height, width = image._bgr.shape[:2]
+    height, width = image.bgr.shape[:2]
     (left, top), _ = rect
     x0, y0 = round(left * width), round(top * height)
     result, _ = _ocr()(crop(image, rect))
@@ -59,8 +58,8 @@ def text_lines(image: ImageChecker, rect: Rect) -> list[tuple[str, Rect]]:
 
 def difference(a: ImageChecker, b: ImageChecker, rect: Rect) -> float:
     """区域在两张截图之间的差别：灰度逐像素差的绝对值的平均，0 到 255。"""
-    gray_a = a._crop(a._gray, rect).astype(np.int16)
-    gray_b = b._crop(b._gray, rect).astype(np.int16)
+    gray_a = a.crop(rect, "gray").astype(np.int16)
+    gray_b = b.crop(rect, "gray").astype(np.int16)
     return float(np.abs(gray_a - gray_b).mean())
 
 
@@ -70,8 +69,8 @@ def small_difference(a: ImageChecker, b: ImageChecker, rect: Rect, size: int = 1
     预览里的宝可梦一直在动，逐像素差会被动画干扰：同一只隔一秒能差 7 左右，空背景换成
     宝可梦也只差 9。缩小后动画被平均掉：同一只 1.4 以下，画出来或者换一只 5 以上。
     """
-    gray_a = a._crop(a._gray, rect)
-    gray_b = b._crop(b._gray, rect)
+    gray_a = a.crop(rect, "gray")
+    gray_b = b.crop(rect, "gray")
     small_a = cv2.resize(gray_a, (size, size), interpolation=cv2.INTER_AREA).astype(np.int16)
     small_b = cv2.resize(gray_b, (size, size), interpolation=cv2.INTER_AREA).astype(np.int16)
     return float(np.abs(small_a - small_b).mean())
@@ -92,14 +91,14 @@ def locate_template(
     区域比模板小时没法匹配，返回 (0, (0, 0))。
     """
     if lower is not None and upper is not None:
-        area = cv2.inRange(image._crop(image._hsv, rect), lower, upper)
+        area = cv2.inRange(image.crop(rect, "hsv"), lower, upper)
     else:
-        area = image._crop(image._bgr, rect)
+        area = image.crop(rect)
     if area.shape[0] < template.shape[0] or area.shape[1] < template.shape[1]:
         return 0.0, (0, 0)
     result = cv2.matchTemplate(area, template, cv2.TM_CCOEFF_NORMED)
     _, score, _, location = cv2.minMaxLoc(result)
-    return float(score), location
+    return float(score), (int(location[0]), int(location[1]))
 
 
 def find_templates(
@@ -116,9 +115,9 @@ def find_templates(
     颜色范围和 locate_template 一样。区域比模板小时返回空列表。
     """
     if lower is not None and upper is not None:
-        area = cv2.inRange(image._crop(image._hsv, rect), lower, upper)
+        area = cv2.inRange(image.crop(rect, "hsv"), lower, upper)
     else:
-        area = image._crop(image._bgr, rect)
+        area = image.crop(rect)
     height, width = template.shape[:2]
     if area.shape[0] < height or area.shape[1] < width:
         return []

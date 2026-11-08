@@ -8,9 +8,11 @@ from autostep.initialize import initialize
 from autostep.join import join
 from autostep.path import path
 from autostep.select_pokemon import select_pokemon
+from config.game import BOSS
 from config.timing import STALL_NOTIFY_SECONDS
 from lib import switch
 from lib.debug_checker import set_step
+from lib.game_state import GameState
 from lib.log import init_log, last_log, log, log_path
 from lib.notify import send, start_watchdog
 
@@ -33,6 +35,7 @@ def main():
     last_step = None
     try:
         switch.connect()
+        game = GameState(BOSS)
         step = "initialize"
         while step is not None:
             if step == "join" and last_step == "select_pokemon":
@@ -41,7 +44,7 @@ def main():
             log(f"开始 {step}")
             set_step(step)
             last_step = step
-            step = steps[step]()
+            step = steps[step](game)
         _, reason = last_log()
         log("结束")
         send(f"程序结束，最后一步 {last_step}：{reason}")

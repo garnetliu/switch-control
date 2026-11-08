@@ -27,8 +27,9 @@ from config.layout import (
 from config.paths import CATCH_DIR
 from config.timing import DEFAULT_TIMEOUT, LOAD_TIMEOUT, TICK_SECONDS
 from lib import data, run, switch
-from lib.dialog import advance_until, press_until
+from lib.dialog import advance_until, menu_last_item, press_until
 from lib.game import restart
+from lib.game_state import GameState
 from lib.log import log, take_warnings
 from lib.notify import send
 from lib.wait import act_until, capture, wait_for
@@ -50,7 +51,7 @@ THANKS_TEXT = "辛苦了"
 RECORD_TEXT = "为您保留"
 
 
-def select_pokemon() -> str | None:
+def select_pokemon(game: GameState) -> str | None:
     """一局结束：一只只查抓到的宝可梦是不是闪光，有闪光就带走，然后按 keep path 收尾。照搬上游。
 
     开始时游戏在 catch 或 battle 结束之后。使用全局连接，需要先调用 switch.connect。
@@ -405,16 +406,26 @@ def _back_to_scientist() -> bool:
     """
     # 结算画面「下一步」和「辛苦了。」之间有一段转场，对话框是空的（真机上遇到过），
     # 所以先推进到「辛苦了。」，之后对话框空了才是真的说完了
-    advance_until(
-        lambda screen: screen.has_text(DIALOG_RECT, THANKS_TEXT),
+    image = advance_until(
+        lambda screen: screen.has_text(DIALOG_RECT, THANKS_TEXT) or _start_menu_shown(screen),
         "「辛苦了。」",
         max_presses=30,
         timeout=LOAD_TIMEOUT,
     )
+    # 输掉时结算对话是「真是太遗憾了」，没有「辛苦了。」，按完最后一页直接回到开始菜单；
+    # 这时对话不再翻页，接着按 A 会直接选「现在就出发」开新的一局
+    if _start_menu_shown(image):
+        return True
     image = advance_until(
-        lambda screen: _record_question_shown(screen) or not screen.read_text(DIALOG_RECT),
+        lambda screen: (
+            _record_question_shown(screen)
+            or _start_menu_shown(screen)
+            or not screen.read_text(DIALOG_RECT)
+        ),
         "结算对话结束，或者问要不要保留位置记录",
     )
+    if _start_menu_shown(image):
+        return True
     if not _record_question_shown(image):
         return True
     if not RECORD_LOCATION:
@@ -424,12 +435,24 @@ def _back_to_scientist() -> bool:
         raise RuntimeError("保留位置记录的菜单上光标不在「是」上")
     switch.get().click("A", 0)
     # 问话还在时就推进，会在它上面再按一次 A
-    wait_for(
-        lambda screen: not screen.has_text(DIALOG_RECT, RECORD_TEXT), DEFAULT_TIMEOUT, "问话消失"
+    image = wait_for(
+        lambda screen: not screen.has_text(DIALOG_RECT, RECORD_TEXT) or _start_menu_shown(screen),
+        DEFAULT_TIMEOUT,
+        "问话消失",
     )
-    advance_until(lambda screen: not screen.read_text(DIALOG_RECT), "对话结束", max_presses=10)
+    if not _start_menu_shown(image):
+        advance_until(
+            lambda screen: _start_menu_shown(screen) or not screen.read_text(DIALOG_RECT),
+            "对话结束",
+            max_presses=10,
+        )
     log("保留了位置记录")
     return True
+
+
+def _start_menu_shown(screen: ImageChecker) -> bool:
+    """科学家问「您现在要出发挑战极巨大冒险吗？」并弹出开场菜单（最后一行「还是先算了」）。"""
+    return menu_last_item(screen) == "还是先算了"
 
 
 def _record_question_shown(screen: ImageChecker) -> bool:
