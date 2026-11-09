@@ -1,48 +1,62 @@
 """一局冒险的运行状态，用 YAML 保存快照，用于 keep path 和断线后恢复。"""
 
 import os
-from typing import Any, Literal, TypedDict
 
 from ruamel.yaml import YAML
 
 from config.paths import GAME_STATE_FILE
-
-
-class MapNode(TypedDict):
-    """路线图上的一个节点。"""
-
-    col: int
-    type: str
-
-
-class Maps(TypedDict):
-    """整张路线图。"""
-
-    type: Literal["2x3", "3x2", "2x2"]
-    rows: dict[str, list[MapNode]]
-    route: list[list[int]]
-    current_index: int
+from typedefs.game_state import GameStateSnapshot, Maps
 
 
 class GameState:
     def __init__(self, boss: str):
         self._yaml = YAML()
-        self.boss = boss
+        state = self._load()
+        if state is None:
+            state = GameStateSnapshot(
+                boss=boss,
+                lock_path=False,
+                seed=None,
+                maps=None,
+                lock_pokemon_index=None,
+                lock_results=[],
+                dynite_ore=0,
+                team=[],
+                step="",
+            )
+        self.boss = state.get("boss", boss)
+        # 是否已经捕获
+        self.caught = False
         # keep path
-        self.lock_path = False
-        self.seed: int | None = None
+        self.lock_path = state.get("lock_path", False)
+        self.seed: int | None = state.get("seed")
         # 地图：type（2x3 / 3x2 / 2x2）、每层节点（col + type）、选中的路线、当前走到第几个
-        self.maps: Maps | None = None
+        self.maps: Maps | None = state.get("maps")
         # 选的租借宝可梦在三个候选里的下标
-        self.lock_pokemon_index: int | None = None
+        self.lock_pokemon_index: int | None = state.get("lock_pokemon_index")
         # 锁定图的每局胜负
-        self.lock_results: list[bool] = []
+        self.lock_results: list[bool] = state.get("lock_results", [])
         # 极巨矿数量，读取和减少的逻辑以后做
-        self.dynite_ore = 0
+        self.dynite_ore = state.get("dynite_ore", 0)
         # 队伍名字和 hp，第一个是自己
-        self.team: list[tuple[str, float]] = []
+        self.team: list[tuple[str, float]] = [
+            tuple(item) for item in state.get("team", [])
+        ]
         # 当前所在的步骤
-        self.step = ""
+        self.step = state.get("step", "")
+
+    def clear(self) -> None:
+        """清空这一局的状态和保存的快照。"""
+        GAME_STATE_FILE.unlink(missing_ok=True)
+        self.__init__(self.boss)
+
+    def set_seed(self, seed: int, boss: str | None = None) -> None:
+        """设置这一局的 seed。seed 或 boss 和已保存的不一样时先清空状态。"""
+        boss = self.boss if boss is None else boss
+        if self.seed != seed or self.boss != boss:
+            self.clear()
+        self.seed = seed
+        self.boss = boss
 
     def save(self) -> None:
         """把整个状态写进 YAML；先写临时文件再替换。"""
@@ -53,25 +67,24 @@ class GameState:
             self._yaml.dump(self._to_dict(), file)
         os.replace(temp, GAME_STATE_FILE)
 
-    def load(self) -> None:
-        """从 YAML 读回快照；文件不存在时保持默认值。"""
+    def _load(self) -> GameStateSnapshot | None:
+        """读 YAML 快照并返回；文件不存在时返回 None。"""
         if not GAME_STATE_FILE.exists():
-            return
+            return None
         with GAME_STATE_FILE.open(encoding="utf-8") as file:
             state = self._yaml.load(file)
-        if state:
-            self._from_dict(state)
+        return state if state else None
 
-    def _to_dict(self) -> dict[str, Any]:
-        """当前状态的快照，set 存成排序后的数组。"""
-        return {
-            key: sorted(value) if isinstance(value, set) else value
-            for key, value in vars(self).items()
-        }
-
-    def _from_dict(self, state: dict[str, Any]) -> None:
-        """把快照写回当前对象，只覆盖类里已有的属性；set 还原成 set。"""
-        for key, value in state.items():
-            if hasattr(self, key):
-                current = getattr(self, key)
-                setattr(self, key, set(value) if isinstance(current, set) else value)
+    def _to_dict(self) -> GameStateSnapshot:
+        """当前状态的结构化快照。"""
+        return GameStateSnapshot(
+            boss=self.boss,
+            lock_path=self.lock_path,
+            seed=self.seed,
+            maps=self.maps,
+            lock_pokemon_index=self.lock_pokemon_index,
+            lock_results=self.lock_results,
+            dynite_ore=self.dynite_ore,
+            team=self.team,
+            step=self.step,
+        )

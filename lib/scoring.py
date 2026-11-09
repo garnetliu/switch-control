@@ -9,8 +9,8 @@ from collections.abc import Iterable
 from dataclasses import replace
 
 from lib.log import log
-from type.battle import Field
-from type.pokemon import Move, Pokemon
+from typedefs.battle import Field
+from typedefs.pokemon import Move, Pokemon
 
 TYPES = (
     "normal", "fire", "water", "electric", "grass", "ice", "fighting", "poison", "ground",

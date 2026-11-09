@@ -1,10 +1,11 @@
 from config.layout import DIALOG_RECT
-from lib import switch
-from lib.dialog import menu_last_item, press_until
+from lib import switch_v1 as switch
+from lib.dialog import menu_last_item
 from lib.game_state import GameState
+from tool.wait import press_until
 
 
-def initialize(game: GameState) -> str:
+def initialize(_: GameState) -> str:
     """确认前台是剑/盾，把游戏带到科学家面前、没有对话框的状态，返回下一步 "join"。
 
     游戏要停在科学家面前。一直按 A，把中途退出的罚款提醒（「是 / 否」光标默认在「是」上，

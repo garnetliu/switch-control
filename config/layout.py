@@ -3,7 +3,7 @@
 数值沿用上游 AutoMaxLair 的 da_controller.py，标了「待实测」的是我们自己估的，没有在真机上核对过。
 """
 
-from type.image import Hsv, Rect
+from typedefs.image import Hsv, Rect
 
 FULL_SCREEN: Rect = ((0, 0), (1, 1))
 

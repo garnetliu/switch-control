@@ -17,16 +17,17 @@ from config.layout import (
     SWAP_RESULT_RECT,
 )
 from config.timing import DEFAULT_TIMEOUT, TICK_SECONDS
-from lib import data, pokemon, run, switch
+from lib import data, pokemon, run
+from lib import switch_v1 as switch
 from lib.dialog import marker_shown
 from lib.game_state import GameState
 from lib.log import log
 from lib.scoring import evaluate_average_matchup, evaluate_matchup, weighted_score
-from lib.wait import wait_for
 from tool.check_image import ImageChecker
 from tool.image import text_lines
 from tool.text import similarity
-from type.pokemon import Pokemon
+from tool.wait import wait_for
+from typedefs.pokemon import Pokemon
 
 
 def catch(game: GameState) -> str:

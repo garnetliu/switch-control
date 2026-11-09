@@ -3,7 +3,7 @@
 from config.game import LANGUAGE
 from lib import data
 from tool.text import levenshtein
-from type.pokemon import Match
+from typedefs.pokemon import Match
 
 
 def identify(

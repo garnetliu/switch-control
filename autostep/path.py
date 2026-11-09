@@ -13,17 +13,18 @@ from config.layout import (
     PATH_TEXT_RECT,
 )
 from config.timing import DEFAULT_TIMEOUT, LOAD_TIMEOUT, POLL_INTERVAL, TICK_SECONDS
-from lib import data, run, switch
+from lib import data, run
+from lib import switch_v1 as switch
 from lib.dialog import advance_until
 from lib.game_state import GameState
 from lib.log import log
 from lib.read import read_team
 from lib.scoring import evaluate_matchup, weighted_score
-from lib.wait import capture, save_timeout_frames, wait_for
 from tool.check_image import ImageChecker
 from tool.image import find_templates
 from tool.text import contains
-from type.image import Rect
+from tool.wait import capture, save_timeout_frames, wait_for
+from typedefs.image import Rect
 
 # 文字框里的提示语。选路线、研究员、背包客的已经在游戏里实测过；树果的是按常见译法写的，待实测（游戏里有树果）
 # 选路线的提示「要走哪条路？」
@@ -95,7 +96,10 @@ def _choose_fork(image: ImageChecker) -> None:
     offset = current.next_fork_offset()
     target = current.current_node.downstream[offset]
     row_types = [node.name for node in current.rows[target.row]]
-    labels = _fork_labels(image, row_types)
+    # 第 3 层的属性可能是用 seed 补出来的，画面上双属性宝可梦显示哪个属性不确定：
+    # 认标签时每列只要认出来的属性在 seed 里这一列可能出现的属性里就行
+    allowed = current.row_type_sets(target.row)
+    labels = _fork_labels(image, row_types, allowed)
     if labels is None:
         # 镜头停在了上面几层，看不到下一层的标签：右摇杆往下推，把镜头带回岔路口。
         # 界面上右摇杆是上下移镜头，左摇杆是选路的，推左摇杆镜头不会动（真机上因此空等到超时）
@@ -104,7 +108,7 @@ def _choose_fork(image: ImageChecker) -> None:
         found: dict[str, list[tuple[int, int]]] = {}
         try:
             wait_for(
-                lambda screen: _store(found, _fork_labels(screen, row_types)),
+                lambda screen: _store(found, _fork_labels(screen, row_types, allowed)),
                 DEFAULT_TIMEOUT,
                 "岔路口下一层的属性标签",
             )
@@ -113,7 +117,7 @@ def _choose_fork(image: ImageChecker) -> None:
 
     # 光标和标签要用同一帧的位置：镜头移动时找到的标签位置会偏，拿偏掉的位置去找光标会一直找不到
     def cursor_column(screen: ImageChecker) -> int | None:
-        frame_labels = _fork_labels(screen, row_types)
+        frame_labels = _fork_labels(screen, row_types, allowed)
         return None if frame_labels is None else _cursor_column(screen, frame_labels)
 
     first = wait_for(
@@ -126,7 +130,7 @@ def _choose_fork(image: ImageChecker) -> None:
     while column != target.col:
         step = 1 if target.col > column else -1
         switch.get().stick("LEFT", step * switch.STICK_MAX, 0, TICK_SECONDS)
-        moved = _wait_column_change(row_types, column)
+        moved = _wait_column_change(row_types, allowed, column)
         if moved is None:
             # 推了光标没动，多半是这次输入被游戏吞了，再推一次
             if time.monotonic() >= deadline:
@@ -149,18 +153,28 @@ def _store(found: dict[str, list[tuple[int, int]]], labels: list[tuple[int, int]
     return True
 
 
-def _fork_labels(screen: ImageChecker, row_types: list[str]) -> list[tuple[int, int]] | None:
+def _fork_labels(
+    screen: ImageChecker,
+    row_types: list[str],
+    allowed: list[set[str]] | None = None,
+) -> list[tuple[int, int]] | None:
     """岔路口画面上下一层的属性标签，返回每个标签左边属性图标左上角的像素位置，从左到右；
     这一层的标签没有全部出现在画面上时返回 None。
 
     row_types: 这一层从左到右各节点的属性，读路线图时记下的。画面上可能还有别的层的标签，
     从找到的标签里挑出从左到右属性正好是 row_types、上下最集中的那几个。
+    allowed: seed 里这一层每一列可能是哪些属性。属性是用 seed 补出来的、画面上双属性宝可梦
+    显示的是另一个属性时，只要每列认出来的属性在那一列的可能属性里也算。
     """
     (left, top), _ = FORK_LABEL_RECT
     width, height = 1920, 1080
+    type_ids = set(row_types)
+    if allowed is not None:
+        for types in allowed:
+            type_ids |= types
     hits = [
         (score, x + round(left * width), y + round(top * height), type_id)
-        for type_id in set(row_types)
+        for type_id in type_ids
         for score, (x, y) in find_templates(
             screen,
             FORK_LABEL_RECT,
@@ -180,6 +194,12 @@ def _fork_labels(screen: ImageChecker, row_types: list[str]) -> list[tuple[int, 
         for combo in combinations(sorted(labels), len(row_types))
         if [type_id for _, _, type_id in combo] == row_types
     ]
+    if not candidates and allowed is not None:
+        candidates = [
+            combo
+            for combo in combinations(sorted(labels), len(row_types))
+            if all(type_id in types for (_, _, type_id), types in zip(combo, allowed))
+        ]
     if not candidates:
         return None
     best = min(
@@ -188,12 +208,17 @@ def _fork_labels(screen: ImageChecker, row_types: list[str]) -> list[tuple[int, 
     return [(x, y) for x, y, _ in best]
 
 
-def _wait_column_change(row_types: list[str], column: int, timeout: float = 1.5) -> int | None:
+def _wait_column_change(
+    row_types: list[str],
+    allowed: list[set[str]] | None,
+    column: int,
+    timeout: float = 1.5,
+) -> int | None:
     """等光标挪到别的列，返回新的列号；超时还在原来那一列（或者认不出来）返回 None。"""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         screen = capture()
-        labels = _fork_labels(screen, row_types)
+        labels = _fork_labels(screen, row_types, allowed)
         if labels is not None:
             now = _cursor_column(screen, labels)
             if now is not None and now != column:

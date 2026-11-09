@@ -26,15 +26,17 @@ from config.layout import (
 )
 from config.paths import CATCH_DIR
 from config.timing import DEFAULT_TIMEOUT, LOAD_TIMEOUT, TICK_SECONDS
-from lib import data, run, switch
-from lib.dialog import advance_until, menu_last_item, press_until
+from lib import data, run
+from lib import switch_v1 as switch
+from lib.dialog import advance_until, menu_last_item
 from lib.game import restart
 from lib.game_state import GameState
 from lib.log import log, take_warnings
 from lib.notify import send
-from lib.wait import act_until, capture, wait_for
 from tool.check_image import ImageChecker
+from tool.cursor import move_to
 from tool.image import save, small_difference, text_lines
+from tool.wait import act_until, capture, press_until, wait_for
 
 # 带走界面的标题
 RESULT_TEXT = "选1只要带回去的宝可梦"
@@ -221,10 +223,12 @@ def _find_shiny() -> int | None:
     # 按 A 不能重按：菜单要 1.3 秒才出来，选中项还会闪（认出来和认不出来一帧一帧交替），
     # 重按过一次，第二下 A 直接在菜单上点了「选择」，差点把不是闪光的首领带走（真机上发生过）
     if reference.selected(rows) != last:
-        act_until(
+        move_to(
+            reference,
+            last,
             lambda: sw.stick("LEFT", 0, switch.STICK_MAX, TICK_SECONDS),
-            lambda screen: screen.selected(rows) == last,
-            "列表光标移到最后一只",
+            "战果列表",
+            options=rows,
             interval=2.0,
         )
         image = wait_for(

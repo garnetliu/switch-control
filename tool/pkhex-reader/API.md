@@ -7,7 +7,7 @@
 在仓库根目录运行：
 
 ```sh
-docker compose -f tools/pkhex-reader/compose.yaml up -d --build
+docker compose -f tool/pkhex-reader/compose.yaml up -d --build
 ```
 
 服务只监听本机 `127.0.0.1:8787`。检查状态：
@@ -48,7 +48,7 @@ return new { pk.Species, pk.ChecksumValid, legality.Parsed, legality.Valid };
 ## 容器管理
 
 ```sh
-docker compose -f tools/pkhex-reader/compose.yaml ps
-docker compose -f tools/pkhex-reader/compose.yaml logs -f
-docker compose -f tools/pkhex-reader/compose.yaml down
+docker compose -f tool/pkhex-reader/compose.yaml ps
+docker compose -f tool/pkhex-reader/compose.yaml logs -f
+docker compose -f tool/pkhex-reader/compose.yaml down
 ```

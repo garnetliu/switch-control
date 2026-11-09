@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 from rapidocr_onnxruntime import RapidOCR
 
-from type.image import Hsv, Rect
+from typedefs.image import Hsv, Rect
 
 BASE_SIZE = (1920, 1080)
 # 行或列的平均亮度不超过这个值，当作黑边

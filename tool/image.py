@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 from tool.check_image import ImageChecker, _ocr
-from type.image import Hsv, Rect
+from typedefs.image import Hsv, Rect
 
 
 def crop(image: ImageChecker, rect: Rect) -> np.ndarray:

@@ -9,7 +9,7 @@ from collections.abc import Iterable, Sequence
 from typing import Any
 
 from lib.lair import FORM_NAME_IDS
-from type.pokemon import Pokemon
+from typedefs.pokemon import Pokemon
 
 DEFAULT_API_URL = "http://127.0.0.1:8787/api/v1/execute"
 RETRY_DELAYS = (1, 2, 4, 8)

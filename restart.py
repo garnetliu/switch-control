@@ -2,7 +2,7 @@
 
 from dotenv import load_dotenv
 
-from lib import switch
+from lib import switch_v1 as switch
 from lib.game import restart
 from lib.log import init_log
 

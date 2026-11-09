@@ -13,15 +13,17 @@ from config.layout import (
     TARGET_CURSOR_RECT,
 )
 from config.timing import DEFAULT_TIMEOUT, POLL_INTERVAL, TICK_SECONDS
-from lib import data, pkhex, run, switch
+from lib import data, pkhex, run
+from lib import switch_v1 as switch
 from lib.dialog import marker_shown
 from lib.game_state import GameState
 from lib.log import log
 from lib.scoring import select_best_move, transform_ditto
-from lib.wait import act_until, capture, wait_for
 from tool import pk8
 from tool.check_image import ImageChecker
-from type.pokemon import Pokemon
+from tool.cursor import move_to
+from tool.wait import act_until, capture, wait_for
+from typedefs.pokemon import Pokemon
 
 # 打赢时战斗文字的第二行「现在是使用精灵球的好机会！」（第一行是「×××变得虚弱了！」，真机截图），之后问要不要抓
 WEAK_TEXT = "使用精灵球的好机会"
@@ -237,25 +239,19 @@ def _dynamax() -> None:
 
 
 def _move_cursor_to(target: int) -> None:
-    """把招式列表的光标移到第 target 个上：每下移一格，等「>」真的移到下一行再判断。
+    """把招式列表的光标移到第 target 个上。
 
     光标不一定从第 1 个开始：游戏会记住上回合停在哪一行。
     """
-    selected = _move_cursor(capture())
-    for _ in range(len(MOVE_CURSOR_RECTS)):
-        if selected == target:
-            return
-        switch.get().stick("LEFT", 0, -switch.STICK_MAX, TICK_SECONDS)
-        image = wait_for(
-            lambda screen, before=selected: _move_cursor(screen) not in (before, -1),
-            DEFAULT_TIMEOUT,
-            "招式光标移到下一行",
-        )
-        selected = _move_cursor(image)
-    if selected != target:
-        raise RuntimeError(
-            f"招式光标移了 {len(MOVE_CURSOR_RECTS)} 次，还是没到第 {target + 1} 个上"
-        )
+    move_to(
+        capture(),
+        target,
+        lambda: switch.get().stick("LEFT", 0, -switch.STICK_MAX, TICK_SECONDS),
+        "招式列表",
+        options=MOVE_CURSOR_RECTS,
+        selected=_move_cursor,
+        interval=1.0,
+    )
 
 
 def _cheer() -> None:
@@ -285,6 +281,11 @@ def _wait_turn() -> str:
     deadline = time.monotonic() + turn_timeout
     # 看到了「倒下了」、还没看到它后面那行「风暴」
     down_pending = False
+    # 有些界面认不出来（比如作用于我方的招式要选目标），回合会一直停着等按键：
+    # 战斗文字长时间不变就按一次 A 推一下
+    last_change = time.monotonic()
+    last_text = ""
+    nudge = 0
     while True:
         if time.monotonic() >= deadline:
             raise TimeoutError(f"等了 {turn_timeout} 秒，这一回合还没打完")
@@ -308,7 +309,13 @@ def _wait_turn() -> str:
             switch.get().click("A", 0)
             wait_for(lambda screen: not _target_shown(screen), DEFAULT_TIMEOUT, "选好目标")
             continue
-        _update_field(screen.read_text(BATTLE_TEXT_RECT))
+        text = screen.read_text(BATTLE_TEXT_RECT)
+        if text != last_text:
+            last_text = text
+            last_change = time.monotonic()
+            # 记录每一行战斗文字：打满 10 回合判负的那行字还没见过，留在这里查
+            log(f"战斗文字「{text}」", "DEBUG")
+        _update_field(text)
         # 同一行「风暴」OCR 会时对时错（一帧「风暴」、下一帧「风泰」），按文字消失来去重，一只倒下
         # 扣过两条命，还把在打的首领战判成了输（真机上发生过两次）。所以要先看到「倒下了」才算数
         if screen.has_text(BATTLE_TEXT_RECT, DOWN_TEXT):
@@ -320,6 +327,14 @@ def _wait_turn() -> str:
             log(f"有一只倒下了，还剩 {current.lives} 条命")
             if current.lives == 0:
                 return "loss"
+        if time.monotonic() - last_change > 25:
+            # 选目标的界面认不出来、光标又停在不能选的位置上时，按 A 不会确认，要按 B 退回招式列表；
+            # 两种都试，按一次隔一会儿再按下一次
+            button = "A" if nudge % 2 == 0 else "B"
+            log(f"这一回合一直没有变化，按一次 {button} 推一下", "WARNING")
+            switch.get().click(button, 0)
+            nudge += 1
+            last_change = time.monotonic()
         time.sleep(POLL_INTERVAL)
 
 

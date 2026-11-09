@@ -1,6 +1,6 @@
 import time
 
-from lib import switch
+from lib import switch_v1 as switch
 from tool.check_image import ImageChecker
 
 # 画面下方的对话框

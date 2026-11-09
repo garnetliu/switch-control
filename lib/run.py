@@ -13,9 +13,9 @@ from typing import Any, ClassVar
 
 from config.paths import STATE_FILE
 from lib import data
-from type.battle import Field
-from type.path import BossNode, TypeMatch
-from type.pokemon import Pokemon
+from typedefs.battle import Field
+from typedefs.path import BossNode, TypeMatch
+from typedefs.pokemon import Pokemon
 
 # 路线图有 5 层：起点、第 1 层 2 个、第 2 层 4 个、第 3 层 4 个、首领
 START_ROW, FIRST_ROW, SECOND_ROW, THIRD_ROW, BOSS_ROW = range(5)
@@ -158,6 +158,17 @@ class Run:
         if self.current_index + 1 >= len(self.target_path):
             raise IndexError("已经走到目标路线的终点")
         self.current_index += 1
+
+    def row_type_sets(self, row: int) -> list[set[str]] | None:
+        """这一层每一列可能是哪些属性：seed 里这一层遇到的宝可梦的属性。
+
+        读路线图时用来核对认出来的标签，岔路口认标签时用来放宽匹配。数据不全时返回 None。
+        """
+        names = self.path_opponents.get(row, [])
+        rentals = data.rental_pokemon()
+        if len(names) != 4 or any(name not in rentals for name in names):
+            return None
+        return [set(rentals[name].type_ids) for name in names]
 
     def update_paths(self, row: int, matches: list[TypeMatch]) -> None:
         """记下某一层读到的各节点属性。

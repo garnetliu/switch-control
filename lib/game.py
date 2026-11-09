@@ -7,11 +7,11 @@ from config.layout import (
     Y_COMM_RECT,
 )
 from config.timing import DEFAULT_TIMEOUT, LOAD_TIMEOUT
-from lib import data, switch
-from lib.dialog import press_until
+from lib import data
+from lib import switch_v1 as switch
 from lib.log import log
-from lib.wait import capture, wait_for
 from tool.check_image import ImageChecker
+from tool.wait import capture, press_until, wait_for
 
 # 《宝可梦 剑》《宝可梦 盾》的 Title ID
 GAME_TITLE_IDS = ("0100ABF008968000", "01008DB008C2C000")

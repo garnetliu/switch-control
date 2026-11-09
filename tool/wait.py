@@ -1,6 +1,7 @@
 """等画面：不盲等固定的秒数，而是不停截图，直到画面满足要求。
 
 - wait_for：等画面满足一个条件，条件是一个接收截图、返回是否满足的函数。
+- press_until：一直按一个按键，直到画面满足条件。
 - wait_until：不看画面，等一个条件满足，比如前台软件的 Title ID。
 - act_until：一直做一个操作，直到画面满足条件（游戏加载时会锁按键，锁多久不确定）。
 
@@ -14,7 +15,7 @@ from collections.abc import Callable
 
 from config.paths import LOG_DIR
 from config.timing import ACT_TIMEOUT, POLL_INTERVAL
-from lib import switch
+from lib import switch_v1 as switch
 from lib.debug_checker import SavingImageChecker, current_step, should_save
 from lib.log import log
 from tool.check_image import ImageChecker
@@ -44,6 +45,35 @@ def wait_for(
             save_timeout_frames(first, image)
             raise TimeoutError(f"等了 {timeout} 秒，画面一直没有出现：{what}")
         time.sleep(interval)
+
+
+def press_until(
+    done: Callable[[ImageChecker], bool],
+    what: str,
+    button: str = "A",
+    timeout: float = ACT_TIMEOUT,
+) -> ImageChecker:
+    """一直按 button，直到 done(截图) 为真，返回那张截图。
+
+    不认中间出现的是什么对话，也不等翻页：按一次隔 POLL_INTERVAL 再看画面，没满足就接着按。
+    按键偶尔会被游戏吞掉（USB 真机上连着好几次没反应），所以不等画面变化，只管接着按。
+    每次按之前都先判定，已经满足就不再按，不会按在要等的菜单上。
+    超过 timeout 秒还没满足，存下开始等时和最后一帧的截图，抛 TimeoutError。
+    what: 在等什么，写进日志和报错里。
+    """
+    deadline = time.monotonic() + timeout
+    first = None
+    while True:
+        screen = capture()
+        first = first or screen
+        if done(screen):
+            return screen
+        if time.monotonic() >= deadline:
+            save_timeout_frames(first, screen)
+            raise TimeoutError(f"等了 {timeout} 秒，按 {button} 一直没有等到：{what}")
+        log(f"按 {button}（在等{what}）", "DEBUG")
+        switch.get().click(button, 0)
+        time.sleep(POLL_INTERVAL)
 
 
 def act_until(

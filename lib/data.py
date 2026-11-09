@@ -10,7 +10,7 @@ import numpy as np
 from config.game import LANGUAGE
 from config.paths import DATA_DIR
 from tool.check_image import load_template
-from type.pokemon import Move, Pokemon
+from typedefs.pokemon import Move, Pokemon
 
 
 @cache

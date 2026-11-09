@@ -15,19 +15,21 @@ from config.layout import (
     STARTER_PANEL_RECTS,
 )
 from config.timing import LOAD_TIMEOUT
-from lib import data, lair, run, switch
-from lib.dialog import menu_last_item, press_until
+from lib import data, lair, run
+from lib import switch_v1 as switch
+from lib.dialog import menu_last_item
 from lib.game_state import GameState
 from lib.log import log
 from lib.run import FIRST_ROW, SECOND_ROW, THIRD_ROW
 from lib.scoring import weighted_score
-from lib.wait import capture, wait_for
 from tool import pk8
 from tool.check_image import BASE_SIZE, ImageChecker
+from tool.cursor import move_to
 from tool.image import locate_template, text_lines
 from tool.text import levenshtein, pad
-from type.image import Rect
-from type.path import TypeMatch
+from tool.wait import capture, press_until, wait_for
+from typedefs.image import Rect
+from typedefs.path import TypeMatch
 
 RENTAL_CANDIDATE_ADDRESSES = (0x83E93070, 0x83E93300, 0x83E93590)
 
@@ -80,7 +82,13 @@ def _select_target() -> str:
     bosses = data.boss_pokemon()
     wanted = bosses[BOSS].name()
     try:
-        _select_menu_item(image, POPUP_RECT, wanted, "选择传说Boss")
+        move_to(
+            image,
+            wanted,
+            lambda: switch.get().click("DDOWN", 0),
+            "选择传说Boss",
+            area=POPUP_RECT,
+        )
         boss = BOSS
     except RuntimeError:
         boss = _select_first_item(image, "选择传说Boss")
@@ -95,7 +103,13 @@ def _select_target() -> str:
         LOAD_TIMEOUT,
         "极巨大冒险的大厅",
     )
-    _select_menu_item(image, LOBBY_MENU_RECT, solo, "大厅菜单")
+    move_to(
+        image,
+        solo,
+        lambda: switch.get().click("DDOWN", 0),
+        "大厅菜单",
+        area=LOBBY_MENU_RECT,
+    )
     switch.get().click("A", 0)
     return boss
 
@@ -164,8 +178,9 @@ def _assign_new_starter(seed: int) -> None:
     current.encountered.update(current.rental_pool)
     log(f"seed {seed:016X} 对应的租借候选：{current.rental_pool}")
 
-    # 选宝可梦的界面刚出来时，候选记录可能还没写进内存（真机上碰到过一次校验失败），过一会儿重读
-    for attempt in range(6):
+    # 选宝可梦的界面刚出来时，候选记录可能还没写进内存（真机上碰到过几次校验失败，最长等了 4 秒），
+    # 过一会儿重读
+    for attempt in range(16):
         records = pk8.read(RENTAL_CANDIDATE_ADDRESSES, data.rental_pokemon().values())
         if all(candidate is not None for _, _, candidate in records):
             break
@@ -251,16 +266,34 @@ def _assign_new_path() -> None:
         log("开场镜头往上移的时候已经读到第 2、3 层，不用再推摇杆")
     else:
         log(f"开场镜头往上移的时候只读到 {len(pan_rows)} 层，推摇杆补读", "WARNING")
-        need = [row for row in (SECOND_ROW, THIRD_ROW) if pan_rows.get(row) is None]
-        previous = first_row
-        if SECOND_ROW not in need:
-            # 第 2 层已经读到，从它往上补第 3 层
-            previous = second
-        _scroll_rows(previous, need)
+        if second is None:
+            _scroll_rows(first_row, [SECOND_ROW])
         if third is not None:
             # 第 3 层是开场镜头读到的，等第 2 层补读完再记（记第 3 层要先知道路线形状）
             current.update_paths(THIRD_ROW, third)
+        else:
+            _fill_third_row_from_seed()
     _choose_target_path()
+
+
+def _fill_third_row_from_seed() -> None:
+    """第 3 层没有从画面上读到：用 seed 里这一层的属性补上。
+
+    连接各层只由第 2 层和路线形状决定，第 3 层的属性只用来画图、找岔路口的标签，
+    用 seed 算出来的就够了。投票的时间很短，推摇杆读第 3 层经常把时间耗完（真机上遇到过），
+    所以不再推摇杆等它，直接补。岔路口认标签时按 seed 里每列可能的属性集合匹配（见 path._fork_labels），
+    双属性宝可梦在画面上显示哪个属性都能认出来。
+    """
+    current = run.get()
+    rentals = data.rental_pokemon()
+    names = current.path_opponents.get(THIRD_ROW, [])
+    if len(names) != 4 or any(name not in rentals for name in names):
+        raise RuntimeError("第 3 层没有读到，seed 里也没有这一层的遭遇宝可梦，没法补")
+    log("第 3 层没有读到，用 seed 里这一层的属性补上", "WARNING")
+    current.update_paths(
+        THIRD_ROW,
+        [TypeMatch(rentals[name].type_ids[0], 0.0, (0, 0)) for name in names],
+    )
 
 
 def _scroll_rows(previous: list[TypeMatch], rows: list[int]) -> None:
@@ -332,55 +365,20 @@ def _choose_target_path() -> None:
     log(f"选了路线 {best}：{' → '.join(selected_pokemon)}，得分 {path_scores[best]:.3f}")
 
 
-def _select_menu_item(image: ImageChecker, area: Rect, target: str, what: str) -> None:
-    """在 area 里的菜单上把光标移到 target 那一项：当前选中的不是它就往下移一格，直到选中。
-
-    image: 菜单出现后的截图。what: 是什么菜单，写进日志和报错。
-    每移一格都等高亮真的移到了别的项上再判断。菜单旁的光标一直在跳，不能用「等画面稳定」。
-    菜单项读不到、或者每一项都试过还是没找到，抛 RuntimeError。
-    """
-    lines = text_lines(image, area)
-    if not lines:
-        raise RuntimeError(f"{what}里读不到任何选项")
-    texts, rects = [text for text, _ in lines], [rect for _, rect in lines]
-    # 菜单有几项就最多移几次，移满一圈还没选中说明菜单里没有它
-    for _ in range(len(lines)):
-        selected = image.selected(rects)
-        # 直接比较已经读出的文字，编辑距离不超过 target 长度的三分之一就算是它。
-        # 不能对单独一行的区域再识别一次：区域贴着文字，边缘的字容易认错
-        if selected >= 0 and levenshtein(texts[selected], target) <= len(target) / 3:
-            log(f"{what}选中了「{texts[selected]}」")
-            return
-        image = press_until(
-            lambda screen, before=selected: screen.selected(rects) not in (before, -1),
-            f"{what}的光标移到下一项",
-            button="DDOWN",
-        )
-    raise RuntimeError(f"{what}里找不到「{target}」，读到的选项: {texts}")
-
-
 def _select_first_item(image: ImageChecker, what: str) -> str:
     """菜单里没有 BOSS 时选菜单的第一项，返回它的 name_id。
 
     先按 DUP 把光标移到最上面那一项，再从上往下找第一项能认出来的神兽（「不指定」不算）。
-    认是哪只和 _select_menu_item 一样按名字的编辑距离判断。
+    认是哪只和 move_to 一样按名字的编辑距离判断。
     """
     bosses = data.boss_pokemon()
-    for _ in range(10):
-        lines = text_lines(image, POPUP_RECT)
-        if not lines:
-            raise RuntimeError(f"{what}里读不到任何选项")
-        rects = [rect for _, rect in lines]
-        selected = image.selected(rects)
-        if selected == 0:
-            break
-        if selected < 0:
-            raise RuntimeError(f"{what}里认不出光标在哪一项上")
-        image = press_until(
-            lambda screen, before=selected, rects=rects: screen.selected(rects) not in (before, -1),
-            f"{what}的光标移到上一项",
-            button="DUP",
-        )
+    move_to(
+        image,
+        0,
+        lambda: switch.get().click("DUP", 0),
+        what,
+        area=POPUP_RECT,
+    )
     texts = [text for text, _ in text_lines(image, POPUP_RECT)]
     for text in texts:
         name = min(bosses, key=lambda name_id: levenshtein(bosses[name_id].name(), text))
@@ -390,26 +388,18 @@ def _select_first_item(image: ImageChecker, what: str) -> str:
 
 
 def _move_starter_cursor(target: int) -> None:
-    """把选宝可梦界面的光标移到第 target 只上：不是它就往下移一格，等黑底真的移到下一只上再判断。
+    """把选宝可梦界面的光标移到第 target 只上。
 
     光标旁的「>」一直在跳，不能用「等画面稳定」（真机上等了 10 秒，倒计时到了，游戏自己选了）。
-    认不出光标在哪只上抛 RuntimeError。
+    认不出光标在哪只上、或者移满三只还没到，抛 RuntimeError。
     """
-    rects = list(STARTER_PANEL_RECTS)
-    selected = capture().selected(rects)
-    for _ in range(len(rects)):
-        if selected == target:
-            return
-        if selected < 0:
-            raise RuntimeError("选宝可梦的界面上认不出光标在哪只上")
-        image = press_until(
-            lambda screen, before=selected: screen.selected(rects) not in (before, -1),
-            "选宝可梦的光标移到下一只",
-            button="DDOWN",
-        )
-        selected = image.selected(rects)
-    if selected != target:
-        raise RuntimeError(f"选宝可梦的光标移了 {len(rects)} 次，还是没到第 {target} 只上")
+    move_to(
+        capture(),
+        target,
+        lambda: switch.get().click("DDOWN", 0),
+        "选宝可梦",
+        options=STARTER_PANEL_RECTS,
+    )
 
 
 def _map_shown(screen: ImageChecker) -> bool:
@@ -433,19 +423,46 @@ def _watch_intro_pan(timeout: float) -> tuple[ImageChecker, dict[int, list[TypeM
     """
     rows: dict[int, list[TypeMatch]] = {}
     deadline = time.monotonic() + timeout
-    while True:
-        image = capture()
-        if _map_shown(image):
-            return image, rows
-        matches = [_identify_type(image, rect) for rect in PATH_RECTS[SECOND_ROW]]
-        types = [match.type_id if match.score >= LABEL_ICON_SCORE else "-" for match in matches]
-        if "-" not in types and _same_row(matches):
-            row = _match_row(matches)
-            if row is not None and row not in rows:
-                rows[row] = matches
-                log(f"开场镜头往上移，读到第 {row} 层: {types}")
-        if time.monotonic() >= deadline:
-            raise TimeoutError(f"等了 {timeout} 秒，路线图一直没有出现")
+    # 第 2 层读到、第 3 层还没出现时，推右摇杆让镜头继续往上。
+    # 镜头一停（出现「要走哪条路」）右摇杆就滚不动地图了，只能在开场镜头还动的时候推
+    pressed = tried = False
+    second_at = 0.0
+    pressed_at = 0.0
+    try:
+        while True:
+            image = capture()
+            if _map_shown(image):
+                return image, rows
+            matches = [_identify_type(image, rect) for rect in PATH_RECTS[SECOND_ROW]]
+            types = [match.type_id if match.score >= LABEL_ICON_SCORE else "-" for match in matches]
+            if "-" not in types and _same_row(matches):
+                row = _match_row(matches)
+                if row is not None and row not in rows:
+                    rows[row] = matches
+                    if row == SECOND_ROW:
+                        second_at = time.monotonic()
+                    log(f"开场镜头往上移，读到第 {row} 层: {types}")
+                    if pressed and THIRD_ROW in rows:
+                        # 第 3 层读到了就马上松开，让镜头回到岔路口，不然投票界面出来时第 1 层的标签
+                        # 还不在检测框里，「要走哪条路」会晚几秒才能确认，投票的时间被吃掉
+                        switch.get().release_stick("RIGHT")
+                        pressed = False
+            now = time.monotonic()
+            if not tried and second_at and THIRD_ROW not in rows and now - second_at > 2.5:
+                log("第 3 层还没出现，推右摇杆让镜头继续往上", "DEBUG")
+                switch.get().press_stick("RIGHT", 0, switch.STICK_MAX)
+                pressed = tried = True
+                pressed_at = now
+            elif pressed and now - pressed_at > 6:
+                # 推了几秒还没有就松开，免得镜头一直停在最上面等不到「要走哪条路」
+                switch.get().release_stick("RIGHT")
+                pressed = False
+                pressed_at = 0.0
+            if now >= deadline:
+                raise TimeoutError(f"等了 {timeout} 秒，路线图一直没有出现")
+    finally:
+        if pressed:
+            switch.get().release_stick("RIGHT")
 
 
 def _match_row(matches: list[TypeMatch]) -> int | None:
@@ -469,12 +486,7 @@ def _allowed_types(row: int) -> list[set[str]] | None:
     读路线图时用来核对认出来的标签，防止把上下两层读重（两层的属性可能完全一样）。
     数据不全时返回 None，不做核对。
     """
-    current = run.get()
-    names = current.path_opponents.get(row, [])
-    rentals = data.rental_pokemon()
-    if len(names) != 4 or any(name not in rentals for name in names):
-        return None
-    return [set(rentals[name].type_ids) for name in names]
+    return run.get().row_type_sets(row)
 
 
 def _row_ready(

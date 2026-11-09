@@ -10,7 +10,7 @@ from lib import data, run
 from lib.log import log
 from tool.check_image import ImageChecker
 from tool.image import crop
-from type.image import Rect
+from typedefs.image import Rect
 
 
 def read_team(

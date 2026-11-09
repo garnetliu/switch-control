@@ -15,6 +15,9 @@ import time
 import usb.core
 import usb.util
 
+from config.game import BOSS
+from lib.game_state import GameState
+
 # 摇杆坐标的最大值
 STICK_MAX = 0x7FFF
 
@@ -31,6 +34,10 @@ def _hex(value: int) -> str:
 
 class Switch:
     """两种连接共用的命令。子类只负责发命令、收返回。"""
+
+    def __init__(self):
+        # 这一局的状态挂在连接上，步骤里通过 switch.get().game 取
+        self.game = GameState(BOSS)
 
     def _send(self, cmd: str):
         raise NotImplementedError
@@ -127,6 +134,7 @@ class WifiSwitch(Switch):
 
         host: Switch 的 IP。port: sys-botbase 的端口，默认 6000。timeout: 连接和收发的超时，单位秒。
         """
+        super().__init__()
         self.sock: socket.socket | None = socket.create_connection((host, port), timeout)
         self.sock.settimeout(timeout)
 
@@ -181,6 +189,7 @@ class UsbSwitch(Switch):
 
         上次退出时复位过设备的话，要等它重新枚举，这里最多等 5 秒。
         """
+        super().__init__()
         self.timeout_ms = int(timeout * 1000)
         self.device = None
         self.out = None

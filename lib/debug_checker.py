@@ -1,7 +1,7 @@
 """调试用：每检查一次截图的某个区域，就把这个区域框出来，存一张图。
 
 环境变量 SAVE_CHECKS=1 打开这个功能；打开后只在 config/debug.py 的 SAVE_CHECK_STEPS 里那几步存，
-lib.wait.capture 截的图就是 SavingImageChecker，见 should_save。
+tool.wait.capture 截的图就是 SavingImageChecker，见 should_save。
 """
 
 import os
@@ -14,7 +14,7 @@ import numpy as np
 from config.debug import SAVE_CHECK_STEPS
 from config.paths import CHECK_DIR
 from tool.check_image import ImageChecker
-from type.image import Rect
+from typedefs.image import Rect
 
 # 现在在跑哪一步，main.py 每开始一步就调用 set_step
 _step = ""

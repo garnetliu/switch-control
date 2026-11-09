@@ -3,8 +3,9 @@
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-from lib import pkhex, switch
-from type.pokemon import Pokemon
+from lib import pkhex
+from lib import switch_v1 as switch
+from typedefs.pokemon import Pokemon
 
 
 def read(
