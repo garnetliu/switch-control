@@ -1,5 +1,14 @@
 from .menu_last_item import menu_last_item
 from .move_menu_option import move_menu_option
-from .wait import press_until, wait_for, act_until, capture
+from .score import score
+from .wait import act_until, capture, press_until, wait_for
 
-__all__ = ["menu_last_item", "move_menu_option", "press_until", "wait_for", "act_until", "capture"]
+__all__ = [
+    "act_until",
+    "capture",
+    "menu_last_item",
+    "move_menu_option",
+    "press_until",
+    "score",
+    "wait_for",
+]

@@ -2,7 +2,7 @@ import logging
 import time
 
 from libs import Lair, MapTypeReader, Switch
-from tools import menu_last_item, move_menu_option, press_until, wait_for, act_until, capture
+from tools import act_until, capture, menu_last_item, move_menu_option, press_until, wait_for
 from type import Boss, MapNode, Maps
 
 
@@ -29,7 +29,7 @@ def _select_target(sw: Switch):
     boss = sw.config.boss
     wanted = _select_boss(sw, bosses[boss])
     if wanted != bosses[boss].name():
-        logging.warning(  # noqa: LOG015
+        logging.warning(
             f"Lair note 里没有「{bosses[sw.config.boss].name()}」，"
             f"这一局改成刷「{wanted}」"
         )
@@ -98,6 +98,7 @@ def _select_path(sw: Switch) -> None:
         logging.info("沿用上一局的路线规划")
     else:
         _assign_new_path(sw)
+        _assign_new_team(sw)
 
 
 def _assign_new_path(sw: Switch) -> None:
@@ -113,11 +114,83 @@ def _assign_new_path(sw: Switch) -> None:
             map_type = reader.update(image)
             if map_type is not None:
                 sw.game.maps["type"] = map_type
+                _assign_route(sw)
                 sw.game.save()
         if time.monotonic() >= deadline:
             raise TimeoutError(f"等了 {sw.config.timeout} 秒，路线图一直没有出现")
     if sw.game.maps is None or sw.game.maps["type"] is None:
         raise RuntimeError("没读到路线图类型")
+
+
+def _assign_route(sw: Switch) -> None:
+    """地图类型出来后，按 seed 的遭遇和首领相性给所有路线打分，存最高分路线。"""
+    maps = sw.game.maps
+    map_type = maps["type"]
+    # 每种地图第 1 层选完后，第 2、3 层每个节点能走到下一层的哪几列
+    links = {
+        "2x3": {
+            (1, 0): (0, 1),
+            (1, 1): (1, 2, 3),
+            (2, 0): (0, 1, 2),
+            (2, 1): (0, 1, 2),
+            (2, 2): (2, 3),
+            (2, 3): (2, 3),
+        },
+        "3x2": {
+            (1, 0): (0, 1, 2),
+            (1, 1): (2, 3),
+            (2, 0): (0, 1),
+            (2, 1): (0, 1),
+            (2, 2): (0, 1),
+            (2, 3): (1, 2, 3),
+        },
+        "2x2": {
+            (1, 0): (0, 1),
+            (1, 1): (2, 3),
+            (2, 0): (0, 1),
+            (2, 1): (1, 2, 3),
+            (2, 2): (1, 2, 3),
+            (2, 3): (1, 2, 3),
+        },
+    }[map_type]
+
+    rows = maps["rows"]
+    paths = [[[0, 0]]]
+    for row in (1, 2, 3):
+        next_paths = []
+        for path in paths:
+            prev_row, prev_col = path[-1]
+            cols = (0, 1) if row == 1 else links[(prev_row, prev_col)]
+            for col in cols:
+                next_paths.append([*path, [row, col]])
+        paths = next_paths
+
+    matchups = sw.data.boss_matchups()
+    scores = []
+    for path in paths:
+        score = 0.0
+        for index, (row, col) in enumerate(path[1:]):
+            encounter = rows[str(row)][col]["encounter"]
+            score += (1.0 + index * 0.1) * matchups[encounter][sw.game.boss]
+        scores.append(score)
+
+    best = scores.index(max(scores))
+    maps["route"] = [*paths[best], [4, 0]]
+    logging.info(
+        "路线: "
+        + " → ".join(
+            rows[str(row)][col]["encounter"] for row, col in maps["route"][1:-1]
+        )
+    )
+
+
+def _assign_new_team(sw: Switch) -> None:
+    """路线图出来后，从队伍内存读自己三只队友，四个位置都是满血。"""
+    records = sw.pkhex.read_pk8(sw.config.addresses.party)
+    names = [sw.data.name_id(record["species"], record["form"]) for record in records]
+    sw.game.team = [(name, 1.0) for name in names]
+    sw.game.save()
+    logging.info(f"队伍: {names}")
 
 
 def _move_starter_cursor(sw: Switch) -> None:
@@ -149,7 +222,7 @@ def _select_boss(sw: Switch, boss: Boss) -> str:
         int.from_bytes(sw.peek(address, 2), "little")
         for address in sw.config.addresses.lair_notes
     ]
-    logging.debug(f"Lair notes: {species}")  # noqa: LOG015
+    logging.debug(f"Lair notes: {species}")
     if boss.id_num in species:
         return boss.name()
     for name_id, candidate in sw.data.boss_pokemon().items():

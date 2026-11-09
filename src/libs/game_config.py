@@ -67,6 +67,17 @@ class Rects:
     )
     # 路线图下方「要走哪条路？」的文字
     den_text: Rect = ((0.27, 0.80), (0.72, 0.92))
+    # 冒险路上底部文字框，整行识别一次再和各个关键词比
+    path_text: Rect = ((0.05, 0.815), (0.95, 0.905))
+    # 背包客的蓝色道具面板，和面板上五个道具名字
+    backpacker: Rect = ((0.75, 0.2), (0.95, 0.6))
+    backpacker_items: tuple[Rect, ...] = (
+        ((0.549, 0.11), (0.745, 0.16)),
+        ((0.549, 0.19), (0.745, 0.24)),
+        ((0.549, 0.27), (0.745, 0.32)),
+        ((0.549, 0.35), (0.745, 0.40)),
+        ((0.549, 0.43), (0.745, 0.48)),
+    )
     # 岔路口每个节点的光标区域，按地图类型分开：{地图类型: {层号: (第 0 列, ...)}}
     # 三种地图先分开写，坐标等真机截图量出来再补
     _EMPTY_CURSORS: ClassVar[tuple[Rect, ...]] = cast(tuple[Rect, ...], ())
@@ -105,6 +116,10 @@ class GameConfig:
     cursor_white_lower: Hsv = (0, 0, 220)
     cursor_white_upper: Hsv = (180, 40, 255)
     cursor_white_ratio = 0.02
+    # 背包客道具面板的蓝色范围和占比阈值
+    backpacker_lower: Hsv = (80, 230, 230)
+    backpacker_upper: Hsv = (120, 255, 255)
+    backpacker_ratio = 240 / 255
     # 摇杆坐标最大值和推一格保持的时间
     stick_max = 0x7FFF
     stick_tick = 0.08

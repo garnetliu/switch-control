@@ -1,0 +1,222 @@
+"""检查冒险路上当前是哪个分支。"""
+import logging
+
+from libs import ImageChecker, Switch
+from tools import act_until, press_until, score, wait_for
+from tools.text import contains
+from type import Rect
+
+
+def path(sw: Switch) -> str:
+    """一直处理路线上的分支，直到进入战斗，返回 "battle"。
+
+    每个分支一次调用最多处理一次，处理完就从 states 里删掉：
+    backpacker 出现「遇到了背包客」、scientist 出现「遇到了研究员」、
+    berry 出现「树果」、fork 出现「要走哪条路」、battle 出现「出现了」。
+    """
+
+    states = ("battle", "backpacker", "scientist", "berry", "fork")
+    while True:
+        image = wait_for(
+            sw,
+            lambda screen, active=states: _match_state(sw, screen, active) is not None,
+            sw.config.timeout,
+            "路线上的界面",
+        )
+        state = _match_state(sw, image, states)
+        assert state is not None
+
+        if state == "battle":
+            # 战斗
+            return state
+        elif state == "backpacker":
+            # 背包客
+            _handle_backpacker(sw)
+        elif state == "scientist":
+            # 研究员
+            _handle_scientist(sw)
+        elif state == "berry":
+            # 树果
+            _handle_berry(sw)
+        elif state == "fork":
+            # 分岔路
+            _handle_fork(sw)
+        else:
+            logging.warning("未知的路线分支状态: %s", state)
+        # 同一分支一次 path 调用只处理一次，处理完就不再认它
+        states = tuple(other for other in states if other != state)
+
+
+def _match_state(
+        sw: Switch, image: ImageChecker, states: tuple[str, ...]
+) -> str | None:
+    """底部文字只识别一次，再按 states 的顺序和关键词比较。"""
+    keywords = {
+        "battle": "出现了",
+        "backpacker": "遇到了背包客",
+        "scientist": "遇到了研究员",
+        "berry": "树果",
+        "fork": "要走哪条路",
+    }
+    found = image.read_text(sw.config.rects.path_text)
+    return next(
+        (state for state in states if contains(found, keywords[state])),
+        None,
+    )
+
+
+def _handle_berry(sw: Switch) -> None:
+    """按 A 推进树果对话，直到文字框里不再有「树果」。"""
+    press_until(
+        sw,
+        lambda screen: not screen.has_text(sw.config.rects.path_text, "树果"),
+        "树果的对话结束",
+        timeout=sw.config.timeout,
+    )
+
+
+def _handle_fork(sw: Switch) -> None:
+    """把岔路口光标移到计划路线上的下一个节点，按 A 确认。"""
+    maps = sw.game.maps
+    index = maps["current_index"]
+    if index + 1 >= len(maps["route"]):
+        raise RuntimeError("路线规划里没有下一个节点")
+    # route 里下一项是 [层号, 列号]，光标要移到这一层的这一列
+    row, col = maps["route"][index + 1]
+    rects = sw.config.rects.path_cursors[maps["type"]].get(row, ())
+    if not rects:
+        raise RuntimeError(f"还没补 {maps['type']} 第 {row} 层的光标坐标")
+    if not 0 <= col < len(rects):
+        raise RuntimeError(f"路线目标列 {col} 超出第 {row} 层的 {len(rects)} 个节点")
+    _move_fork_cursor(sw, rects, col)
+    sw.click("A", 0)
+    maps["current_index"] = index + 1
+    sw.game.save()
+
+
+def _move_fork_cursor(sw: Switch, rects: tuple[Rect, ...], target: int) -> None:
+    """把岔路口光标从当前列移到 target。
+
+    先用每个节点区域里的白色占比判断当前列，再按 target 在左还是右推左摇杆；
+    每次推完都重新读一帧，输入被吞掉时 act_until 会重推。
+    """
+    image = wait_for(
+        sw,
+        lambda screen: _path_cursor_index(sw, screen, rects) != -1,
+        sw.config.timeout,
+        "岔路口光标",
+    )
+    start = _path_cursor_index(sw, image, rects)
+    for _ in range(len(rects)):
+        current = _path_cursor_index(sw, image, rects)
+        if current == target:
+            logging.info(f"岔路口光标从第 {start + 1} 列移到第 {target + 1} 列")
+            return
+        direction = 1 if target > current else -1
+        image = act_until(
+            sw,
+            lambda step=direction: sw.stick(
+                "LEFT", step * sw.config.stick_max, 0, sw.config.stick_tick
+            ),
+            lambda screen, before=current: _path_cursor_index(sw, screen, rects)
+                                           not in (before, -1),
+            "岔路口光标移动",
+        )
+    raise RuntimeError(
+        f"岔路口光标移了 {len(rects)} 次，还是没到第 {target + 1} 个"
+    )
+
+
+def _path_cursor_index(
+        sw: Switch, image: ImageChecker, rects: tuple[Rect, ...]
+) -> int:
+    """几个光标区域里白色占比最高的序号，没有明显的返回 -1。"""
+    ratios = [
+        image.color_ratio(
+            rect, sw.config.cursor_white_lower, sw.config.cursor_white_upper
+        )
+        for rect in rects
+    ]
+    best = max(range(len(ratios)), key=ratios.__getitem__)
+    return best if ratios[best] > sw.config.cursor_white_ratio else -1
+
+
+def _handle_backpacker(sw: Switch) -> None:
+    """等背包客的蓝色道具面板出来，读一下道具名，拿默认道具，再等面板消失。"""
+    # 「遇到了背包客」之后对话自己翻页，道具面板才出来
+    image = wait_for(
+        sw,
+        lambda screen: _backpacker_shown(sw, screen),
+        sw.config.timeout,
+        "背包客的道具面板",
+    )
+    items = [image.read_text(rect).strip() for rect in sw.config.rects.backpacker_items]
+    logging.info(f"背包客的道具: {items}")
+    sw.click("A", 0)
+    wait_for(
+        sw,
+        lambda screen: not _backpacker_shown(sw, screen),
+        sw.config.timeout,
+        "背包客的道具面板消失",
+    )
+
+
+def _handle_scientist(sw: Switch) -> None:
+    """研究员问要不要换租借宝可梦：平均分更高就换，问完重新读队伍。
+
+    平均分排除候选池和这一局路线上的遭遇宝可梦；队伍内存里只能读到名字，
+    读不到当前血条，留在队里的按名字沿用原血量，新换进来的按满血算。
+    """
+    own = sw.game.team[0][0]
+
+    rental_scores = sw.data.rental_scores()
+    # 候选池和这一局路线上的宝可梦不会再作为新对手出现，算平均分时排除
+    excluded = set(sw.game.rental_pool)
+    for nodes in sw.game.maps["rows"].values():
+        excluded.update(node["encounter"] for node in nodes)
+    names = [name for name in rental_scores if name not in excluded]
+    floor = sw.game.maps["current_index"]
+    average = sum(score(sw, name, sw.game.boss, floor) for name in names) / len(names)
+    own_score = score(sw, own, sw.game.boss, floor)
+    take = average > own_score
+    logging.info(
+        f"研究员：平均分 {average:.2f}，{own} 的分数 {own_score:.2f}，"
+        f"{'换' if take else '不换'}"
+    )
+
+    wait_for(
+        sw,
+        lambda screen: screen.has_text(sw.config.rects.path_text, "希望交换成"),
+        sw.config.timeout,
+        "研究员问换不换",
+    )
+    sw.click("A" if take else "B", 0)
+    wait_for(
+        sw,
+        lambda screen: not screen.has_text(sw.config.rects.path_text, "希望交换成"),
+        sw.config.timeout,
+        "研究员问话消失",
+    )
+    logging.info(f"研究员换人前队伍: {sw.game.team}")
+    # 就算自己不换，队友也可能换，所以都要重新读队伍
+    records = sw.pkhex.read_pk8(sw.config.addresses.party)
+    team_names = [
+        sw.data.name_id(record["species"], record["form"]) for record in records
+    ]
+    # 留在队里的沿用原血量，新换进来的按满血算
+    old_hp = dict(sw.game.team)
+    sw.game.team = [(name, old_hp.get(name, 1.0)) for name in team_names]
+    logging.info(f"研究员换人后队伍: {sw.game.team}")
+    sw.game.save()
+
+
+def _backpacker_shown(sw: Switch, image: ImageChecker) -> bool:
+    """蓝色道具面板正显示着。"""
+    return (
+            image.color_ratio(
+                sw.config.rects.backpacker,
+                sw.config.backpacker_lower,
+                sw.config.backpacker_upper,
+            )
+            > sw.config.backpacker_ratio
+    )
