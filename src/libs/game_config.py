@@ -1,8 +1,9 @@
 """新代码的配置：路径、计时、界面区域、游戏参数。"""
 
 from pathlib import Path
+from typing import ClassVar, cast
 
-from type import Rect
+from type import Hsv, Rect
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -49,6 +50,31 @@ class Rects:
     menu_search: Rect = ((0.60, 0.45), (0.90, 0.79))
     # 极巨大冒险大厅右下角的菜单
     lobby_menu: Rect = ((0.6, 0.65), (0.98, 0.92))
+    # 选初始宝可梦界面左上角的「按顺序选择」
+    starter_hint: Rect = ((0.015, 0.068), (0.14, 0.122))
+    # 选初始宝可梦界面右侧三个候选的名字区域，选中的是黑底
+    starter_candidates: tuple[Rect, Rect, Rect] = (
+        ((0.485, 0.150), (0.665, 0.385)),
+        ((0.485, 0.395), (0.665, 0.645)),
+        ((0.485, 0.655), (0.665, 0.907)),
+    )
+    # 路线图第 2 层的四列，覆盖镜头上下移动时属性标签可能出现的高度
+    path_second_row: tuple[Rect, Rect, Rect, Rect] = (
+        ((0.14, 0.24), (0.32, 0.92)),
+        ((0.38, 0.24), (0.55, 0.92)),
+        ((0.61, 0.24), (0.78, 0.92)),
+        ((0.84, 0.24), (1.0, 0.92)),
+    )
+    # 路线图下方「要走哪条路？」的文字
+    den_text: Rect = ((0.27, 0.80), (0.72, 0.92))
+    # 岔路口每个节点的光标区域，按地图类型分开：{地图类型: {层号: (第 0 列, ...)}}
+    # 三种地图先分开写，坐标等真机截图量出来再补
+    _EMPTY_CURSORS: ClassVar[tuple[Rect, ...]] = cast(tuple[Rect, ...], ())
+    path_cursors: ClassVar[dict[str, dict[int, tuple[Rect, ...]]]] = {
+        "2x3": {1: _EMPTY_CURSORS, 2: _EMPTY_CURSORS, 3: _EMPTY_CURSORS},
+        "3x2": {1: _EMPTY_CURSORS, 2: _EMPTY_CURSORS, 3: _EMPTY_CURSORS},
+        "2x2": {1: _EMPTY_CURSORS, 2: _EMPTY_CURSORS, 3: _EMPTY_CURSORS},
+    }
 
 
 class GameConfig:
@@ -68,6 +94,20 @@ class GameConfig:
     rects = Rects()
     # 日志和出错时的截图
     log_dir = ROOT / "logs"
+    # 路线图第 2 层四个标签的纵向间距对应的地图类型
+    path_types: ClassVar[dict[int, str]] = {135: "2x2", 180: "2x3", 65: "3x2"}
+    # 属性图标匹配：白色范围、最低匹配度、同一层允许的最大高度差（占画面高度的比例）
+    label_icon_lower: Hsv = (0, 0, 200)
+    label_icon_upper: Hsv = (180, 50, 255)
+    label_icon_score = 0.80
+    row_max_spread = 0.2
+    # 岔路口光标是白色，白色占比超过这个值才算选中
+    cursor_white_lower: Hsv = (0, 0, 220)
+    cursor_white_upper: Hsv = (180, 40, 255)
+    cursor_white_ratio = 0.02
+    # 摇杆坐标最大值和推一格保持的时间
+    stick_max = 0x7FFF
+    stick_tick = 0.08
     # 等画面变化和操作超时
     timeout = 60.0
     # 两次截图之间的间隔

@@ -6,9 +6,11 @@ from ruamel.yaml import YAML
 
 from type import GameStateSnapshot, Maps
 
+from .game_config import GameConfig
+
 
 class GameState:
-    def __init__(self, config):
+    def __init__(self, config: GameConfig):
         self._config = config
         self._yaml = YAML()
         state = self._load()
@@ -17,6 +19,8 @@ class GameState:
                 boss=self._config.boss,
                 lock_path=False,
                 seed=None,
+                rental_pool=[],
+                candidates=[],
                 maps=None,
                 lock_pokemon_index=None,
                 lock_results=[],
@@ -28,6 +32,10 @@ class GameState:
         # keep path
         self.lock_path = state.get("lock_path", False)
         self.seed: int | None = state.get("seed")
+        # seed 对应的 6 只租借候选；初始界面从里面连续取 3 只，通常是前 3 只
+        self.rental_pool: list[str] = state.get("rental_pool", [])
+        # 选初始界面从内存读到的 3 只，顺序和屏幕上一致
+        self.candidates: list[str] = state.get("candidates", [])
         # 地图：type（2x3 / 3x2 / 2x2）、每层节点（col + type）、选中的路线、当前走到第几个
         self.maps: Maps | None = state.get("maps")
         # 选的租借宝可梦在三个候选里的下标
@@ -43,18 +51,13 @@ class GameState:
         # 当前所在的步骤
         self.step = state.get("step", "")
 
-    def clear(self) -> None:
-        """清空这一局的状态和保存的快照。"""
+    def clear(self, seed: int | None, boss: str | None) -> None:
+        """清空快照，用新的 boss 和 seed 重新初始化并写回文件。"""
         self._config.game_state_file.unlink(missing_ok=True)
         self.__init__(self._config)
-
-    def set_seed(self, seed: int, boss: str | None = None) -> None:
-        """设置这一局的 seed。seed 或 boss 和已保存的不一样时先清空状态。"""
-        boss = self.boss if boss is None else boss
-        if self.seed != seed or self.boss != boss:
-            self.clear()
-        self.seed = seed
-        self.boss = boss
+        self.boss = boss if boss else self._config.boss
+        self.seed = seed if seed else self.seed
+        self.save()
 
     def save(self) -> None:
         """把整个状态写进 YAML；先写临时文件再替换。"""
@@ -79,6 +82,8 @@ class GameState:
             boss=self.boss,
             lock_path=self.lock_path,
             seed=self.seed,
+            rental_pool=self.rental_pool,
+            candidates=self.candidates,
             maps=self.maps,
             lock_pokemon_index=self.lock_pokemon_index,
             lock_results=self.lock_results,

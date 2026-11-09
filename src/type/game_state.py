@@ -9,6 +9,8 @@ class GameStateSnapshot(TypedDict):
     boss: str
     lock_path: bool
     seed: int | None
+    rental_pool: list[str]
+    candidates: list[str]
     maps: Maps | None
     lock_pokemon_index: int | None
     lock_results: list[bool]

@@ -1,12 +1,15 @@
 import logging
+import time
 
-from libs import Switch
-from tools import menu_last_item, move_menu_option, press_until, wait_for
-from type import Boss
+from libs import Lair, MapTypeReader, Switch
+from tools import menu_last_item, move_menu_option, press_until, wait_for, act_until, capture
+from type import Boss, MapNode, Maps
 
 
 def join(sw: Switch) -> str:
     _select_target(sw)
+    _select_starter(sw)
+    _select_path(sw)
     return "path"
 
 
@@ -57,6 +60,87 @@ def _select_target(sw: Switch):
         area=sw.config.rects.lobby_menu,
     )
     sw.click("A", 0)
+    return sw.game.boss
+
+
+def _select_starter(sw: Switch) -> None:
+    """从内存读取三只租借宝可梦，选择得分最高的。
+
+    屏幕只用来看光标停在哪只上；宝可梦信息都从内存读取。队友等第一场战斗再读（见 battle._read_team），
+    选初始界面读不到队伍地址。
+    """
+    # 不能用面板高亮判断界面是否出来：刚切出来时面板还在淡入，选中位置会看错
+    wait_for(
+        sw,
+        lambda screen: screen.has_text(sw.config.rects.starter_hint, "按顺序选择"),
+        sw.config.timeout,
+        "选宝可梦的界面",
+    )
+
+    seed = _read_seed(sw)
+
+    if seed == sw.game.seed:
+        logging.info("seed 和上一局一样，沿用上一局的 starter 选择")
+    else:
+        sw.game.clear(seed=seed)
+        _assign_new_starter(sw)
+
+    _move_starter_cursor(sw)
+    sw.click("A", 0)
+
+
+def _select_path(sw: Switch) -> None:
+    """等路线图出现，读出整张路线图，给每条路线打分，把分数最高的记为这一局的目标路线。
+
+    只决定走哪条，真正在岔路口移动光标是下一步 path 的事。
+    """
+    if len(sw.game.maps.route):
+        logging.info("沿用上一局的路线规划")
+    else:
+        _assign_new_path(sw)
+
+
+def _assign_new_path(sw: Switch) -> None:
+    """开场镜头往上移动时只读地图类型，等到路线图出现。"""
+    wait_for(sw, lambda screen: not screen.is_black(), sw.config.timeout, "开场黑屏结束")
+    reader = MapTypeReader(sw)
+    deadline = time.monotonic() + sw.config.timeout
+    while True:
+        image = capture(sw)
+        if image.has_text(sw.config.rects.den_text, "要走哪条路"):
+            break
+        if sw.game.maps is not None and sw.game.maps["type"] is None:
+            map_type = reader.update(image)
+            if map_type is not None:
+                sw.game.maps["type"] = map_type
+                sw.game.save()
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"等了 {sw.config.timeout} 秒，路线图一直没有出现")
+    if sw.game.maps is None or sw.game.maps["type"] is None:
+        raise RuntimeError("没读到路线图类型")
+
+
+def _move_starter_cursor(sw: Switch) -> None:
+    """读界面上的三只候选，选得分最高的，把黑色光标移过去。"""
+
+    rects = sw.config.rects.starter_candidates
+    image = wait_for(
+        sw,
+        lambda screen: screen.selected(rects) != -1,
+        sw.config.timeout,
+        "选宝可梦的光标",
+    )
+    for _ in range(len(rects)):
+        current = image.selected(rects)
+        if current == sw.game.lock_pokemon_index:
+            return
+        image = act_until(
+            sw,
+            lambda: sw.click("DDOWN", 0),
+            lambda screen, before=current: screen.selected(rects) not in (before, -1),
+            "选宝可梦的光标移一格",
+        )
+    raise RuntimeError(f"选宝可梦的光标移了 {len(rects)} 次，还是没到第 {sw.game.lock_pokemon_index + 1} 只")
 
 
 def _select_boss(sw: Switch, boss: Boss) -> str:
@@ -68,7 +152,57 @@ def _select_boss(sw: Switch, boss: Boss) -> str:
     logging.debug(f"Lair notes: {species}")  # noqa: LOG015
     if boss.id_num in species:
         return boss.name()
-    for candidate in sw.data.boss_pokemon().values():
+    for name_id, candidate in sw.data.boss_pokemon().items():
         if candidate.id_num == species[1]:
+            sw.game.clear(boss=name_id)
             return candidate.name()
     raise RuntimeError(f"Lair note 里找不到第一个 boss：{species}")
+
+
+def _read_seed(sw: Switch) -> int:
+    """读这一局的冒险 seed。"""
+    raw = sw.peek(sw.config.addresses.seed, 8)
+    if len(raw) != 8:
+        raise RuntimeError(f"路线 seed 读取长度错误：{len(raw)}")
+    seed = int.from_bytes(raw, "little")
+    logging.info(f"读取到的 seed 是 {seed}")
+    return seed
+
+
+def _assign_new_starter(sw: Switch) -> None:
+    """seed 变了时重新算这一局的候选池和遭遇。"""
+    seed = sw.game.seed
+    assert seed is not None
+    lair = Lair(sw.data, seed)
+    sw.game.rental_pool = lair.candidates()
+    rental_pokemon = sw.data.rental_pokemon()
+    sw.game.maps = Maps(
+        type=None,
+        rows={
+            row: [
+                MapNode(
+                    col=col,
+                    type=rental_pokemon[encounter]["type_ids"][0],
+                    encounter=encounter,
+                )
+                for col, encounter in enumerate(encounters)
+            ]
+            for row, encounters in lair.encounters().items()
+        },
+        route=[],
+        current_index=0,
+    )
+
+    records = sw.pkhex.read_pk8(sw.config.addresses.starter_candidates)
+    names = [sw.data.name_id(record["species"], record["form"]) for record in records]
+    boss_matchups = sw.data.boss_matchups()
+    rental_scores = sw.data.rental_scores()
+    # 开始时还剩 3 个对手，最后还有 1 个首领；首领权重更大
+    scores = [
+        (rental_scores[name] ** 3 * boss_matchups[name][sw.game.boss] ** 2) ** (1 / 5)
+        for name in names
+    ]
+    target = scores.index(max(scores))
+    sw.game.candidates = names
+    sw.game.lock_pokemon_index = target
+    sw.game.save()

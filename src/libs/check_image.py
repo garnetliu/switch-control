@@ -211,14 +211,26 @@ class ImageChecker:
         这时 template 也要是同样处理过的单通道图。
         区域比模板小时没法匹配，返回 0。
         """
+        score, _ = self.match_template_position(rect, template, lower, upper)
+        return score
+
+    def match_template_position(
+            self,
+            rect: Rect,
+            template: np.ndarray,
+            lower: Hsv | None = None,
+            upper: Hsv | None = None,
+    ) -> tuple[float, tuple[int, int]]:
+        """在区域里找模板，返回最高匹配度和模板左上角相对区域的像素位置。"""
         if lower is not None and upper is not None:
             area = cv2.inRange(self._crop(self._hsv, rect), lower, upper)
         else:
             area = self._crop(self._bgr, rect)
         if area.shape[0] < template.shape[0] or area.shape[1] < template.shape[1]:
-            return 0.0
+            return 0.0, (0, 0)
         result = cv2.matchTemplate(area, template, cv2.TM_CCOEFF_NORMED)
-        return float(result.max())
+        _, score, _, location = cv2.minMaxLoc(result)
+        return float(score), (int(location[0]), int(location[1]))
 
     def has_template(
             self,

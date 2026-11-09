@@ -18,6 +18,7 @@ import usb.util
 from .game_config import GameConfig
 from .game_data import GameData
 from .game_state import GameState
+from .pkhex import Pkhex
 
 # 摇杆坐标的最大值
 STICK_MAX = 0x7FFF
@@ -211,6 +212,7 @@ class Switch:
         self.config = GameConfig()
         self.game = GameState(self.config)
         self.data = GameData(self.config)
+        self.pkhex = Pkhex(self.peek)
         self._connect()
 
     def _connect(self) -> None:
