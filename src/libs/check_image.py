@@ -36,11 +36,13 @@ class ImageChecker:
         rows = np.flatnonzero(gray.mean(axis=1) > black_bar)
         cols = np.flatnonzero(gray.mean(axis=0) > black_bar)
         if rows.size and cols.size:
-            img = img[rows[0]: rows[-1] + 1, cols[0]: cols[-1] + 1]
+            img = img[rows[0] : rows[-1] + 1, cols[0] : cols[-1] + 1]
         interpolation = cv2.INTER_AREA if img.shape[1] > base_size[0] else cv2.INTER_CUBIC
         self._bgr = cv2.resize(img, base_size, interpolation=interpolation)
         self._hsv = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2HSV)
         self._gray = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2GRAY)
+        # 在这张图上检查过的区域，判定成功时画进截图里，见 tools.log.save_check
+        self.checked: list[Rect] = []
 
     @property
     def bgr(self) -> np.ndarray:
@@ -56,11 +58,12 @@ class ImageChecker:
         image = {"bgr": self._bgr, "gray": self._gray, "hsv": self._hsv}[channel]
         return self._crop(image, rect)
 
-    @staticmethod
-    def _crop(img: np.ndarray, rect: Rect) -> np.ndarray:
+    def _crop(self, img: np.ndarray, rect: Rect) -> np.ndarray:
+        if rect not in self.checked:
+            self.checked.append(rect)
         h, w = img.shape[:2]
         (left, top), (right, bottom) = rect
-        return img[round(top * h): round(bottom * h), round(left * w): round(right * w)]
+        return img[round(top * h) : round(bottom * h), round(left * w) : round(right * w)]
 
     # ---- 文字 ----
 
@@ -72,7 +75,9 @@ class ImageChecker:
         所以空的区域也能直接用来判断「有没有字」。要读多行的区域用 text_lines。
         """
         min_text_score = 0.5
-        result, _ = self._ocr(self._crop(self._bgr, rect), use_det=False, use_cls=False, use_rec=True)
+        result, _ = self._ocr(
+            self._crop(self._bgr, rect), use_det=False, use_cls=False, use_rec=True
+        )
         if not result:
             return ""
         text = str(result[0][0])
@@ -143,7 +148,7 @@ class ImageChecker:
         found, text = _clean(self.read_text(rect)), _clean(text)
         window = len(text)
         for start in range(max(1, len(found) - window + 1)):
-            if SequenceMatcher(None, found[start: start + window], text).ratio() >= min_similarity:
+            if SequenceMatcher(None, found[start : start + window], text).ratio() >= min_similarity:
                 return True
         return False
 
@@ -191,19 +196,16 @@ class ImageChecker:
         # 亮度不超过 50 的像素占比至少 98%，并且亮度的标准差不超过 10
         dark_value, dark_ratio, dark_std = 50, 0.98, 10
         value = self._hsv[:, :, 2]
-        return (
-                float((value <= dark_value).mean()) >= dark_ratio
-                and float(value.std()) <= dark_std
-        )
+        return float((value <= dark_value).mean()) >= dark_ratio and float(value.std()) <= dark_std
 
     # ---- 模板匹配 ----
 
     def match_template(
-            self,
-            rect: Rect,
-            template: np.ndarray,
-            lower: Hsv | None = None,
-            upper: Hsv | None = None,
+        self,
+        rect: Rect,
+        template: np.ndarray,
+        lower: Hsv | None = None,
+        upper: Hsv | None = None,
     ) -> float:
         """在区域里找模板，返回最高的匹配度，0 到 1。
 
@@ -215,11 +217,11 @@ class ImageChecker:
         return score
 
     def match_template_position(
-            self,
-            rect: Rect,
-            template: np.ndarray,
-            lower: Hsv | None = None,
-            upper: Hsv | None = None,
+        self,
+        rect: Rect,
+        template: np.ndarray,
+        lower: Hsv | None = None,
+        upper: Hsv | None = None,
     ) -> tuple[float, tuple[int, int]]:
         """在区域里找模板，返回最高匹配度和模板左上角相对区域的像素位置。"""
         if lower is not None and upper is not None:
@@ -232,13 +234,24 @@ class ImageChecker:
         _, score, _, location = cv2.minMaxLoc(result)
         return float(score), (int(location[0]), int(location[1]))
 
+    def match_sprite(self, rect: Rect, sprite: np.ndarray) -> float:
+        """区域里的图在 sprite 模板里的最高匹配度。
+
+        用在截图里的小图标和完整精灵图之间比较，区域必须不大于模板。
+        """
+        area = self.crop(rect)
+        if area.shape[0] > sprite.shape[0] or area.shape[1] > sprite.shape[1]:
+            return 0.0
+        result = cv2.matchTemplate(sprite, area, cv2.TM_CCOEFF_NORMED)
+        return float(result.max())
+
     def has_template(
-            self,
-            rect: Rect,
-            template: np.ndarray,
-            min_score: float = 0.85,
-            lower: Hsv | None = None,
-            upper: Hsv | None = None,
+        self,
+        rect: Rect,
+        template: np.ndarray,
+        min_score: float = 0.85,
+        lower: Hsv | None = None,
+        upper: Hsv | None = None,
     ) -> bool:
         """区域里有没有和模板匹配度达到 min_score 的内容。"""
         return self.match_template(rect, template, lower, upper) >= min_score

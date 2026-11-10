@@ -13,9 +13,14 @@ def contains(found: str, text: str, min_similarity: float = 0.8) -> bool:
     found, text = (re.sub(r"[\s，。！？、,.!?…：:]", "", value) for value in (found, text))
     window = len(text)
     return any(
-        SequenceMatcher(None, found[start:start + window], text).ratio() >= min_similarity
+        SequenceMatcher(None, found[start : start + window], text).ratio() >= min_similarity
         for start in range(max(1, len(found) - window + 1))
     )
+
+
+def similarity(a: str, b: str) -> float:
+    """两段文字有多像，0 到 1。"""
+    return SequenceMatcher(None, a, b).ratio()
 
 
 def levenshtein(a: str, b: str) -> int:

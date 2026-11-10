@@ -1,8 +1,9 @@
 """检查冒险路上当前是哪个分支。"""
+
 import logging
 
-from libs import ImageChecker, Switch
-from tools import act_until, press_until, score, wait_for
+from libs import ImageChecker, PathCursorCollector, Switch
+from tools import act_until, press_until, rental_boss_score, wait_for
 from tools.text import contains
 from type import Rect
 
@@ -47,9 +48,7 @@ def path(sw: Switch) -> str:
         states = tuple(other for other in states if other != state)
 
 
-def _match_state(
-        sw: Switch, image: ImageChecker, states: tuple[str, ...]
-) -> str | None:
+def _match_state(sw: Switch, image: ImageChecker, states: tuple[str, ...]) -> str | None:
     """底部文字只识别一次，再按 states 的顺序和关键词比较。"""
     keywords = {
         "battle": "出现了",
@@ -85,7 +84,7 @@ def _handle_fork(sw: Switch) -> None:
     row, col = maps["route"][index + 1]
     rects = sw.config.rects.path_cursors[maps["type"]].get(row, ())
     if not rects:
-        raise RuntimeError(f"还没补 {maps['type']} 第 {row} 层的光标坐标")
+        rects = PathCursorCollector(sw).ensure(row)
     if not 0 <= col < len(rects):
         raise RuntimeError(f"路线目标列 {col} 超出第 {row} 层的 {len(rects)} 个节点")
     _move_fork_cursor(sw, rects, col)
@@ -118,23 +117,18 @@ def _move_fork_cursor(sw: Switch, rects: tuple[Rect, ...], target: int) -> None:
             lambda step=direction: sw.stick(
                 "LEFT", step * sw.config.stick_max, 0, sw.config.stick_tick
             ),
-            lambda screen, before=current: _path_cursor_index(sw, screen, rects)
-                                           not in (before, -1),
+            lambda screen, before=current: (
+                _path_cursor_index(sw, screen, rects) not in (before, -1)
+            ),
             "岔路口光标移动",
         )
-    raise RuntimeError(
-        f"岔路口光标移了 {len(rects)} 次，还是没到第 {target + 1} 个"
-    )
+    raise RuntimeError(f"岔路口光标移了 {len(rects)} 次，还是没到第 {target + 1} 个")
 
 
-def _path_cursor_index(
-        sw: Switch, image: ImageChecker, rects: tuple[Rect, ...]
-) -> int:
+def _path_cursor_index(sw: Switch, image: ImageChecker, rects: tuple[Rect, ...]) -> int:
     """几个光标区域里白色占比最高的序号，没有明显的返回 -1。"""
     ratios = [
-        image.color_ratio(
-            rect, sw.config.cursor_white_lower, sw.config.cursor_white_upper
-        )
+        image.color_ratio(rect, sw.config.cursor_white_lower, sw.config.cursor_white_upper)
         for rect in rects
     ]
     best = max(range(len(ratios)), key=ratios.__getitem__)
@@ -176,12 +170,11 @@ def _handle_scientist(sw: Switch) -> None:
         excluded.update(node["encounter"] for node in nodes)
     names = [name for name in rental_scores if name not in excluded]
     floor = sw.game.maps["current_index"]
-    average = sum(score(sw, name, sw.game.boss, floor) for name in names) / len(names)
-    own_score = score(sw, own, sw.game.boss, floor)
+    average = sum(rental_boss_score(sw, name, sw.game.boss, floor) for name in names) / len(names)
+    own_score = rental_boss_score(sw, own, sw.game.boss, floor)
     take = average > own_score
     logging.info(
-        f"研究员：平均分 {average:.2f}，{own} 的分数 {own_score:.2f}，"
-        f"{'换' if take else '不换'}"
+        f"研究员：平均分 {average:.2f}，{own} 的分数 {own_score:.2f}，{'换' if take else '不换'}"
     )
 
     wait_for(
@@ -200,9 +193,7 @@ def _handle_scientist(sw: Switch) -> None:
     logging.info(f"研究员换人前队伍: {sw.game.team}")
     # 就算自己不换，队友也可能换，所以都要重新读队伍
     records = sw.pkhex.read_pk8(sw.config.addresses.party)
-    team_names = [
-        sw.data.name_id(record["species"], record["form"]) for record in records
-    ]
+    team_names = [sw.data.name_id(record["species"], record["form"]) for record in records]
     # 留在队里的沿用原血量，新换进来的按满血算
     old_hp = dict(sw.game.team)
     sw.game.team = [(name, old_hp.get(name, 1.0)) for name in team_names]
@@ -213,10 +204,10 @@ def _handle_scientist(sw: Switch) -> None:
 def _backpacker_shown(sw: Switch, image: ImageChecker) -> bool:
     """蓝色道具面板正显示着。"""
     return (
-            image.color_ratio(
-                sw.config.rects.backpacker,
-                sw.config.backpacker_lower,
-                sw.config.backpacker_upper,
-            )
-            > sw.config.backpacker_ratio
+        image.color_ratio(
+            sw.config.rects.backpacker,
+            sw.config.backpacker_lower,
+            sw.config.backpacker_upper,
+        )
+        > sw.config.backpacker_ratio
     )

@@ -69,6 +69,83 @@ class Rects:
     den_text: Rect = ((0.27, 0.80), (0.72, 0.92))
     # 冒险路上底部文字框，整行识别一次再和各个关键词比
     path_text: Rect = ((0.05, 0.815), (0.95, 0.905))
+    # 战斗界面：底部两行文字、结算标题
+    battle_text: Rect = ((0.05, 0.815), (0.95, 0.888))
+    battle_line2: Rect = ((0.05, 0.888), (0.95, 0.958))
+    result_title: Rect = ((0.58, 0.20), (0.95, 0.29))
+    # 战斗菜单第一项的文字：平时是「战斗」，自己倒下时是「应援」
+    battle_menu_text: Rect = ((0.815, 0.685), (0.895, 0.76))
+    # 招式列表每一行左边的光标「>」
+    move_cursor_rects: tuple[Rect, Rect, Rect, Rect] = (
+        ((0.645, 0.60), (0.68, 0.69)),
+        ((0.645, 0.70), (0.68, 0.79)),
+        ((0.645, 0.80), (0.68, 0.88)),
+        ((0.645, 0.89), (0.68, 0.98)),
+    )
+    # 招式列表左边的「极巨化」按钮和它左边的光标
+    dynamax_button: Rect = ((0.575, 0.80), (0.61, 0.84))
+    dynamax_cursor: Rect = ((0.515, 0.83), (0.55, 0.92))
+    # 选目标界面：对手卡片和四张我方卡片左边的光标
+    target_cursor: Rect = ((0.365, 0.37), (0.405, 0.44))
+    ally_target_cursor_rects: tuple[Rect, Rect, Rect, Rect] = (
+        ((0.028, 0.55), (0.068, 0.63)),
+        ((0.263, 0.55), (0.303, 0.63)),
+        ((0.498, 0.55), (0.538, 0.63)),
+        ((0.733, 0.55), (0.773, 0.63)),
+    )
+    # 捕捉菜单：「捕捉 / 不捕捉」，选中项黑底、另一项白底
+    catch_black: Rect = ((0.82, 0.845), (0.95, 0.855))
+    catch_white: Rect = ((0.82, 0.925), (0.95, 0.935))
+    # 「捕捉」这一项的黑色选项框，不含左边的光标
+    catch_option: Rect = ((0.82, 0.835), (0.99, 0.905))
+    # 选球界面的「使用」按钮，不含左边的光标
+    ball_use: Rect = ((0.71, 0.835), (0.885, 0.9))
+    # 选球界面顶部的球名和数量
+    ball_name: Rect = ((0.70, 0.62), (0.88, 0.69))
+    ball_count: Rect = ((0.88, 0.62), (0.97, 0.69))
+    # 抓到后换不换的界面：两个选项、光标、队伍血量、新卡片、结果、玩家名字
+    swap_options: tuple[Rect, Rect] = (
+        ((0.56, 0.765), (0.90, 0.83)),
+        ((0.56, 0.845), (0.90, 0.905)),
+    )
+    swap_cursors: tuple[Rect, Rect] = (
+        ((0.525, 0.76), (0.565, 0.83)),
+        ((0.525, 0.84), (0.565, 0.91)),
+    )
+    swap_hp: Rect = ((0.20, 0.33), (0.34, 0.68))
+    caught_name: Rect = ((0.48, 0.60), (0.60, 0.65))
+    caught_ability: Rect = ((0.48, 0.645), (0.60, 0.70))
+    swap_result: Rect = ((0.20, 0.80), (0.55, 0.90))
+    swap_players: tuple[Rect, Rect, Rect, Rect] = (
+        ((0.0, 0.345), (0.15, 0.40)),
+        ((0.0, 0.435), (0.15, 0.49)),
+        ((0.0, 0.525), (0.15, 0.58)),
+        ((0.0, 0.615), (0.15, 0.665)),
+    )
+    # 结算：列表、左侧预览、弹出菜单、资料页、闪光标志、是否确认
+    result_rows: tuple[Rect, Rect, Rect, Rect] = (
+        ((0.60, 0.32), (0.905, 0.44)),
+        ((0.60, 0.455), (0.905, 0.57)),
+        ((0.60, 0.59), (0.905, 0.705)),
+        ((0.60, 0.725), (0.905, 0.84)),
+    )
+    result_preview: Rect = ((0.02, 0.18), (0.55, 0.86))
+    result_menu: Rect = ((0.55, 0.30), (1.0, 0.90))
+    # 在列表第一只上按 A 弹出的「选择 / 查看能力 / 取消」菜单，和里面「查看能力」这一项
+    result_option_menu: Rect = ((0.735, 0.375), (0.895, 0.585))
+    result_view_ability: Rect = ((0.75, 0.455), (0.87, 0.515))
+    summary_name_label: Rect = ((0.05, 0.11), (0.17, 0.19))
+    summary_name: Rect = ((0.18, 0.09), (0.47, 0.18))
+    summary_sprite: Rect = ((0.60, 0.22), (0.97, 0.88))
+    shiny: Rect = ((0.075, 0.53), (0.105, 0.58))
+    # 重启游戏：HOME 菜单底部「切换用户」的提示、关闭软件的确认框、选用户界面的标题
+    home_hint: Rect = ((0.5, 0.9), (1.0, 1.0))
+    close_dialog: Rect = ((0.45, 0.38), (0.8, 0.5))
+    user_picker: Rect = ((0.0, 0.45), (0.5, 0.55))
+    yes_no: tuple[Rect, Rect] = (
+        ((0.68, 0.645), (0.82, 0.705)),
+        ((0.68, 0.705), (0.82, 0.765)),
+    )
     # 背包客的蓝色道具面板，和面板上五个道具名字
     backpacker: Rect = ((0.75, 0.2), (0.95, 0.6))
     backpacker_items: tuple[Rect, ...] = (
@@ -105,6 +182,11 @@ class GameConfig:
     rects = Rects()
     # 日志和出错时的截图
     log_dir = ROOT / "logs"
+    # 判定成功时的截图，环境变量 SAVE_CHECKS=1 时才存
+    check_dir = ROOT / "logs" / "checks"
+    # 战果截图：闪光的放 catch_dir，不是闪光的放 result_dir
+    catch_dir = ROOT / "logs" / "catches"
+    result_dir = ROOT / "logs" / "results"
     # 路线图第 2 层四个标签的纵向间距对应的地图类型
     path_types: ClassVar[dict[int, str]] = {135: "2x2", 180: "2x3", 65: "3x2"}
     # 属性图标匹配：白色范围、最低匹配度、同一层允许的最大高度差（占画面高度的比例）
@@ -120,10 +202,58 @@ class GameConfig:
     backpacker_lower: Hsv = (80, 230, 230)
     backpacker_upper: Hsv = (120, 255, 255)
     backpacker_ratio = 240 / 255
+    # 队伍栏血条的颜色范围和精灵图最低匹配度
+    team_hp_lower: Hsv = (0, 50, 0)
+    team_hp_upper: Hsv = (180, 255, 255)
+    team_sprite_score = 0.75
+    # 普通对手和首领用的球，是否抓首领
+    base_ball = "究极球"
+    legendary_ball = "究极球"
+    catch_boss = True
+    # 捕捉菜单黑底/白底的亮度范围和最低占比
+    catch_black_lower: Hsv = (0, 0, 0)
+    catch_black_upper: Hsv = (180, 10, 10)
+    catch_white_lower: Hsv = (0, 0, 250)
+    catch_white_upper: Hsv = (180, 10, 255)
+    catch_ratio = 200 / 255
+    # 资料页闪光框的高饱和像素占比范围
+    shiny_lower: Hsv = (0, 100, 20)
+    shiny_upper: Hsv = (180, 255, 255)
+    shiny_min = 10
+    shiny_max = 100
+    # 资料页右边的宝可梦画出来了：区域里边缘像素的占比超过这个值
+    summary_sprite_edge = 0.002
+    # 带走列表左边的预览：粉色背景的范围，不是粉色的像素占比超过 result_preview_ratio 就是宝可梦画出来了
+    result_preview_lower: Hsv = (140, 80, 0)
+    result_preview_upper: Hsv = (180, 255, 255)
+    result_preview_ratio = 0.02
+    # 菜单光标「>」的白边和黑底范围，以及最低占比
+    marker_white_lower: Hsv = (0, 0, 220)
+    marker_white_upper: Hsv = (180, 40, 255)
+    marker_dark_lower: Hsv = (0, 0, 0)
+    marker_dark_upper: Hsv = (180, 255, 40)
+    marker_white_ratio = 0.08
+    marker_dark_ratio = 0.15
+    # 极巨化按钮上白色标志的范围和最低占比
+    dynamax_lower: Hsv = (0, 0, 200)
+    dynamax_upper: Hsv = (180, 50, 255)
+    dynamax_ratio = 10 / 255
     # 摇杆坐标最大值和推一格保持的时间
     stick_max = 0x7FFF
     stick_tick = 0.08
     # 等画面变化和操作超时
     timeout = 60.0
+    # 一局没带走闪光时：倒下不超过 lock_max_faints 次、用时不超过 lock_max_minutes 分钟，就重启游戏 keep path
+    lock_max_faints = 1
+    lock_max_minutes = 12.0
+    # 重启游戏：等选用户界面、等开场彩色画面最多几秒
+    load_timeout = 30.0
+    boot_timeout = 60.0
+    # 《宝可梦 剑》《宝可梦 盾》的 Title ID
+    game_title_ids = ("0100ABF008968000", "01008DB008C2C000")
+    # 开场画面是彩色的：鲜艳的像素（饱和度、亮度都不低）至少占这么多
+    colorful_lower: Hsv = (0, 100, 60)
+    colorful_upper: Hsv = (180, 255, 255)
+    colorful_ratio = 0.3
     # 两次截图之间的间隔
     interval = 0.3

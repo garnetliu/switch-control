@@ -20,9 +20,7 @@ class MapTypeReader:
             rentals = sw.data.rental_pokemon()
             for row in (2, 3):
                 nodes = sw.game.maps["rows"].get(str(row), [])
-                self._allowed[row] = [
-                    set(rentals[node["encounter"]]["type_ids"]) for node in nodes
-                ]
+                self._allowed[row] = [set(rentals[node["encounter"]]["type_ids"]) for node in nodes]
         self._merged: dict[int, tuple[str, int]] = {}
         self._pending: list[dict[int, tuple[str, int]]] = []
 
@@ -68,7 +66,7 @@ class MapTypeReader:
         return found
 
     def _split_rows(
-            self, frame: dict[int, tuple[str, int]], height: int
+        self, frame: dict[int, tuple[str, int]], height: int
     ) -> list[dict[int, tuple[str, int]]]:
         """同一帧里高度差太大的标签拆成多组，每组是一排。"""
         groups: list[dict[int, tuple[str, int]]] = []
@@ -122,9 +120,7 @@ class MapTypeReader:
                 if not shared:
                     continue
                 self._pending.remove(frame)
-                offsets = sorted(
-                    self._merged[col][1] - frame[col][1] for col in shared
-                )
+                offsets = sorted(self._merged[col][1] - frame[col][1] for col in shared)
                 offset = offsets[len(offsets) // 2]
                 for col, (type_id, y) in frame.items():
                     self._merged[col] = (type_id, y + offset)

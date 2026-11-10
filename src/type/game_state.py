@@ -16,4 +16,9 @@ class GameStateSnapshot(TypedDict):
     lock_results: list[bool]
     dynite_ore: int
     team: list[tuple[str, float]]
+    num_caught: int
+    caught: list[str]
+    lives: int
+    balls: dict[str, int]
     step: str
+    started: float

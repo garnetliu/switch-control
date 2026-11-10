@@ -1,4 +1,3 @@
-
 class Boss:
     def __init__(self, name: str, id_num: int):
         self._name = name

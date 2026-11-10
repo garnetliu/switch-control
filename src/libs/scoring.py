@@ -5,17 +5,33 @@
 算出的属性只在这一次计算里用，所以同样的输入每次结果都一样。
 """
 
+import logging
 from collections.abc import Iterable
 from dataclasses import replace
 
-from lib.log import log
-from typedefs.battle import Field
-from typedefs.pokemon import Move, Pokemon
+from type.field import Field
+from type.pokemon import Move, Pokemon
 
 TYPES = (
-    "normal", "fire", "water", "electric", "grass", "ice", "fighting", "poison", "ground",
-    "flying", "psychic", "bug", "rock", "ghost", "dragon", "dark", "steel", "fairy",
-)  # fmt: skip
+    "normal",
+    "fire",
+    "water",
+    "electric",
+    "grass",
+    "ice",
+    "fighting",
+    "poison",
+    "ground",
+    "flying",
+    "psychic",
+    "bug",
+    "rock",
+    "ghost",
+    "dragon",
+    "dark",
+    "steel",
+    "fairy",
+)
 # 属性相克表：TYPE_CHART[招式属性][防守方属性] 是伤害倍率，顺序同 TYPES
 TYPE_CHART = (
     (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0.5, 0, 1, 1, 0.5, 1),
@@ -100,7 +116,7 @@ def select_best_move(
     for index, move in enumerate(moves):
         if attacker.pp[index] > 0:
             score = move_score(attacker, index, defender, teammates, field)
-            log(f"第 {index + 1} 个招式 {move.name()}（得分 {score:.2f}）")
+            logging.debug(f"第 {index + 1} 个招式 {move.name()}（得分 {score:.2f}）")
             if score > best_score:
                 best_index, best_name_id, best_score = index, move.name_id, score
     return best_index, best_name_id, best_score
@@ -397,15 +413,40 @@ def _ability_modifier(
             modifier = 0.5
 
     punches = (
-        "bullet-punch", "comet-punch", "dizzy-punch", "double-iron-bash", "drain-punch",
-        "dynamic-punch", "fire-punch", "focus-punch", "hammer-arm", "ice-hammer", "ice-punch",
-        "mach-punch", "mega-punch", "meteor-mash", "plasma-fists", "power-up-punch",
-        "shadow-punch", "sky-uppercut", "surging-strikes", "thunder-punch", "wicked-blow",
-    )  # fmt: skip
+        "bullet-punch",
+        "comet-punch",
+        "dizzy-punch",
+        "double-iron-bash",
+        "drain-punch",
+        "dynamic-punch",
+        "fire-punch",
+        "focus-punch",
+        "hammer-arm",
+        "ice-hammer",
+        "ice-punch",
+        "mach-punch",
+        "mega-punch",
+        "meteor-mash",
+        "plasma-fists",
+        "power-up-punch",
+        "shadow-punch",
+        "sky-uppercut",
+        "surging-strikes",
+        "thunder-punch",
+        "wicked-blow",
+    )
     bites = (
-        "bite", "crunch", "fire-fang", "fishious-rend", "hyper-fang", "ice-fang", "jaw-lock",
-        "poison-fang", "psychic-fangs", "thunder-fang",
-    )  # fmt: skip
+        "bite",
+        "crunch",
+        "fire-fang",
+        "fishious-rend",
+        "hyper-fang",
+        "ice-fang",
+        "jaw-lock",
+        "poison-fang",
+        "psychic-fangs",
+        "thunder-fang",
+    )
     if ability == "iron-fist" and move_name_id in punches:
         modifier *= 1.2
     elif ability == "strong-jaw" and move_name_id in bites:

@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable
 
 from libs import ImageChecker, Switch
+from tools.log import save_check
 
 
 def capture(sw: Switch) -> ImageChecker:
@@ -31,6 +32,7 @@ def wait_for(
         image = capture(sw)
         first = first or image
         if condition(image):
+            save_check(sw, image, what, *image.checked)
             return image
         if time.monotonic() >= deadline:
             save_timeout_frames(sw, first, image)
@@ -82,18 +84,20 @@ def act_until(
         image = capture(sw)
         first = first or image
         if condition(image):
+            save_check(sw, image, what, *image.checked)
             return image
         if time.monotonic() >= deadline:
             save_timeout_frames(sw, first, image)
             raise TimeoutError(f"等了 {timeout} 秒，画面一直没有出现：{what}")
         if attempt:
-            logging.debug(f"没有反应，再做一次（在等{what}）")  # noqa: LOG015
+            logging.debug(f"没有反应，再做一次（在等{what}）")
         action()
         attempt += 1
         poll_deadline = time.monotonic() + interval
         while True:
             image = capture(sw)
             if condition(image):
+                save_check(sw, image, what, *image.checked)
                 return image
             if time.monotonic() >= poll_deadline:
                 break
@@ -106,4 +110,4 @@ def save_timeout_frames(sw: Switch, first: ImageChecker, last: ImageChecker) -> 
     for name, frame in (("first", first), ("last", last)):
         path = sw.config.log_dir / f"timeout-{stamp}-{name}.jpg"
         frame.save(str(path))
-        logging.warning(f"超时的截图: {path}")  # noqa: LOG015
+        logging.warning(f"超时的截图: {path}")

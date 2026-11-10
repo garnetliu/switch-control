@@ -7,6 +7,8 @@ from type import Boss, MapNode, Maps
 
 
 def join(sw: Switch) -> str:
+    # 先清掉上一局的状态、记下开始时间。后面 seed 或 boss 不一样时 clear 会清掉全部，开始时间保留
+    sw.game.new_run()
     _select_target(sw)
     _select_starter(sw)
     _select_path(sw)
@@ -30,8 +32,7 @@ def _select_target(sw: Switch):
     wanted = _select_boss(sw, bosses[boss])
     if wanted != bosses[boss].name():
         logging.warning(
-            f"Lair note 里没有「{bosses[sw.config.boss].name()}」，"
-            f"这一局改成刷「{wanted}」"
+            f"Lair note 里没有「{bosses[sw.config.boss].name()}」，这一局改成刷「{wanted}」"
         )
     move_menu_option(
         sw,
@@ -94,7 +95,7 @@ def _select_path(sw: Switch) -> None:
 
     只决定走哪条，真正在岔路口移动光标是下一步 path 的事。
     """
-    if len(sw.game.maps.route):
+    if len(sw.game.maps["route"]):
         logging.info("沿用上一局的路线规划")
     else:
         _assign_new_path(sw)
@@ -177,10 +178,7 @@ def _assign_route(sw: Switch) -> None:
     best = scores.index(max(scores))
     maps["route"] = [*paths[best], [4, 0]]
     logging.info(
-        "路线: "
-        + " → ".join(
-            rows[str(row)][col]["encounter"] for row, col in maps["route"][1:-1]
-        )
+        "路线: " + " → ".join(rows[str(row)][col]["encounter"] for row, col in maps["route"][1:-1])
     )
 
 
@@ -213,14 +211,15 @@ def _move_starter_cursor(sw: Switch) -> None:
             lambda screen, before=current: screen.selected(rects) not in (before, -1),
             "选宝可梦的光标移一格",
         )
-    raise RuntimeError(f"选宝可梦的光标移了 {len(rects)} 次，还是没到第 {sw.game.lock_pokemon_index + 1} 只")
+    raise RuntimeError(
+        f"选宝可梦的光标移了 {len(rects)} 次，还是没到第 {sw.game.lock_pokemon_index + 1} 只"
+    )
 
 
 def _select_boss(sw: Switch, boss: Boss) -> str:
     """读四个 Lair note 的 species，目标还在就返回目标名字，不在就返回第一个 boss 的名字。"""
     species = [
-        int.from_bytes(sw.peek(address, 2), "little")
-        for address in sw.config.addresses.lair_notes
+        int.from_bytes(sw.peek(address, 2), "little") for address in sw.config.addresses.lair_notes
     ]
     logging.debug(f"Lair notes: {species}")
     if boss.id_num in species:

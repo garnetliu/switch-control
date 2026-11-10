@@ -49,7 +49,7 @@ def move_menu_option(
         current = image.selected(rects)
         if current == index:
             if label is not None:
-                logging.info(f"{what}选中了「{label}」")  # noqa: LOG015
+                logging.info(f"{what}选中了「{label}」")
             return index
         image = act_until(
             sw,

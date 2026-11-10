@@ -33,14 +33,10 @@ class Lair:
             state = [seed]
             for index in range(1, 624):
                 previous = state[-1]
-                state.append(
-                    (1812433253 * (previous ^ (previous >> 30)) + index) & 0xFFFFFFFF
-                )
+                state.append((1812433253 * (previous ^ (previous >> 30)) + index) & 0xFFFFFFFF)
             while True:
                 for index in range(624):
-                    y = (state[index] & 0x80000000) | (
-                            state[(index + 1) % 624] & 0x7FFFFFFF
-                    )
+                    y = (state[index] & 0x80000000) | (state[(index + 1) % 624] & 0x7FFFFFFF)
                     state[index] = state[(index + 397) % 624] ^ (y >> 1)
                     if y & 1:
                         state[index] ^= 0x9908B0DF

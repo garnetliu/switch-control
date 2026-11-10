@@ -74,23 +74,22 @@ return Input.GetProperty("records").EnumerateArray()
                         payload = json.load(response)
                     break
                 except (
-                        urllib.error.URLError,
-                        TimeoutError,
-                        ConnectionError,
-                        json.JSONDecodeError,
+                    urllib.error.URLError,
+                    TimeoutError,
+                    ConnectionError,
+                    json.JSONDecodeError,
                 ):
                     if attempt == len(self.RETRY_DELAYS):
                         raise
                     time.sleep(self.RETRY_DELAYS[attempt])
         except (
-                urllib.error.URLError,
-                TimeoutError,
-                ConnectionError,
-                json.JSONDecodeError,
+            urllib.error.URLError,
+            TimeoutError,
+            ConnectionError,
+            json.JSONDecodeError,
         ) as exc:
             raise RuntimeError(
-                f"无法调用 PKHeX API（{self._api_url}），"
-                "请确认 switch-pkhex-api 容器正在运行"
+                f"无法调用 PKHeX API（{self._api_url}），请确认 switch-pkhex-api 容器正在运行"
             ) from exc
         if "error" in payload:
             raise RuntimeError(f"PKHeX API 解析失败：{payload['error']}")

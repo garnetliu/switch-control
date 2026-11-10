@@ -4,7 +4,9 @@ import json
 import pickle
 from typing import Any
 
-from type import Boss
+import cv2
+
+from type import Boss, Move, Pokemon
 
 from .game_config import GameConfig
 
@@ -23,6 +25,11 @@ class GameData:
         self._boss_matchups_cache: dict[str, dict[str, float]] | None = None
         self._rental_scores_cache: dict[str, float] | None = None
         self._type_icons_cache: dict[str, Any] | None = None
+        self._misc_icons_cache: dict[str, Any] | None = None
+        self._boss_data_cache: dict[str, dict] | None = None
+        self._rental_objects_cache: dict[str, Pokemon] | None = None
+        self._boss_objects_cache: dict[str, Pokemon] | None = None
+        self._pokemon_sprites_cache: list[tuple[str, Any]] | None = None
 
     def boss_pokemon(self) -> dict[str, Boss]:
         """传说宝可梦，name_id 到名字。"""
@@ -65,8 +72,7 @@ class GameData:
         rental_name_ids = self._rental_name_ids_cache
         if rental_name_ids is None:
             rental_name_ids = {
-                pokemon["id_num"]: name
-                for name, pokemon in self.rental_pokemon().items()
+                pokemon["id_num"]: name for name, pokemon in self.rental_pokemon().items()
             }
             self._rental_name_ids_cache = rental_name_ids
         return rental_name_ids
@@ -76,9 +82,7 @@ class GameData:
         form_name_ids = self._form_name_ids_cache
         if form_name_ids is None:
             rental_moves = {
-                frozenset(
-                    move["id_num"] for move in pokemon["moves"] if move["id_num"]
-                ): name
+                frozenset(move["id_num"] for move in pokemon["moves"] if move["id_num"]): name
                 for name, pokemon in self.rental_pokemon().items()
             }
             form_name_ids = {}
@@ -95,11 +99,105 @@ class GameData:
         """路线图上的属性图标模板：{属性: 单通道图}。"""
         type_icons = self._type_icons_cache
         if type_icons is None:
-            type_icons = pickle.loads(
-                (self._directory / "type_icons.pickle").read_bytes()
-            )
+            type_icons = pickle.loads((self._directory / "type_icons.pickle").read_bytes())
             self._type_icons_cache = type_icons
         return type_icons
+
+    def pokemon_sprites(self) -> list[tuple[str, Any]]:
+        """租借宝可梦的精灵图：(name_id, 图)，用来认队伍栏。"""
+        sprites = self._pokemon_sprites_cache
+        if sprites is None:
+            sprites = pickle.loads((self._directory / "pokemon_sprites.pickle").read_bytes())
+            self._pokemon_sprites_cache = sprites
+        return sprites
+
+    def misc_icons(self) -> dict[str, Any]:
+        """战斗界面用的图标模板：{名字: BGR 图}。"""
+        misc_icons = self._misc_icons_cache
+        if misc_icons is None:
+            misc_icons = {
+                path.stem: cv2.imread(str(path))
+                for path in (self._directory / "misc_icons").glob("*.png")
+            }
+            self._misc_icons_cache = misc_icons
+        return misc_icons
+
+    def pokemon_data(self, name_id: str) -> dict:
+        """按 name_id 取完整数据，先在租借表里找，再找首领表。"""
+        rental = self.rental_pokemon()
+        if name_id in rental:
+            return rental[name_id]
+        boss_data = self._boss_data_cache
+        if boss_data is None:
+            boss_data = self._load("boss_pokemon.json")
+            self._boss_data_cache = boss_data
+        return boss_data[name_id]
+
+    def rental_pokemon_objects(self) -> dict[str, Pokemon]:
+        """租借宝可梦，name_id 到 Pokemon 对象。"""
+        pokemon = self._rental_objects_cache
+        if pokemon is None:
+            pokemon = {
+                name_id: self._pokemon(raw) for name_id, raw in self.rental_pokemon().items()
+            }
+            self._rental_objects_cache = pokemon
+        return pokemon
+
+    def boss_pokemon_objects(self) -> dict[str, Pokemon]:
+        """首领宝可梦，name_id 到 Pokemon 对象。"""
+        pokemon = self._boss_objects_cache
+        if pokemon is None:
+            raw = self._load("boss_pokemon.json")
+            pokemon = {name_id: self._pokemon(data) for name_id, data in raw.items()}
+            self._boss_objects_cache = pokemon
+        return pokemon
+
+    def pokemon_object(self, name_id: str) -> Pokemon:
+        """按 name_id 取 Pokemon 对象，先在租借表里找，再找首领表。"""
+        rental = self.rental_pokemon_objects()
+        if name_id in rental:
+            return rental[name_id]
+        return self.boss_pokemon_objects()[name_id]
+
+    @staticmethod
+    def _pokemon(raw: dict) -> Pokemon:
+        return Pokemon(
+            id_num=raw["id_num"],
+            name_id=raw["name_id"],
+            names=raw["names"],
+            ability_name_id=raw["ability_name_id"],
+            abilities=raw["abilities"],
+            type_ids=raw["type_ids"],
+            types=raw["types"],
+            base_stats=GameData._as_tuple(raw["base_stats"]),
+            moves=tuple(GameData._move(move) for move in raw["moves"]),
+            max_moves=tuple(GameData._move(move) for move in raw["max_moves"]),
+            level=raw["level"],
+            ivs=GameData._as_tuple(raw["ivs"]),
+            evs=GameData._as_tuple(raw["evs"]),
+            nature=GameData._as_tuple(raw["nature"]),
+        )
+
+    @staticmethod
+    def _move(raw: dict) -> Move:
+        return Move(
+            id_num=raw["id_num"],
+            name_id=raw["name_id"],
+            names=raw["names"],
+            type_id=raw["type_id"],
+            category=raw["category"],
+            base_power=raw["base_power"],
+            accuracy=raw["accuracy"],
+            pp=raw["PP"],
+            effect=raw["effect"],
+            probability=raw["probability"],
+            is_spread=raw["is_spread"],
+            correction_factor=raw["correction_factor"],
+        )
+
+    @staticmethod
+    def _as_tuple(value: Any) -> tuple:
+        return tuple(value["py/tuple"]) if isinstance(value, dict) else tuple(value)
 
     def boss_matchups(self) -> dict[str, dict[str, float]]:
         """租借宝可梦对每个传说的相性：{租借宝可梦: {传说: 分数}}。"""

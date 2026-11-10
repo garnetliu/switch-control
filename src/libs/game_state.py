@@ -1,6 +1,7 @@
 """一局冒险的运行状态，用 YAML 保存快照，用于 keep path 和断线后恢复。"""
 
 import os
+import time
 
 from ruamel.yaml import YAML
 
@@ -26,7 +27,12 @@ class GameState:
                 lock_results=[],
                 dynite_ore=0,
                 team=[],
+                num_caught=0,
+                caught=[],
+                lives=4,
+                balls={},
                 step="",
+                started=0.0,
             )
         self.boss = state.get("boss", self._config.boss)  # boss 可能在 config 里没设置
         # keep path
@@ -45,18 +51,38 @@ class GameState:
         # 极巨矿数量，读取和减少的逻辑以后做
         self.dynite_ore = state.get("dynite_ore", 0)
         # 队伍名字和 hp，第一个是自己
-        self.team: list[tuple[str, float]] = [
-            tuple(item) for item in state.get("team", [])
-        ]
+        self.team: list[tuple[str, float]] = [tuple(item) for item in state.get("team", [])]
+        # 已抓到的数量和顺序
+        self.num_caught: int = state.get("num_caught", 0)
+        self.caught: list[str] = state.get("caught", [])
+        # 还剩几条命
+        self.lives: int = state.get("lives", 4)
+        # 各种球还剩几个：{球名: 数量}
+        self.balls: dict[str, int] = state.get("balls", {})
         # 当前所在的步骤
         self.step = state.get("step", "")
+        # 这一局开始的时间（time.time()），join 一开始记下
+        self.started: float = state.get("started", 0.0)
 
-    def clear(self, seed: int | None, boss: str | None) -> None:
-        """清空快照，用新的 boss 和 seed 重新初始化并写回文件。"""
+    def clear(self, seed: int | None = None, boss: str | None = None) -> None:
+        """清空快照，用新的 boss 和 seed 重新初始化并写回文件。这一局的开始时间保留。"""
+        started = self.started
         self._config.game_state_file.unlink(missing_ok=True)
         self.__init__(self._config)
+        self.started = started
         self.boss = boss if boss else self._config.boss
         self.seed = seed if seed else self.seed
+        self.save()
+
+    def new_run(self) -> None:
+        """开始新的一局：只清掉这一局的状态，路线、初始宝可梦、球数这些跨局的保留，记下开始时间。"""
+        self.num_caught = 0
+        self.caught = []
+        self.lives = 4
+        self.team = []
+        if self.maps is not None:
+            self.maps["current_index"] = 0
+        self.started = time.time()
         self.save()
 
     def save(self) -> None:
@@ -89,5 +115,10 @@ class GameState:
             lock_results=self.lock_results,
             dynite_ore=self.dynite_ore,
             team=self.team,
+            num_caught=self.num_caught,
+            caught=self.caught,
+            lives=self.lives,
+            balls=self.balls,
             step=self.step,
+            started=self.started,
         )

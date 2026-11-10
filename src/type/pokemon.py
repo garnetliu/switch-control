@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
-from config.game import LANGUAGE
+LANGUAGE = "zh-Hans"
 
 
 @dataclass(frozen=True)
