@@ -1,5 +1,7 @@
 """新的入口：创建 switch，把连接传给每一步。"""
 
+import logging
+
 from dotenv import load_dotenv
 
 from libs import Switch
@@ -19,8 +21,13 @@ def main() -> None:
         "select_pokemon": select_pokemon,
     }
     step = "initialize"
-    while step in steps:
-        step = steps[step](sw)
+    try:
+        while step in steps:
+            step = steps[step](sw)
+    except Exception as error:
+        logging.exception(f"程序出错，步骤 {step}")
+        sw.notifier.send(f"程序出错：{type(error).__name__}: {error}\n步骤：{step}")
+        raise
 
 
 if __name__ == "__main__":

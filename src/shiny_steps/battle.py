@@ -25,9 +25,11 @@ def battle(sw: Switch) -> str:
         elif state == "field":
             war.update(image.read_text(sw.config.rects.battle_text))
         elif state == "storm":
-            if _storm(sw):
+            if _storm(sw, war):
+                _record_faints(sw, war)
                 return "select_pokemon"
         elif state == "catch":
+            _record_faints(sw, war)
             return "catch"
         else:
             # 出招动画、战斗文字这些都不用处理，隔一会儿再看
@@ -147,21 +149,27 @@ def _move_cursor_to(sw: Switch, image: ImageChecker, target: int) -> None:
     raise RuntimeError(f"招式光标移了 4 次，还是没到第 {target + 1} 行")
 
 
-def _storm(sw: Switch) -> bool:
-    """有宝可梦倒下：扣 1 条命，等「倒下了」这行字消失。命数扣到 0 就是输了，返回 True。
+def _storm(sw: Switch, war: War) -> bool:
+    """有宝可梦倒下：这一场倒下次数加 1，等「倒下了」这行字消失。命数扣到 0 就是输了，返回 True。
 
     输了之后的带走宝可梦界面由 select_pokemon 去等。
     """
-    sw.game.lives = max(sw.game.lives - 1, 0)
-    sw.game.save()
-    logging.info(f"有一只倒下了，还剩 {sw.game.lives} 条命")
+    war.faints += 1
+    lives = sw.game.lives - war.faints
+    logging.info(f"有一只倒下了，这一场倒下 {war.faints} 次，还剩 {lives} 条命")
     wait_for(
         sw,
         lambda screen: not screen.has_text(sw.config.rects.battle_text, "倒下了"),
         sw.config.timeout,
         "「倒下了」消失",
     )
-    return sw.game.lives == 0
+    return lives <= 0
+
+
+def _record_faints(sw: Switch, war: War) -> None:
+    """这一场打完：倒下次数写进 game.faints，每场固定加一项。"""
+    sw.game.faints.append(war.faints)
+    sw.game.save()
 
 
 def _cheer(sw: Switch) -> None:

@@ -157,6 +157,7 @@ def _assign_route(sw: Switch) -> None:
 
     best = scores.index(max(scores))
     maps["route"] = [*paths[best], [4, 0]]
+    sw.game.route_score = scores[best]
     logging.info(
         "路线: " + " → ".join(rows[str(row)][col]["encounter"] for row, col in maps["route"][1:-1])
     )

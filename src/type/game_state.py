@@ -18,7 +18,8 @@ class GameStateSnapshot(TypedDict):
     team: list[tuple[str, float]]
     num_caught: int
     caught: list[str]
-    lives: int
+    faints: list[int]
+    route_score: float
     balls: dict[str, int]
     step: str
     started: float

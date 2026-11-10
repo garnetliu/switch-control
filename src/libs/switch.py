@@ -18,6 +18,7 @@ import usb.util
 from .game_config import GameConfig
 from .game_data import GameData
 from .game_state import GameState
+from .notifier import Notifier
 from .pkhex import Pkhex
 
 # 摇杆坐标的最大值
@@ -213,6 +214,8 @@ class Switch:
         self.game = GameState(self.config)
         self.data = GameData(self.config)
         self.pkhex = Pkhex(self.peek)
+        # 往 Discord 推送消息，步骤里用 sw.notifier 取
+        self.notifier = Notifier()
         self._connect()
 
     def _connect(self) -> None:

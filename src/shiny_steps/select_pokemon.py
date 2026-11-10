@@ -3,6 +3,7 @@
 import logging
 import os
 import time
+import unicodedata
 
 from libs import ImageChecker, Switch
 from tools import act_until, capture, move_menu_option, press_until, restart, save_check, wait_for
@@ -10,6 +11,9 @@ from tools import act_until, capture, move_menu_option, press_until, restart, sa
 
 def select_pokemon(sw: Switch) -> str:
     """查闪光，带走或留下，再决定下一局，返回 "initialize"。"""
+    # 这一局的胜负记下来，战报里的第几轮就是记录的局数
+    sw.game.lock_results.append(sw.game.num_caught == 4)
+    sw.game.save()
     if sw.game.num_caught == 0:
         logging.info("一只都没抓到")
         # 一只都没抓到时后面是什么界面还没见过，等 15 秒截一张留着，之后照着改逻辑
@@ -17,10 +21,12 @@ def select_pokemon(sw: Switch) -> str:
         save_check(sw, capture(sw), "没抓住的界面", sw.config.rects.result_title)
         _back_to_scientist(sw)
         _press_until_thanks_gone(sw)
+        _report(sw, -1, "一只都没抓到")
         return "initialize"
     else:
         shiny = _check_shiny(sw)
-        _decide_next_run(sw, shiny)
+        outcome = _decide_next_run(sw, shiny)
+        _report(sw, shiny, outcome)
         return "initialize"
 
 
@@ -89,8 +95,8 @@ def _save_screenshot(sw: Switch, image: ImageChecker, kind: str, shiny: bool) ->
         sw.click("CAPTURE", 0)
 
 
-def _decide_next_run(sw: Switch, shiny: int) -> None:
-    """决定下一局：带走闪光、重启游戏 keep path，或者结束这一局。
+def _decide_next_run(sw: Switch, shiny: int) -> str:
+    """决定下一局：带走闪光、重启游戏 keep path，或者结束这一局。返回怎么处理的，写进战报。
 
     - 有闪光：光标移到那只上，一直按 A 到画面变黑。带走后下一局 seed 不一样，join 会清掉状态。
     - 没有闪光，倒下次数和用时都在范围内：重启游戏，下一局 seed 和 boss 不变就是 keep path。
@@ -100,6 +106,7 @@ def _decide_next_run(sw: Switch, shiny: int) -> None:
     if shiny >= 0:
         _take(sw, shiny)
         _press_until_thanks_gone(sw)
+        return f"带走第 {shiny + 1} 只闪光"
     else:
         faints = 4 - sw.game.lives
         minutes: float = (time.time() - sw.game.started) / 60
@@ -113,9 +120,97 @@ def _decide_next_run(sw: Switch, shiny: int) -> None:
         ):
             logging.info("重启游戏，keep path")
             restart(sw)
+            return "不带走，重启游戏保留路线"
         else:
             _back_to_scientist(sw)
             _press_until_thanks_gone(sw)
+            return "不带走"
+
+
+def _report(sw: Switch, shiny: int, outcome: str) -> None:
+    """把这一局的战报写进日志并推送，附上这一局存下的战果截图。格式：
+
+    第 N 轮战报：胜/负，倒下 X 次，Y 分钟，抓到 n/4（N 是 lock_results 里记录的局数）
+    路线：A（属性） → B（属性） → C（属性）
+    路线得分：S
+    首发：名字（第 k 位）
+    逐关：每一关的对手和结果（抓到谁、团灭、没打到），这一关倒下几次
+    闪光：第几只是闪光，或者没有
+    处理：这一局结束时怎么处理抓到的宝可梦
+    """
+    game = sw.game
+    language = sw.config.language
+    maps = game.maps
+
+    def name(name_id: str) -> str:
+        return sw.data.pokemon_object(name_id).name(language)
+
+    def types(name_id: str) -> str:
+        return "/".join(t.get(language, "?") for t in sw.data.pokemon_object(name_id).types)
+
+    won = game.num_caught == 4
+    minutes: float = (time.time() - game.started) / 60
+    lines = [
+        f"第 {len(game.lock_results)} 轮战报：{'胜' if won else '负'}，倒下 {4 - game.lives} 次，{minutes:.1f} 分钟，抓到 {game.num_caught}/4"
+    ]
+    nodes = []
+    if maps is not None and maps["route"]:
+        nodes = [maps["rows"][str(row)][col]["encounter"] for row, col in maps["route"][1:-1]]
+    starter = "?"
+    if game.lock_pokemon_index is not None and game.lock_pokemon_index < len(game.candidates):
+        starter = f"{name(game.candidates[game.lock_pokemon_index])}（第 {game.lock_pokemon_index + 1} 位）"
+    route = " → ".join(f"{name(node)}（{types(node)}）" for node in nodes) or "?"
+    lines.append(f"路线：{route}")
+    lines.append(f"路线得分：{game.route_score:.3f}")
+    lines.append(f"首发：{starter}")
+
+    lines.append("逐关：")
+    stages = []
+    for index, opponent in enumerate([*nodes, game.boss]):
+        label = "首领" if index == len(nodes) else f"第{index + 1}关"
+        if index < game.num_caught:
+            result = f"抓到 {name(game.caught[index])}"
+        elif index == game.num_caught and game.lives == 0:
+            result = "团灭"
+        else:
+            result = "没打到"
+        if index < len(game.faints) and game.faints[index]:
+            result += f"，倒下 {game.faints[index]} 次"
+        stages.append((label, f"{name(opponent)}（{types(opponent)}）", result))
+    label_width = max(_display_width(label) for label, _, _ in stages) + 2
+    kind_width = max(_display_width(kind) for _, kind, _ in stages) + 2
+    for label, kind, result in stages:
+        lines.append(f"  {_pad(label, label_width)}{_pad(kind, kind_width)}{result}")
+
+    if game.num_caught == 0:
+        lines.append("闪光：没有查")
+    elif shiny >= 0:
+        lines.append(f"闪光：第 {shiny + 1} 只 {name(game.caught[shiny])}")
+    else:
+        lines.append("闪光：没有")
+    lines.append(f"处理：{outcome}")
+
+    report = "\n".join(lines)
+    logging.info("\n" + report)
+    # 这一局存下的战果截图：开始时间之后存进闪光目录和战果目录的图片
+    files = sorted(
+        path
+        for directory in (sw.config.catch_dir, sw.config.result_dir)
+        if directory.exists()
+        for path in directory.glob("*.jpg")
+        if path.stat().st_mtime >= game.started
+    )
+    sw.notifier.send("```\n" + report + "\n```", files=files)
+
+
+def _display_width(text: str) -> int:
+    """等宽字体下的显示宽度，中文和全角字符算 2 列。"""
+    return sum(2 if unicodedata.east_asian_width(char) in ("W", "F") else 1 for char in text)
+
+
+def _pad(text: str, width: int) -> str:
+    """按显示宽度补空格，让等宽字体里的列对齐。"""
+    return text + " " * max(0, width - _display_width(text))
 
 
 def _take(sw: Switch, index: int) -> None:

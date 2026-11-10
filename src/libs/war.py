@@ -15,6 +15,8 @@ class War(Field):
     teammates: list[Pokemon] = field(default_factory=list)
     # 极巨化还剩几回合：-1 这场还没极巨化，0 这场已经极巨化过了
     dynamax_turns: int = -1
+    # 这一场倒下了几次（看到一次风暴算一次），打完写进 game.faints
+    faints: int = 0
 
     def __post_init__(self) -> None:
         # 极巨大冒险里的百变怪有变身者特性，一上场就变成对方
