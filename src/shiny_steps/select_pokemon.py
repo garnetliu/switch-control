@@ -47,13 +47,11 @@ def _check_shiny(sw: Switch) -> int:
 
 
 def _save_list_screenshots(sw: Switch, results: list[bool]) -> None:
-    """有闪光时，在带走列表上从第一只往下，把闪光的和最后一只（神兽）的截图存下来。
+    """在带走列表上从第一只往下，把闪光的和最后一只（神兽）的截图存下来。没有闪光也要截神兽。
 
     资料页查完最后一只还会往下切一次，绕回第一只，所以退回列表时光标在第一只上。
     闪光的那只还要用 Switch 自己截一张。
     """
-    if not any(results):
-        return
     rects = sw.config.rects
     last = len(results) - 1
     for index, shiny in enumerate(results):
@@ -164,16 +162,17 @@ def _find_shiny(sw: Switch) -> list[bool]:
         lambda screen: not screen.has_text(rects.result_view_ability, "查看能力"),
         "进资料页",
     )
-    # 资料页上的名字按抓到的顺序，从这一局的记录里取
+    # 日志里的名字按抓到的顺序从这一局的记录里取；数据里的中文名可能和游戏里不一样，不拿来比画面
     names = [sw.data.pokemon_object(name_id).name(sw.config.language) for name_id in sw.game.caught]
     results = []
     for index, name in enumerate(names):
         image = wait_for(
             sw,
-            lambda screen, current=name: screen.has_text(rects.summary_name, current),
+            lambda screen: bool(screen.read_text(rects.summary_name).strip()),
             sw.config.timeout,
-            f"资料页上的「{name}」",
+            f"资料页上第 {index + 1} 只（{name}）的名字",
         )
+        shown = image.read_text(rects.summary_name).strip()
         shiny = _is_shiny(sw, image)
         if shiny:
             logging.warning(f"闪光！第 {index + 1} 只 {name}")
@@ -193,7 +192,9 @@ def _find_shiny(sw: Switch) -> list[bool]:
         act_until(
             sw,
             lambda: sw.stick("LEFT", 0, -sw.config.stick_max, sw.config.stick_tick),
-            lambda screen, current=name: not screen.has_text(rects.summary_name, current),
+            lambda screen, before=shown: (
+                screen.read_text(rects.summary_name).strip() not in ("", before)
+            ),
             "资料页换到下一只",
         )
     return results

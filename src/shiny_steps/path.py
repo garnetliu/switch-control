@@ -3,7 +3,7 @@
 import logging
 
 from libs import ImageChecker, PathCursorCollector, Switch
-from tools import act_until, press_until, rental_boss_score, wait_for
+from tools import act_until, next_columns, press_until, rental_boss_score, wait_for
 from tools.text import contains
 from type import Rect
 
@@ -82,23 +82,27 @@ def _handle_fork(sw: Switch) -> None:
         raise RuntimeError("路线规划里没有下一个节点")
     # route 里下一项是 [层号, 列号]，光标要移到这一层的这一列
     row, col = maps["route"][index + 1]
-    rects = sw.config.rects.path_cursors[maps["type"]].get(row, ())
-    if not rects:
-        rects = PathCursorCollector(sw).ensure(row)
-    if not 0 <= col < len(rects):
-        raise RuntimeError(f"路线目标列 {col} 超出第 {row} 层的 {len(rects)} 个节点")
-    _move_fork_cursor(sw, rects, col)
+    # 岔路口只能选当前节点连着的几列
+    current_row, current_col = maps["route"][index]
+    columns = next_columns(maps["type"], current_row, current_col)
+    if col not in columns:
+        raise RuntimeError(f"路线目标第 {row} 层第 {col + 1} 列不在当前节点能走到的 {columns} 里")
+    rects = PathCursorCollector(sw).ensure((current_row, current_col), columns)
+    _move_fork_cursor(sw, dict(zip(columns, rects)), col)
     sw.click("A", 0)
     maps["current_index"] = index + 1
     sw.game.save()
 
 
-def _move_fork_cursor(sw: Switch, rects: tuple[Rect, ...], target: int) -> None:
-    """把岔路口光标从当前列移到 target。
+def _move_fork_cursor(sw: Switch, cursors: dict[int, Rect], column: int) -> None:
+    """把岔路口光标移到第 column 列。cursors 是能走到的几列的光标区域：{列号: 区域}。
 
-    先用每个节点区域里的白色占比判断当前列，再按 target 在左还是右推左摇杆；
+    先用每个光标区域里的白色占比判断当前列，再按 column 在左还是右推左摇杆；
     每次推完都重新读一帧，输入被吞掉时 act_until 会重推。
     """
+    columns = sorted(cursors)
+    rects = tuple(cursors[c] for c in columns)
+    target = columns.index(column)
     image = wait_for(
         sw,
         lambda screen: _path_cursor_index(sw, screen, rects) != -1,
@@ -109,7 +113,7 @@ def _move_fork_cursor(sw: Switch, rects: tuple[Rect, ...], target: int) -> None:
     for _ in range(len(rects)):
         current = _path_cursor_index(sw, image, rects)
         if current == target:
-            logging.info(f"岔路口光标从第 {start + 1} 列移到第 {target + 1} 列")
+            logging.info(f"岔路口光标从第 {columns[start] + 1} 列移到第 {column + 1} 列")
             return
         direction = 1 if target > current else -1
         image = act_until(
@@ -122,7 +126,7 @@ def _move_fork_cursor(sw: Switch, rects: tuple[Rect, ...], target: int) -> None:
             ),
             "岔路口光标移动",
         )
-    raise RuntimeError(f"岔路口光标移了 {len(rects)} 次，还是没到第 {target + 1} 个")
+    raise RuntimeError(f"岔路口光标移了 {len(rects)} 次，还是没到第 {column + 1} 列")
 
 
 def _path_cursor_index(sw: Switch, image: ImageChecker, rects: tuple[Rect, ...]) -> int:

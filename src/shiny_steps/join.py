@@ -2,7 +2,15 @@ import logging
 import time
 
 from libs import Lair, MapTypeReader, Switch
-from tools import act_until, capture, menu_last_item, move_menu_option, press_until, wait_for
+from tools import (
+    act_until,
+    capture,
+    menu_last_item,
+    move_menu_option,
+    next_columns,
+    press_until,
+    wait_for,
+)
 from type import Boss, MapNode, Maps
 
 
@@ -99,7 +107,6 @@ def _select_path(sw: Switch) -> None:
         logging.info("沿用上一局的路线规划")
     else:
         _assign_new_path(sw)
-        _assign_new_team(sw)
 
 
 def _assign_new_path(sw: Switch) -> None:
@@ -127,33 +134,6 @@ def _assign_route(sw: Switch) -> None:
     """地图类型出来后，按 seed 的遭遇和首领相性给所有路线打分，存最高分路线。"""
     maps = sw.game.maps
     map_type = maps["type"]
-    # 每种地图第 1 层选完后，第 2、3 层每个节点能走到下一层的哪几列
-    links = {
-        "2x3": {
-            (1, 0): (0, 1),
-            (1, 1): (1, 2, 3),
-            (2, 0): (0, 1, 2),
-            (2, 1): (0, 1, 2),
-            (2, 2): (2, 3),
-            (2, 3): (2, 3),
-        },
-        "3x2": {
-            (1, 0): (0, 1, 2),
-            (1, 1): (2, 3),
-            (2, 0): (0, 1),
-            (2, 1): (0, 1),
-            (2, 2): (0, 1),
-            (2, 3): (1, 2, 3),
-        },
-        "2x2": {
-            (1, 0): (0, 1),
-            (1, 1): (2, 3),
-            (2, 0): (0, 1),
-            (2, 1): (1, 2, 3),
-            (2, 2): (1, 2, 3),
-            (2, 3): (1, 2, 3),
-        },
-    }[map_type]
 
     rows = maps["rows"]
     paths = [[[0, 0]]]
@@ -161,7 +141,7 @@ def _assign_route(sw: Switch) -> None:
         next_paths = []
         for path in paths:
             prev_row, prev_col = path[-1]
-            cols = (0, 1) if row == 1 else links[(prev_row, prev_col)]
+            cols = next_columns(map_type, prev_row, prev_col)
             for col in cols:
                 next_paths.append([*path, [row, col]])
         paths = next_paths
@@ -180,15 +160,6 @@ def _assign_route(sw: Switch) -> None:
     logging.info(
         "路线: " + " → ".join(rows[str(row)][col]["encounter"] for row, col in maps["route"][1:-1])
     )
-
-
-def _assign_new_team(sw: Switch) -> None:
-    """路线图出来后，从队伍内存读自己三只队友，四个位置都是满血。"""
-    records = sw.pkhex.read_pk8(sw.config.addresses.party)
-    names = [sw.data.name_id(record["species"], record["form"]) for record in records]
-    sw.game.team = [(name, 1.0) for name in names]
-    sw.game.save()
-    logging.info(f"队伍: {names}")
 
 
 def _move_starter_cursor(sw: Switch) -> None:

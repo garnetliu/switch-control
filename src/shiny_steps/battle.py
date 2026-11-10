@@ -35,18 +35,18 @@ def battle(sw: Switch) -> str:
 
 
 def _create_war(sw: Switch) -> War:
-    """建这场对战的场上状态：自己、队友和对手。"""
-    _read_team(sw)
+    """建这场对战的场上状态：自己、队友和对手。自己的 PP 用内存里读到的剩余值。"""
+    own_pp = _read_team(sw)
     own_name, own_hp = sw.game.team[0]
     return War(
-        own=replace(sw.data.pokemon_object(own_name), hp=own_hp),
+        own=replace(sw.data.pokemon_object(own_name), hp=own_hp, pp=own_pp),
         teammates=[replace(sw.data.pokemon_object(name), hp=hp) for name, hp in sw.game.team[1:]],
         opponent=_read_opponent(sw),
     )
 
 
-def _read_team(sw: Switch) -> None:
-    """重新读队伍内存：位置上的宝可梦没变的沿用原血量，变了的按满血算。"""
+def _read_team(sw: Switch) -> list[int]:
+    """重新读队伍内存：位置上的宝可梦没变的沿用原血量，变了的按满血算。返回自己 4 个招式的剩余 PP。"""
     records = sw.pkhex.read_pk8(sw.config.addresses.party)
     names = [sw.data.name_id(record["species"], record["form"]) for record in records]
     old = sw.game.team
@@ -55,7 +55,9 @@ def _read_team(sw: Switch) -> None:
         for index, name in enumerate(names)
     ]
     sw.game.save()
-    logging.info(f"队伍: {sw.game.team}")
+    own_pp = list(records[0]["pp"])
+    logging.info(f"队伍: {sw.game.team}，自己的 PP: {own_pp}")
+    return own_pp
 
 
 def _read_opponent(sw: Switch) -> Pokemon:

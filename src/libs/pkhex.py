@@ -28,6 +28,7 @@ return Input.GetProperty("records").EnumerateArray()
             species = pk.Species,
             form = pk.Form,
             moves = new[] { pk.Move1, pk.Move2, pk.Move3, pk.Move4 },
+            pp = new[] { pk.Move1_PP, pk.Move2_PP, pk.Move3_PP, pk.Move4_PP },
             checksumValid = pk.ChecksumValid,
             encryptionConstant = pk.EncryptionConstant.ToString("X8"),
         };

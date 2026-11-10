@@ -1,8 +1,10 @@
 """岔路口光标坐标：缺坐标时逐列采样，写回 game_config.py 并保存截图。
 
-地图类型和层号决定路线图上节点的位置，所以坐标按 (地图类型, 层号) 记录，
-一局里量到一次之后写回源码，下次直接使用。采样时用属性标签定位每一列：
-seed 里每个节点的遭遇宝可梦决定了这一列可能出现的属性，标签正下方的白色箭头就是光标。
+镜头跟着玩家移动，所以坐标按 (地图类型, 出发节点) 记录：每个出发节点只记它能走到的那几列，
+顺序和 next_columns 返回的列一致。量到一次之后写回源码，下次直接使用；还没采的是 ((0, 0), (0, 0))。
+采样时用属性标签定位每一列：seed 里每个节点的遭遇宝可梦决定了这一列可能出现的属性。
+光标是标签附近的白色箭头，有的列在标签左下、有的在右下，所以光标停在这一列时找出箭头本身，
+用它的外框加上边距作为这一列的坐标。
 """
 
 import logging
@@ -25,11 +27,21 @@ _FIRST_ROW_COLUMNS = ((0.28, 0.45), (0.67, 0.84))
 # 岔路口找属性标签的纵向范围，和旧流程的 FORK_LABEL_RECT 一致，避开底部文字框
 _LABEL_TOP = 0.05
 _LABEL_BOTTOM = 0.80
-# 光标区域相对属性图标左上角（x, y）的偏移，旧流程真机实测：光标在图标下方 60 到 180 像素
-_CURSOR_LEFT = -60
-_CURSOR_TOP = 60
-_CURSOR_RIGHT = 160
-_CURSOR_BOTTOM = 180
+# 找光标箭头的范围，相对属性图标左上角（x, y）的偏移。真机上箭头在图标左下或右下，
+# 外框约 64×64，离图标左上角横向 -90 到 +150、纵向 +85 到 +160 像素
+_SEARCH_LEFT = -200
+_SEARCH_TOP = 40
+_SEARCH_RIGHT = 250
+_SEARCH_BOTTOM = 230
+# 箭头至少有这么多白色像素，小的白点不算；宽、高都不超过这么多像素，大块的白色不是箭头
+_ARROW_MIN_PIXELS = 500
+_ARROW_MAX_SIZE = 110
+# 左侧白色的队伍面板右边缘，找箭头时不看这左边的部分（面板和里面的对话气泡都是白色）
+_PANEL_RIGHT = 260
+# 箭头会上下晃动，外框四周再放这么多像素
+_ARROW_MARGIN = 20
+# 还没采样的列
+_MISSING: Rect = ((0, 0), (0, 0))
 # 截图统一缩放到这个尺寸，偏移量按它量出来
 _SCREEN_WIDTH = 1920
 _SCREEN_HEIGHT = 1080
@@ -58,12 +70,11 @@ class _Hit(NamedTuple):
 
 
 class _Frame(NamedTuple):
-    """一帧的检测结果：每列一个标签、光标列和每列的光标区域。"""
+    """一帧的检测结果：每列一个标签和光标所在的列。"""
 
     image: ImageChecker
     hits: tuple[_Hit, ...]
     index: int
-    rects: tuple[Rect, ...]
 
 
 class PathCursorCollector:
@@ -83,34 +94,43 @@ class PathCursorCollector:
         self._allowed: list[set[str]] = []
         self._bands: list[Rect] = []
 
-    def ensure(self, row: int) -> tuple[Rect, ...]:
-        """返回这一层各列的光标区域；还没收集就现场采样并写回 game_config.py。"""
+    def ensure(self, start: tuple[int, int], columns: tuple[int, ...]) -> tuple[Rect, ...]:
+        """从 start 节点出发、能走到的 columns 这几列的光标区域，顺序和 columns 一致。
+
+        还没采样的列现场采样，写回 game_config.py。
+        """
         maps = self._maps
         if maps is None or maps["type"] is None:
             raise RuntimeError("还没读出地图类型，没法收集岔路口光标坐标")
         map_type = maps["type"]
+        row = start[0] + 1
         nodes = maps["rows"].get(str(row), [])
         if not nodes:
             raise RuntimeError(f"seed 里没有第 {row} 层的节点")
-        rects = self._sw.config.rects.path_cursors[map_type][row]
-        if rects:
-            return rects
-
-        self._map_type, self._row = map_type, row
-        self._allowed = self._allowed_types(nodes)
-        self._bands = self._column_bands(row, len(nodes))
-        logging.info(f"岔路口 {map_type} 第 {row} 层的光标坐标还没收集，开始逐列采样")
-        try:
-            rects = self._collect()
-        except TimeoutError:
-            raise
-        except Exception:
-            self._save_failure("error")
-            raise
-        self._sw.config.rects.path_cursors[map_type][row] = rects
-        self._save_source()
-        logging.info(f"岔路口 {map_type} 第 {row} 层的光标坐标: {rects}")
-        return rects
+        known = list(self._sw.config.rects.path_cursors[map_type][start])
+        missing = tuple(column for column, rect in zip(columns, known) if rect == _MISSING)
+        if missing:
+            self._map_type, self._row = map_type, row
+            self._allowed = self._allowed_types(nodes)
+            self._bands = self._column_bands(row, len(nodes))
+            logging.info(
+                f"岔路口 {map_type} 从 {start} 出发，第 {row} 层第 {[c + 1 for c in missing]} 列"
+                "的光标坐标还没收集，开始采样"
+            )
+            try:
+                collected = self._collect(missing)
+            except TimeoutError:
+                raise
+            except Exception:
+                self._save_failure("error")
+                raise
+            for index, column in enumerate(columns):
+                if column in collected:
+                    known[index] = collected[column]
+            self._sw.config.rects.path_cursors[map_type][start] = tuple(known)
+            self._save_source()
+            logging.info(f"岔路口 {map_type} 从 {start} 出发的光标坐标: {tuple(known)}")
+        return tuple(known)
 
     def _allowed_types(self, nodes: list) -> list[set[str]]:
         """每列可能出现的属性。双属性宝可梦在地图上显示哪个属性不确定，所以用集合。"""
@@ -135,19 +155,23 @@ class PathCursorCollector:
             raise RuntimeError(f"第 {row} 层有 {count} 个节点，但标签搜索区间是 {len(columns)} 列")
         return [((left, _LABEL_TOP), (right, _LABEL_BOTTOM)) for left, right in columns]
 
-    def _collect(self) -> tuple[Rect, ...]:
-        """从左到右逐列采样，返回最终那一帧的每列光标区域。"""
+    def _collect(self, columns: tuple[int, ...]) -> dict[int, Rect]:
+        """光标逐个移到 columns 里的列，每列找出箭头的外框。"""
         frame = self._prepare()
-        for target in range(len(self._allowed)):
+        rects = {}
+        for target in columns:
             frame = self._move_to(target, frame)
             self._save_column(frame.image, target)
             hit = frame.hits[target]
+            rect = self._cursor_rect(frame.image, hit)
+            if rect is None:
+                raise RuntimeError(f"第 {target + 1} 列的光标在，但找不到箭头的外框")
+            rects[target] = rect
             logging.info(
                 f"岔路口 {self._map_type} 第 {self._row} 层第 {target + 1} 列:"
-                f" {hit.type_id}，白色 {hit.white:.3f}"
+                f" {hit.type_id}，白色 {hit.white:.3f}，光标 {rect}"
             )
-        final = self._wait_stable(frame)
-        return _round_rects(final.rects)
+        return rects
 
     def _prepare(self) -> _Frame:
         """等出一帧能认全标签和光标的画面；看不到标签时推右摇杆把镜头带回岔路口。"""
@@ -207,11 +231,7 @@ class PathCursorCollector:
             spread = max(ys) - min(ys)
             if spread > max_spread:
                 continue
-            marked = [
-                index
-                for index, hit in enumerate(combo)
-                if hit.white > self._sw.config.cursor_white_ratio
-            ]
+            marked = [index for index, hit in enumerate(combo) if hit.white > 0]
             if len(marked) != 1:
                 continue
             key = (spread, -sum(hit.score for hit in combo))
@@ -220,12 +240,7 @@ class PathCursorCollector:
         if best is None:
             return None
         _, combo, index = best
-        return _Frame(
-            image,
-            tuple(combo),
-            index,
-            tuple(_below_label(hit.x, hit.y) for hit in combo),
-        )
+        return _Frame(image, tuple(combo), index)
 
     def _hits(self, image: ImageChecker, band: Rect, allowed: set[str]) -> list[_Hit]:
         """这一列里所有可能的属性标签，每个都算上光标区域的白色占比。"""
@@ -259,12 +274,49 @@ class PathCursorCollector:
         return hits
 
     def _white(self, image: ImageChecker, x: int, y: int) -> float:
-        """属性图标正下方区域的白色占比，有光标时明显超过阈值。"""
-        return image.color_ratio(
-            _below_label(x, y),
+        """属性图标附近箭头的白色占比；没有箭头时是 0。"""
+        arrow = self._arrow(image, x, y)
+        if arrow is None:
+            return 0.0
+        (left, top), (right, bottom) = _search_region(x, y)
+        area = (right - left) * _SCREEN_WIDTH * (bottom - top) * _SCREEN_HEIGHT
+        return float(arrow[4]) / area
+
+    def _cursor_rect(self, image: ImageChecker, hit: _Hit) -> Rect | None:
+        """属性图标附近的箭头外框加边距，比例坐标；找不到箭头返回 None。"""
+        arrow = self._arrow(image, hit.x, hit.y)
+        if arrow is None:
+            return None
+        left, top, width, height, _ = arrow
+        return _pixel_rect(
+            left - _ARROW_MARGIN,
+            top - _ARROW_MARGIN,
+            left + width + _ARROW_MARGIN,
+            top + height + _ARROW_MARGIN,
+        )
+
+    def _arrow(self, image: ImageChecker, x: int, y: int) -> tuple[int, int, int, int, int] | None:
+        """属性图标附近箭头大小的白块里面积最大的一块：(左, 上, 宽, 高, 面积)，像素坐标。"""
+        region = _search_region(x, y)
+        mask = cv2.inRange(
+            image.crop(region, "hsv"),
             self._sw.config.cursor_white_lower,
             self._sw.config.cursor_white_upper,
         )
+        count, _, stats, _ = cv2.connectedComponentsWithStats(mask)
+        blobs = [
+            stats[i]
+            for i in range(1, count)
+            if stats[i][4] >= _ARROW_MIN_PIXELS
+            and stats[i][2] <= _ARROW_MAX_SIZE
+            and stats[i][3] <= _ARROW_MAX_SIZE
+        ]
+        if not blobs:
+            return None
+        left, top, width, height, area = (int(v) for v in max(blobs, key=lambda blob: blob[4]))
+        x0 = round(region[0][0] * _SCREEN_WIDTH)
+        y0 = round(region[0][1] * _SCREEN_HEIGHT)
+        return x0 + left, y0 + top, width, height, area
 
     def _capture(self) -> ImageChecker:
         image = ImageChecker(self._sw.pixel_peek())
@@ -358,30 +410,39 @@ class PathCursorCollector:
         logging.info(f"光标坐标已写回 {path}")
 
     def _format_cursors(self) -> list[str]:
-        """按 game_config.py 里的缩进生成 path_cursors 的源码。"""
-        lines = ["    path_cursors: ClassVar[dict[str, dict[int, tuple[Rect, ...]]]] = {\n"]
-        for map_type, rows in self._sw.config.rects.path_cursors.items():
-            lines.append(f'        "{map_type}": {{\n')
-            for row in sorted(rows):
-                rects = rows[row]
-                if not rects:
-                    lines.append(f"            {row}: _EMPTY_CURSORS,\n")
-                    continue
-                lines.append(f"            {row}: (\n")
+        """按 game_config.py 里的缩进生成 path_cursors 的源码，行尾注释写这一组是下一层的哪几列。"""
+        from tools.next_columns import next_columns
+
+        lines = ["    path_cursors: ClassVar[dict[str, PathCursors]] = {\n"]
+        for map_type, starts in self._sw.config.rects.path_cursors.items():
+            lines.append(f'        "{map_type}": PathCursors({{\n')
+            for start, rects in starts.items():
+                columns = ", ".join(str(c) for c in next_columns(map_type, *start))
+                lines.append(f"            {start}: (  # 下一层第 {columns} 列\n")
                 lines.extend(f"                {rect!r},\n" for rect in rects)
                 lines.append("            ),\n")
-            lines.append("        },\n")
+            lines.append("        }),\n")
         lines.append("    }\n")
         return lines
 
 
-def _below_label(x: int, y: int) -> Rect:
-    """属性图标左上角正下方光标出现的区域，比例坐标。"""
+def _search_region(x: int, y: int) -> Rect:
+    """属性图标左上角附近找光标箭头的范围，比例坐标。左边不超过队伍面板。"""
+    return _pixel_rect(
+        max(x + _SEARCH_LEFT, _PANEL_RIGHT), y + _SEARCH_TOP, x + _SEARCH_RIGHT, y + _SEARCH_BOTTOM
+    )
+
+
+def _pixel_rect(left: int, top: int, right: int, bottom: int) -> Rect:
+    """像素坐标转成比例坐标，超出画面的部分截掉，保留 4 位小数。"""
     return (
-        (max(x + _CURSOR_LEFT, 0) / _SCREEN_WIDTH, (y + _CURSOR_TOP) / _SCREEN_HEIGHT),
         (
-            min(x + _CURSOR_RIGHT, _SCREEN_WIDTH) / _SCREEN_WIDTH,
-            (y + _CURSOR_BOTTOM) / _SCREEN_HEIGHT,
+            round(max(left, 0) / _SCREEN_WIDTH, 4),
+            round(max(top, 0) / _SCREEN_HEIGHT, 4),
+        ),
+        (
+            round(min(right, _SCREEN_WIDTH) / _SCREEN_WIDTH, 4),
+            round(min(bottom, _SCREEN_HEIGHT) / _SCREEN_HEIGHT, 4),
         ),
     )
 
@@ -395,15 +456,4 @@ def _same(first: _Frame, second: _Frame) -> bool:
         and abs(before.x - after.x) <= _STABLE_PIXELS
         and abs(before.y - after.y) <= _STABLE_PIXELS
         for before, after in zip(first.hits, second.hits)
-    )
-
-
-def _round_rects(rects: tuple[Rect, ...]) -> tuple[Rect, ...]:
-    """坐标保留 4 位小数，写回源码时不出现一长串浮点数。"""
-    return tuple(
-        (
-            (round(rect[0][0], 4), round(rect[0][1], 4)),
-            (round(rect[1][0], 4), round(rect[1][1], 4)),
-        )
-        for rect in rects
     )
