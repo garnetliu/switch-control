@@ -10,7 +10,7 @@ from type import Field, Pokemon, Rect
 
 
 def battle(sw: Switch) -> str:
-    """打到出现要不要抓的界面返回 "catch"，输掉返回 "select_pokemon"。"""
+    """打到出现要不要抓的界面返回 "catch"，命数扣到 0 或者认到战败返回 "select_pokemon"。"""
     war = _create_war(sw)
 
     while True:
@@ -31,6 +31,9 @@ def battle(sw: Switch) -> str:
         elif state == "catch":
             _record_faints(sw, war)
             return "catch"
+        elif state == "loss":
+            _loss(sw, war)
+            return "select_pokemon"
         else:
             # 出招动画、战斗文字这些都不用处理，隔一会儿再看
             time.sleep(sw.config.interval)
@@ -48,13 +51,14 @@ def _create_war(sw: Switch) -> War:
 
 
 def _read_team(sw: Switch) -> list[int]:
-    """重新读队伍内存：位置上的宝可梦没变的沿用原血量，变了的按满血算。返回自己 4 个招式的剩余 PP。"""
+    """重新读队伍内存，血量用内存里的当前值和最大值算。返回自己 4 个招式的剩余 PP。"""
     records = sw.pkhex.read_pk8(sw.config.addresses.party)
-    names = [sw.data.name_id(record["species"], record["form"]) for record in records]
-    old = sw.game.team
     sw.game.team = [
-        (name, old[index][1] if index < len(old) and old[index][0] == name else 1.0)
-        for index, name in enumerate(names)
+        (
+            sw.data.name_id(record["species"], record["form"]),
+            record["hp"] / record["maxHp"] if record["maxHp"] else 1.0,
+        )
+        for record in records
     ]
     sw.game.save()
     own_pp = list(records[0]["pp"])
@@ -166,6 +170,12 @@ def _storm(sw: Switch, war: War) -> bool:
     return lives <= 0
 
 
+def _loss(sw: Switch, war: War) -> None:
+    """认到战败（「被风刮到巢穴外了」）：这一场到此结束，倒下次数按已经记下的写进去。"""
+    logging.info(f"战败，这一场倒下 {war.faints} 次")
+    _record_faints(sw, war)
+
+
 def _record_faints(sw: Switch, war: War) -> None:
     """这一场打完：倒下次数写进 game.faints，每场固定加一项。"""
     sw.game.faints.append(war.faints)
@@ -190,8 +200,8 @@ def _marker_shown(sw: Switch, image: ImageChecker, rect: Rect) -> bool:
 
 
 def _battle_state(sw: Switch, image: ImageChecker) -> str:
-    """当前战斗界面是哪个状态：fight、cheer、catch、storm（有宝可梦倒下）、
-    field（天气、场地变化的提示）；都不是返回 none。"""
+    """当前战斗界面是哪个状态：fight、cheer、catch、loss（战败，被风刮到巢穴外）、
+    storm（有宝可梦倒下）、field（天气、场地变化的提示）；都不是返回 none。"""
     if image.has_text(sw.config.rects.battle_menu_text, "战斗"):
         return "fight"
     if image.has_text(sw.config.rects.battle_menu_text, "助威"):
@@ -200,6 +210,9 @@ def _battle_state(sw: Switch, image: ImageChecker) -> str:
     if image.has_text(sw.config.rects.battle_line2, "使用精灵球的好机会"):
         save_check(sw, image, "catch", sw.config.rects.battle_line2)
         return "catch"
+    if image.has_text(sw.config.rects.battle_line2, "巢穴外"):
+        save_check(sw, image, "loss", sw.config.rects.battle_line2)
+        return "loss"
     if image.has_text(sw.config.rects.battle_text, "倒下了"):
         save_check(sw, image, "storm", sw.config.rects.battle_text)
         return "storm"

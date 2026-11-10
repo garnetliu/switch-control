@@ -160,10 +160,9 @@ def _handle_backpacker(sw: Switch) -> None:
 
 
 def _handle_scientist(sw: Switch) -> None:
-    """研究员问要不要换租借宝可梦：平均分更高就换，问完重新读队伍。
+    """研究员问要不要换租借宝可梦：平均分更高就换。
 
-    平均分排除候选池和这一局路线上的遭遇宝可梦；队伍内存里只能读到名字，
-    读不到当前血条，留在队里的按名字沿用原血量，新换进来的按满血算。
+    平均分排除候选池和这一局路线上的遭遇宝可梦。
     """
     own = sw.game.team[0][0]
 
@@ -194,15 +193,6 @@ def _handle_scientist(sw: Switch) -> None:
         sw.config.timeout,
         "研究员问话消失",
     )
-    logging.info(f"研究员换人前队伍: {sw.game.team}")
-    # 就算自己不换，队友也可能换，所以都要重新读队伍
-    records = sw.pkhex.read_pk8(sw.config.addresses.party)
-    team_names = [sw.data.name_id(record["species"], record["form"]) for record in records]
-    # 留在队里的沿用原血量，新换进来的按满血算
-    old_hp = dict(sw.game.team)
-    sw.game.team = [(name, old_hp.get(name, 1.0)) for name in team_names]
-    logging.info(f"研究员换人后队伍: {sw.game.team}")
-    sw.game.save()
 
 
 def _backpacker_shown(sw: Switch, image: ImageChecker) -> bool:

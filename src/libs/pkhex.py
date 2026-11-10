@@ -29,6 +29,8 @@ return Input.GetProperty("records").EnumerateArray()
             form = pk.Form,
             moves = new[] { pk.Move1, pk.Move2, pk.Move3, pk.Move4 },
             pp = new[] { pk.Move1_PP, pk.Move2_PP, pk.Move3_PP, pk.Move4_PP },
+            hp = pk.Stat_HPCurrent,
+            maxHp = pk.Stat_HPMax,
             checksumValid = pk.ChecksumValid,
             encryptionConstant = pk.EncryptionConstant.ToString("X8"),
         };

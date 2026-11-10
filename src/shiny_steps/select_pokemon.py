@@ -286,6 +286,9 @@ def _find_shiny(sw: Switch) -> list[bool]:
         else:
             logging.info(f"第 {index + 1} 只「{name}」不是闪光")
         results.append(shiny)
+        # 只抓到 1 只时翻页名字不会变，会一直等到超时；多只时最后一只还要翻一次绕回第一只
+        if len(names) == 1:
+            break
         act_until(
             sw,
             lambda: sw.stick("LEFT", 0, -sw.config.stick_max, sw.config.stick_tick),
