@@ -72,6 +72,7 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 | `src/type` | 共用的类型 |
 | `data` | 宝可梦、招式、路线和图片数据 |
 | `run` | 这一局的状态 `game.yaml`，用来断线恢复和 keep path |
-| `logs` | 日志和截图：闪光截图在 `logs/catches/`，其他战果截图在 `logs/results/` |
+| `catches` | 闪光宝可梦的截图 |
+| `logs` | 日志和截图：不是闪光的战果截图在 `logs/results/` |
 | `docs` | 实测记录和待测试的事项 |
 | `docker` | PKHeX 服务的容器 |

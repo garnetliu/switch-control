@@ -14,6 +14,7 @@ class GameStateSnapshot(TypedDict):
     maps: Maps | None
     lock_pokemon_index: int | None
     lock_results: list[bool]
+    path_results: list[bool]
     dynite_ore: int
     team: list[tuple[str, float]]
     num_caught: int

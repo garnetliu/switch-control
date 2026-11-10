@@ -133,7 +133,9 @@ def main():
     if delay is None:
         logging.warning("ping 不通：确认 Switch 没休眠、和这台电脑在同一个局域网")
     elif delay > max_ping_ms:
-        logging.warning(f"ping 平均 {delay:.0f} ms，超过 {max_ping_ms} ms，网络太差，流程会频繁超时")
+        logging.warning(
+            f"ping 平均 {delay:.0f} ms，超过 {max_ping_ms} ms，网络太差，流程会频繁超时"
+        )
     else:
         logging.info(f"ping 平均 {delay:.0f} ms")
 

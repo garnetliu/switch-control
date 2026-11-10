@@ -1,3 +1,6 @@
+import logging
+import shutil
+
 from libs import Switch
 from tools import menu_last_item, press_until
 
@@ -22,4 +25,22 @@ def initialize(sw: Switch) -> str:
         "对话框消失",
         button="B",
     )
+    rounds = len(sw.game.lock_results)
+    if rounds and rounds % sw.config.log_cleanup_rounds == 0:
+        _clean_logs(sw)
     return "join"
+
+
+def _clean_logs(sw: Switch) -> None:
+    """清空 logs 里除了 start（运行日志）以外的全部文件和目录，直接删除，不进回收站。"""
+    removed = 0
+    for path in sw.config.log_dir.iterdir():
+        if path.name == "start":
+            continue
+        if path.is_dir():
+            removed += sum(1 for item in path.rglob("*") if item.is_file())
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+            removed += 1
+    logging.info(f"已经打了 {len(sw.game.lock_results)} 局，清空 logs，删掉 {removed} 个文件")

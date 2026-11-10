@@ -173,12 +173,12 @@ def _record_faints(sw: Switch, war: War) -> None:
 
 
 def _cheer(sw: Switch) -> None:
-    """应援：按 A，等应援菜单消失。"""
+    """助威：按 A，等助威菜单消失。"""
     act_until(
         sw,
         lambda: sw.click("A", 0),
-        lambda screen: not screen.has_text(sw.config.rects.battle_menu_text, "应援"),
-        "应援菜单消失",
+        lambda screen: not screen.has_text(sw.config.rects.battle_menu_text, "助威"),
+        "助威菜单消失",
     )
 
 
@@ -194,7 +194,7 @@ def _battle_state(sw: Switch, image: ImageChecker) -> str:
     field（天气、场地变化的提示）；都不是返回 none。"""
     if image.has_text(sw.config.rects.battle_menu_text, "战斗"):
         return "fight"
-    if image.has_text(sw.config.rects.battle_menu_text, "应援"):
+    if image.has_text(sw.config.rects.battle_menu_text, "助威"):
         save_check(sw, image, "cheer", sw.config.rects.battle_menu_text)
         return "cheer"
     if image.has_text(sw.config.rects.battle_line2, "使用精灵球的好机会"):

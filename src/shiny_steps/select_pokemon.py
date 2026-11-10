@@ -1,7 +1,6 @@
 """一局结束：检查抓到的宝可梦是不是闪光，带走或留下。"""
 
 import logging
-import os
 import time
 import unicodedata
 
@@ -11,23 +10,31 @@ from tools import act_until, capture, move_menu_option, press_until, restart, sa
 
 def select_pokemon(sw: Switch) -> str:
     """查闪光，带走或留下，再决定下一局，返回 "initialize"。"""
-    # 这一局的胜负记下来，战报里的第几轮就是记录的局数
-    sw.game.lock_results.append(sw.game.num_caught == 4)
-    sw.game.save()
     if sw.game.num_caught == 0:
-        logging.info("一只都没抓到")
-        # 一只都没抓到时后面是什么界面还没见过，等 15 秒截一张留着，之后照着改逻辑
-        time.sleep(15)
-        save_check(sw, capture(sw), "没抓住的界面", sw.config.rects.result_title)
-        _back_to_scientist(sw)
-        _press_until_thanks_gone(sw)
-        _report(sw, -1, "一只都没抓到")
+        _no_catch(sw)
         return "initialize"
     else:
         shiny = _check_shiny(sw)
-        outcome = _decide_next_run(sw, shiny)
-        _report(sw, shiny, outcome)
+        _decide_next_run(sw, shiny)
         return "initialize"
+
+
+def _no_catch(sw: Switch) -> None:
+    """一只都没抓到：截一张后面的界面，算输一局判断锁不锁定，先写战报，再重启或结束这一局。"""
+    logging.info("一只都没抓到")
+    # 一只都没抓到时后面是什么界面还没见过，等 15 秒截一张留着，之后照着改逻辑
+    time.sleep(15)
+    save_check(sw, capture(sw), "没抓住的界面", sw.config.rects.result_title)
+    keep, lock = sw.game.finish_run(took_shiny=False)
+    # 战报先发，后面收尾的按键卡住或出错也不影响
+    if keep:
+        _report(sw, -1, "一只都没抓到，重启游戏保留路线", lock)
+        logging.info("重启游戏，keep path")
+        restart(sw)
+    else:
+        _report(sw, -1, "一只都没抓到", lock)
+        _back_to_scientist(sw)
+        _press_until_thanks_gone(sw)
 
 
 def _check_shiny(sw: Switch) -> int:
@@ -78,7 +85,8 @@ def _save_list_screenshots(sw: Switch, results: list[bool]) -> None:
                 "列表左边的宝可梦",
             )
             _save_screenshot(sw, image, "list", shiny)
-        _move_list_cursor(sw, index + 1)
+        if index < last:
+            _move_list_cursor(sw, index + 1)
 
 
 def _save_screenshot(sw: Switch, image: ImageChecker, kind: str, shiny: bool) -> None:
@@ -95,39 +103,30 @@ def _save_screenshot(sw: Switch, image: ImageChecker, kind: str, shiny: bool) ->
         sw.click("CAPTURE", 0)
 
 
-def _decide_next_run(sw: Switch, shiny: int) -> str:
-    """决定下一局：带走闪光、重启游戏 keep path，或者结束这一局。返回怎么处理的，写进战报。
+def _decide_next_run(sw: Switch, shiny: int) -> None:
+    """决定下一局：带走闪光、重启游戏 keep path，或者结束这一局。
 
-    - 有闪光：光标移到那只上，一直按 A 到画面变黑。带走后下一局 seed 不一样，join 会清掉状态。
-    - 没有闪光，倒下次数和用时都在范围内：重启游戏，下一局 seed 和 boss 不变就是 keep path。
-    - 都不是：一直按 B 到画面变黑。
+    先用 game.finish_run 记下胜负、算锁定还是解锁，再写战报，最后按键收尾；
+    战报先发，收尾的按键卡住或出错也不影响。
+    - 有闪光：光标移到那只上带走，不锁定。
+    - 没有闪光：锁定就重启游戏，下一局还是这张图；不锁定就不带走，结束这一局。
     """
-    sw.game.save()
+    keep, lock = sw.game.finish_run(took_shiny=shiny >= 0)
     if shiny >= 0:
+        _report(sw, shiny, f"带走第 {shiny + 1} 只闪光", lock)
         _take(sw, shiny)
         _press_until_thanks_gone(sw)
-        return f"带走第 {shiny + 1} 只闪光"
+    elif keep:
+        _report(sw, shiny, "不带走，重启游戏保留路线", lock)
+        logging.info("重启游戏，keep path")
+        restart(sw)
     else:
-        faints = 4 - sw.game.lives
-        minutes: float = (time.time() - sw.game.started) / 60
-        logging.info(f"这一局倒下 {faints} 次，用时 {minutes:.1f} 分钟")
-        # keep path 要重启游戏，下次和科学家说话要付极矿石，矿石不够时用环境变量关掉
-        keep_path = os.environ.get("KEEP_PATH") == "1"
-        if (
-            keep_path
-            and faints <= sw.config.lock_max_faints
-            and minutes <= sw.config.lock_max_minutes
-        ):
-            logging.info("重启游戏，keep path")
-            restart(sw)
-            return "不带走，重启游戏保留路线"
-        else:
-            _back_to_scientist(sw)
-            _press_until_thanks_gone(sw)
-            return "不带走"
+        _report(sw, shiny, "不带走", lock)
+        _back_to_scientist(sw)
+        _press_until_thanks_gone(sw)
 
 
-def _report(sw: Switch, shiny: int, outcome: str) -> None:
+def _report(sw: Switch, shiny: int, outcome: str, lock: str) -> None:
     """把这一局的战报写进日志并推送，附上这一局存下的战果截图。格式：
 
     第 N 轮战报：胜/负，倒下 X 次，Y 分钟，抓到 n/4（N 是 lock_results 里记录的局数）
@@ -137,6 +136,7 @@ def _report(sw: Switch, shiny: int, outcome: str) -> None:
     逐关：每一关的对手和结果（抓到谁、团灭、没打到），这一关倒下几次
     闪光：第几只是闪光，或者没有
     处理：这一局结束时怎么处理抓到的宝可梦
+    锁定：这张图锁定的情况，锁定以来的局数和总胜率、继续锁定还是解锁
     """
     game = sw.game
     language = sw.config.language
@@ -153,7 +153,7 @@ def _report(sw: Switch, shiny: int, outcome: str) -> None:
     lines = [
         f"第 {len(game.lock_results)} 轮战报：{'胜' if won else '负'}，倒下 {4 - game.lives} 次，{minutes:.1f} 分钟，抓到 {game.num_caught}/4"
     ]
-    nodes = []
+    nodes: list[str] = []
     if maps is not None and maps["route"]:
         nodes = [maps["rows"][str(row)][col]["encounter"] for row, col in maps["route"][1:-1]]
     starter = "?"
@@ -166,7 +166,8 @@ def _report(sw: Switch, shiny: int, outcome: str) -> None:
 
     lines.append("逐关：")
     stages = []
-    for index, opponent in enumerate([*nodes, game.boss]):
+    opponents: list[str] = [*nodes, game.boss]
+    for index, opponent in enumerate(opponents):
         label = "首领" if index == len(nodes) else f"第{index + 1}关"
         if index < game.num_caught:
             result = f"抓到 {name(game.caught[index])}"
@@ -189,6 +190,7 @@ def _report(sw: Switch, shiny: int, outcome: str) -> None:
     else:
         lines.append("闪光：没有")
     lines.append(f"处理：{outcome}")
+    lines.append(f"锁定：{lock}")
 
     report = "\n".join(lines)
     logging.info("\n" + report)
@@ -323,18 +325,22 @@ def _is_shiny(sw: Switch, image: ImageChecker) -> bool:
 
 
 def _press_until_thanks_gone(sw: Switch) -> None:
-    """一直按 A，先等科学家的「辛苦了。」出来，再按到它消失。
+    """一直按 A，先等科学家的结束语出来，再按到它消失。
 
-    带走和不带走之后都是：报酬页面 → 转场黑屏 → 回到科学家面前说「辛苦了。」。
+    带走和不带走之后都是：报酬页面 → 转场黑屏 → 回到科学家面前说结束语。
+    打赢了说「辛苦了。」，打输了说「真是太遗憾了」。
     """
+    farewells = ("辛苦了", "真是太遗憾了")
     press_until(
         sw,
-        lambda screen: screen.has_text(sw.config.rects.dialog, "辛苦了"),
-        "科学家的「辛苦了。」",
+        lambda screen: any(screen.has_text(sw.config.rects.dialog, text) for text in farewells),
+        "科学家的「辛苦了。」或「真是太遗憾了」",
         timeout=sw.config.timeout * 2,
     )
     press_until(
         sw,
-        lambda screen: not screen.has_text(sw.config.rects.dialog, "辛苦了"),
-        "「辛苦了。」消失",
+        lambda screen: not any(
+            screen.has_text(sw.config.rects.dialog, text) for text in farewells
+        ),
+        "科学家的结束语消失",
     )

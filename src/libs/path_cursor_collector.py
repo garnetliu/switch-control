@@ -410,7 +410,7 @@ class PathCursorCollector:
         logging.info(f"光标坐标已写回 {path}")
 
     def _format_cursors(self) -> list[str]:
-        """按 game_config.py 里的缩进生成 path_cursors 的源码，行尾注释写这一组是下一层的哪几列。"""
+        """按 game_config.py 里的缩进生成 path_cursors 的源码，行尾注释写这一组是第几排的哪几列。"""
         from tools.next_columns import next_columns
 
         lines = ["    path_cursors: ClassVar[dict[str, PathCursors]] = {\n"]
@@ -418,7 +418,7 @@ class PathCursorCollector:
             lines.append(f'        "{map_type}": PathCursors({{\n')
             for start, rects in starts.items():
                 columns = ", ".join(str(c) for c in next_columns(map_type, *start))
-                lines.append(f"            {start}: (  # 下一层第 {columns} 列\n")
+                lines.append(f"            {start}: (  # 第 {start[0] + 1} 排第 {columns} 列\n")
                 lines.extend(f"                {rect!r},\n" for rect in rects)
                 lines.append("            ),\n")
             lines.append("        }),\n")

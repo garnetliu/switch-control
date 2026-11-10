@@ -11,14 +11,14 @@ from tools import (
     press_until,
     wait_for,
 )
-from type import Boss, MapNode, Maps
+from type import MapNode, Maps
 
 
 def join(sw: Switch) -> str:
-    # 先清掉上一局的状态、记下开始时间。后面 seed 或 boss 不一样时 clear 会清掉全部，开始时间保留
-    sw.game.new_run()
-    _select_target(sw)
-    _select_starter(sw)
+    # 记下开始时间，清掉上一局打到一半的数据
+    sw.game.start_run()
+    boss = _select_target(sw)
+    _select_starter(sw, boss)
     _select_path(sw)
     return "path"
 
@@ -36,9 +36,9 @@ def _select_target(sw: Switch):
     """
     image = press_until(sw, lambda screen: menu_last_item(sw, screen) == "不指定", "传说菜单")
     bosses = sw.data.boss_pokemon()
-    boss = sw.config.boss
-    wanted = _select_boss(sw, bosses[boss])
-    if wanted != bosses[boss].name():
+    boss = _select_boss(sw, sw.config.boss)
+    wanted = bosses[boss].name()
+    if boss != sw.config.boss:
         logging.warning(
             f"Lair note 里没有「{bosses[sw.config.boss].name()}」，这一局改成刷「{wanted}」"
         )
@@ -69,10 +69,10 @@ def _select_target(sw: Switch):
         area=sw.config.rects.lobby_menu,
     )
     sw.click("A", 0)
-    return sw.game.boss
+    return boss
 
 
-def _select_starter(sw: Switch) -> None:
+def _select_starter(sw: Switch, boss: str) -> None:
     """从内存读取三只租借宝可梦，选择得分最高的。
 
     屏幕只用来看光标停在哪只上；宝可梦信息都从内存读取。队友等第一场战斗再读（见 battle._read_team），
@@ -88,10 +88,10 @@ def _select_starter(sw: Switch) -> None:
 
     seed = _read_seed(sw)
 
-    if seed == sw.game.seed:
-        logging.info("seed 和上一局一样，沿用上一局的 starter 选择")
+    # 锁定了这张图并且 boss、seed 都对得上才沿用上一局的选择，否则 check_keep 会清掉旧数据
+    if sw.game.check_keep(boss, seed):
+        logging.info("锁定了这张图，沿用上一局的 starter 选择")
     else:
-        sw.game.clear(seed=seed)
         _assign_new_starter(sw)
 
     _move_starter_cursor(sw)
@@ -188,18 +188,18 @@ def _move_starter_cursor(sw: Switch) -> None:
     )
 
 
-def _select_boss(sw: Switch, boss: Boss) -> str:
-    """读四个 Lair note 的 species，目标还在就返回目标名字，不在就返回第一个 boss 的名字。"""
+def _select_boss(sw: Switch, target: str) -> str:
+    """读四个 Lair note 的 species，目标 target 还在就返回它，不在就返回第一个 boss 的 name_id。"""
     species = [
         int.from_bytes(sw.peek(address, 2), "little") for address in sw.config.addresses.lair_notes
     ]
     logging.debug(f"Lair notes: {species}")
-    if boss.id_num in species:
-        return boss.name()
-    for name_id, candidate in sw.data.boss_pokemon().items():
+    bosses = sw.data.boss_pokemon()
+    if bosses[target].id_num in species:
+        return target
+    for name_id, candidate in bosses.items():
         if candidate.id_num == species[1]:
-            sw.game.clear(boss=name_id)
-            return candidate.name()
+            return name_id
     raise RuntimeError(f"Lair note 里找不到第一个 boss：{species}")
 
 
