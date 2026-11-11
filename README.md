@@ -46,7 +46,7 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 | 变量 | 作用 |
 |---|---|
-| `SAVE_CHECKS` | 每次画面判定成功，把截图存进 `logs/checks/`，判定用的区域画成红框 |
+| `SAVE_CHECKS` | 要存截图的步骤名字，用逗号分开（`initialize`、`join`、`path`、`battle`、`catch`、`select_pokemon`），比如 `SAVE_CHECKS=join,battle`。这些步骤里每次画面判定成功，把截图存进 `logs/checks/`，判定用的区域画成红框 |
 | `KEEP_PATH` | 一局没刷到闪光、倒下次数和用时都在范围内时，重启游戏保留这张图（keep path）。重启要付极矿石，矿石不够时不要开 |
 
 ## 流程

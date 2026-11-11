@@ -7,6 +7,7 @@
 
 import re
 from difflib import SequenceMatcher
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -20,12 +21,18 @@ def _clean(text: str) -> str:
     return re.sub(r"[\s，。！？、,.!?…：:]", "", text)
 
 
+@lru_cache(maxsize=1)
+def _shared_ocr() -> RapidOCR:
+    """整个程序共用一个识别器。创建一次要 0.11 秒，不能每张截图都创建。"""
+    return RapidOCR()
+
+
 class ImageChecker:
     """对一张截图做各种检查。截图只解码和缩放一次，同一张图的多次检查共用。"""
 
     def __init__(self, image: bytes):
-        self._ocr = RapidOCR()
         """image: 截图的 JPEG 或 PNG 字节。解码失败会抛 ValueError。"""
+        self._ocr = _shared_ocr()
         base_size = (1920, 1080)
         # 行或列的平均亮度不超过这个值，当作黑边
         black_bar = 8

@@ -14,8 +14,8 @@ def select_pokemon(sw: Switch) -> str:
         _no_catch(sw)
         return "initialize"
     else:
-        shiny = _check_shiny(sw)
-        _decide_next_run(sw, shiny)
+        shiny, values = _check_shiny(sw)
+        _decide_next_run(sw, shiny, values)
         return "initialize"
 
 
@@ -28,24 +28,28 @@ def _no_catch(sw: Switch) -> None:
     keep, lock = sw.game.finish_run(took_shiny=False)
     # 战报先发，后面收尾的按键卡住或出错也不影响
     if keep:
-        _report(sw, -1, "一只都没抓到，重启游戏保留路线", lock)
+        _report(sw, -1, [], "一只都没抓到，重启游戏保留路线", lock)
         logging.info("重启游戏，keep path")
         restart(sw)
     else:
-        _report(sw, -1, "一只都没抓到", lock)
+        _report(sw, -1, [], "一只都没抓到", lock)
         _back_to_scientist(sw)
         _press_until_black(sw)
 
 
-def _check_shiny(sw: Switch) -> int:
-    """等带走宝可梦的界面，查闪光，截图后回到列表。返回要带走的那只的序号，没有闪光返回 -1。"""
+def _check_shiny(sw: Switch) -> tuple[int, list[float]]:
+    """等带走宝可梦的界面，查闪光，截图后回到列表。
+
+    返回 (要带走的那只的序号，没有闪光是 -1；每只闪光框的占比，写进战报)。
+    """
     wait_for(
         sw,
         lambda screen: screen.has_text(sw.config.rects.result_title, "选1只要带回去的宝可梦"),
         sw.config.timeout,
         "带走宝可梦的界面",
     )
-    results = _find_shiny(sw)
+    values = _find_shiny(sw)
+    results = [_is_shiny(sw, value) for value in values]
     # 从资料页退回带走宝可梦的列表
     act_until(
         sw,
@@ -56,7 +60,7 @@ def _check_shiny(sw: Switch) -> int:
     _save_list_screenshots(sw, results)
     # 有好几只闪光时带走最后一只，也就是排在最后的神兽
     shiny = max((index for index, found in enumerate(results) if found), default=-1)
-    return shiny
+    return shiny, values
 
 
 def _save_list_screenshots(sw: Switch, results: list[bool]) -> None:
@@ -103,7 +107,7 @@ def _save_screenshot(sw: Switch, image: ImageChecker, kind: str, shiny: bool) ->
         sw.click("CAPTURE", 0)
 
 
-def _decide_next_run(sw: Switch, shiny: int) -> None:
+def _decide_next_run(sw: Switch, shiny: int, values: list[float]) -> None:
     """决定下一局：带走闪光、重启游戏 keep path，或者结束这一局。
 
     先用 game.finish_run 记下胜负、算锁定还是解锁，再写战报，最后按键收尾；
@@ -113,28 +117,28 @@ def _decide_next_run(sw: Switch, shiny: int) -> None:
     """
     keep, lock = sw.game.finish_run(took_shiny=shiny >= 0)
     if shiny >= 0:
-        _report(sw, shiny, f"带走第 {shiny + 1} 只闪光", lock)
+        _report(sw, shiny, values, f"带走第 {shiny + 1} 只闪光", lock)
         _take(sw, shiny)
         _press_until_black(sw)
     elif keep:
-        _report(sw, shiny, "不带走，重启游戏保留路线", lock)
+        _report(sw, shiny, values, "不带走，重启游戏保留路线", lock)
         logging.info("重启游戏，keep path")
         restart(sw)
     else:
-        _report(sw, shiny, "不带走", lock)
+        _report(sw, shiny, values, "不带走", lock)
         _back_to_scientist(sw)
         _press_until_black(sw)
 
 
-def _report(sw: Switch, shiny: int, outcome: str, lock: str) -> None:
+def _report(sw: Switch, shiny: int, values: list[float], outcome: str, lock: str) -> None:
     """把这一局的战报写进日志并推送，附上这一局存下的战果截图。格式：
 
     第 N 轮战报：胜/负，倒下 X 次，Y 分钟，抓到 n/4（N 是 lock_results 里记录的局数）
     路线：A（属性） → B（属性） → C（属性）
     路线得分：S
     首发：名字（第 k 位）
-    逐关：每一关的对手和结果（抓到谁、团灭、没打到），这一关倒下几次
-    闪光：第几只是闪光，或者没有
+    逐关：每一关抓到、团灭还是没抓，对手和属性，这一关倒下几次；团灭之后的关卡不写
+    闪光（逐只）：每只是闪光还是非闪、闪光框的占比和阈值、名字
     处理：这一局结束时怎么处理抓到的宝可梦
     锁定：这张图锁定的情况，锁定以来的局数和总胜率、继续锁定还是解锁
     """
@@ -170,25 +174,27 @@ def _report(sw: Switch, shiny: int, outcome: str, lock: str) -> None:
     for index, opponent in enumerate(opponents):
         label = "首领" if index == len(nodes) else f"第{index + 1}关"
         if index < game.num_caught:
-            result = f"抓到 {name(game.caught[index])}"
-        elif index == game.num_caught and game.lives == 0:
+            result = "抓到"
+        elif game.lives == 0:
             result = "团灭"
         else:
-            result = "没打到"
+            result = "没抓"
+        result += f" {name(opponent)}（{types(opponent)}）"
         if index < len(game.faints) and game.faints[index]:
-            result += f"，倒下 {game.faints[index]} 次"
-        stages.append((label, f"{name(opponent)}（{types(opponent)}）", result))
-    label_width = max(_display_width(label) for label, _, _ in stages) + 2
-    kind_width = max(_display_width(kind) for _, kind, _ in stages) + 2
-    for label, kind, result in stages:
-        lines.append(f"  {_pad(label, label_width)}{_pad(kind, kind_width)}{result}")
+            result += f"·倒下 {game.faints[index]} 次"
+        stages.append((label, result))
+        # 团灭之后的关卡没有打，不写
+        if result.startswith("团灭"):
+            break
+    label_width = max(_display_width(label) for label, _ in stages) + 1
+    for label, result in stages:
+        lines.append(f"  {_pad(label, label_width)}{result}")
 
-    if game.num_caught == 0:
-        lines.append("闪光：没有查")
-    elif shiny >= 0:
-        lines.append(f"闪光：第 {shiny + 1} 只 {name(game.caught[shiny])}")
-    else:
-        lines.append("闪光：没有")
+    if values:
+        lines.append("闪光（逐只）：")
+        for name_id, value in zip(game.caught, values, strict=False):
+            kind = "闪光" if _is_shiny(sw, value) else "非闪"
+            lines.append(f"  {kind}（{value:.2f} / 阈值 {sw.config.shiny_min}） {name(name_id)}")
     lines.append(f"处理：{outcome}")
     lines.append(f"锁定：{lock}")
 
@@ -235,8 +241,8 @@ def _move_list_cursor(sw: Switch, index: int) -> None:
     )
 
 
-def _find_shiny(sw: Switch) -> list[bool]:
-    """从第一只开始，按顺序打开资料页查闪光，返回每只是不是闪光。"""
+def _find_shiny(sw: Switch) -> list[float]:
+    """从第一只开始，按顺序打开资料页查闪光，返回每只闪光框的占比，用 _is_shiny 判断是不是闪光。"""
     rects = sw.config.rects
     # 光标在列表第一只上，按 A 弹出菜单，菜单的位置是固定的
     image = act_until(
@@ -270,8 +276,8 @@ def _find_shiny(sw: Switch) -> list[bool]:
             f"资料页上第 {index + 1} 只（{name}）的名字",
         )
         shown = _summary_name(sw, image)
-        shiny = _is_shiny(sw, image)
-        if shiny:
+        value = _shiny_value(image, sw)
+        if _is_shiny(sw, value):
             logging.warning(f"闪光！第 {index + 1} 只 {name}")
             # 资料页右边的宝可梦要晚一点才画出来，等它出来再截图
             image = wait_for(
@@ -285,7 +291,7 @@ def _find_shiny(sw: Switch) -> list[bool]:
             _save_screenshot(sw, image, "summary", True)
         else:
             logging.info(f"第 {index + 1} 只「{name}」不是闪光")
-        results.append(shiny)
+        results.append(value)
         # 只抓到 1 只时翻页名字不会变，会一直等到超时；多只时最后一只还要翻一次绕回第一只
         if len(names) == 1:
             break
@@ -301,10 +307,9 @@ def _find_shiny(sw: Switch) -> list[bool]:
 def _summary_name(sw: Switch, image: ImageChecker) -> str:
     """资料页上的名字。
 
-    名字区域比名字宽很多，只有两个字的名字（比如「袋兽」）用 read_text 只识别不检测时读不出来，
-    所以先检测文字位置再识别。
+    区域要贴着名字那一格：区域里空白太多时，两个字的名字（比如「袋兽」）用 read_text 读不出来。
     """
-    return "".join(text for text, _ in image.text_lines(sw.config.rects.summary_name)).strip()
+    return image.read_text(sw.config.rects.summary_name)
 
 
 def _back_to_scientist(sw: Switch) -> None:
@@ -320,8 +325,8 @@ def _back_to_scientist(sw: Switch) -> None:
     )
 
 
-def _is_shiny(sw: Switch, image: ImageChecker) -> bool:
-    """资料页闪光框里高饱和像素占比在范围内。"""
+def _shiny_value(image: ImageChecker, sw: Switch) -> float:
+    """资料页闪光框里高饱和像素的占比，换算成 0 到 255。"""
     value = (
         image.color_ratio(
             sw.config.rects.shiny,
@@ -331,6 +336,11 @@ def _is_shiny(sw: Switch, image: ImageChecker) -> bool:
         * 255
     )
     logging.debug(f"闪光框的占比 {value:.1f}")
+    return value
+
+
+def _is_shiny(sw: Switch, value: float) -> bool:
+    """闪光框的占比在范围内就是闪光。"""
     return sw.config.shiny_min < value <= sw.config.shiny_max
 
 

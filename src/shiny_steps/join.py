@@ -1,6 +1,8 @@
 import logging
 import time
 
+import cv2
+
 from libs import Lair, MapTypeReader, Switch
 from tools import (
     act_until,
@@ -9,6 +11,7 @@ from tools import (
     move_menu_option,
     next_columns,
     press_until,
+    save_check,
     wait_for,
 )
 from type import MapNode, Maps
@@ -114,20 +117,39 @@ def _assign_new_path(sw: Switch) -> None:
     wait_for(sw, lambda screen: not screen.is_black(), sw.config.timeout, "开场黑屏结束")
     reader = MapTypeReader(sw)
     deadline = time.monotonic() + sw.config.timeout
+    # 读类型用过的每一帧先留着，最后没读出来就存下来，拿去离线重跑
+    frames = []
     while True:
         image = capture(sw)
         if image.has_text(sw.config.rects.den_text, "要走哪条路"):
+            frames.append(image.bgr)
             break
         if sw.game.maps is not None and sw.game.maps["type"] is None:
+            frames.append(image.bgr)
             map_type = reader.update(image)
             if map_type is not None:
+                # 读出类型的这一帧存下来，红框是实际找标签的范围：最左一列和另外三列的窄条
+                save_check(sw, image, f"地图类型 {map_type}", *reader.rects)
                 sw.game.maps["type"] = map_type
                 _assign_route(sw)
                 sw.game.save()
         if time.monotonic() >= deadline:
             raise TimeoutError(f"等了 {sw.config.timeout} 秒，路线图一直没有出现")
     if sw.game.maps is None or sw.game.maps["type"] is None:
+        _save_map_frames(sw, frames)
         raise RuntimeError("没读到路线图类型")
+
+
+def _save_map_frames(sw: Switch, frames: list) -> None:
+    """把读地图类型时截到的帧按顺序存进 logs/map_type/这一次的时间/。
+
+    下一次启动时 initialize 会清空 logs，要看的话先把这个目录拷出去。
+    """
+    directory = sw.config.log_dir / "map_type" / time.strftime("%Y%m%d-%H%M%S")
+    directory.mkdir(parents=True, exist_ok=True)
+    for index, frame in enumerate(frames):
+        cv2.imwrite(str(directory / f"{index:03d}.jpg"), frame)
+    logging.warning(f"没读到路线图类型，读图用的 {len(frames)} 帧存在 {directory}")
 
 
 def _assign_route(sw: Switch) -> None:
@@ -213,11 +235,36 @@ def _read_seed(sw: Switch) -> int:
     return seed
 
 
+def _matching_lair(sw: Switch, seed: int, shown: list[str]) -> Lair:
+    """按 seed 算租借和遭遇，算出来的前 3 只租借要和选宝可梦界面上的 3 只（shown）一样。
+
+    不一样就在开头多取 1 个随机数重算，最多多取 lair_extra_max 个；都对不上抛 RuntimeError。
+    """
+    tried = []
+    for extra in range(sw.config.lair_extra_max + 1):
+        lair = Lair(sw.data, seed, extra)
+        first = lair.candidates()[:3]
+        if first == shown:
+            if extra:
+                logging.warning(
+                    f"seed {seed} 按原来的算法前 3 只租借是 {tried[0]}，界面上是 {shown}；"
+                    f"开头多取 {extra} 个随机数后对上了"
+                )
+            return lair
+        tried.append(first)
+    raise RuntimeError(
+        f"seed {seed} 算出来的前 3 只租借和界面上的 {shown} 对不上，"
+        f"多取 0 到 {sw.config.lair_extra_max} 个随机数依次算出 {tried}"
+    )
+
+
 def _assign_new_starter(sw: Switch) -> None:
     """seed 变了时重新算这一局的候选池和遭遇。"""
     seed = sw.game.seed
     assert seed is not None
-    lair = Lair(sw.data, seed)
+    records = sw.pkhex.read_pk8(sw.config.addresses.starter_candidates)
+    names = [sw.data.name_id(record["species"], record["form"]) for record in records]
+    lair = _matching_lair(sw, seed, names)
     sw.game.rental_pool = lair.candidates()
     rental_pokemon = sw.data.rental_pokemon()
     sw.game.maps = Maps(
@@ -237,8 +284,6 @@ def _assign_new_starter(sw: Switch) -> None:
         current_index=0,
     )
 
-    records = sw.pkhex.read_pk8(sw.config.addresses.starter_candidates)
-    names = [sw.data.name_id(record["species"], record["form"]) for record in records]
     boss_matchups = sw.data.boss_matchups()
     rental_scores = sw.data.rental_scores()
     # 开始时还剩 3 个对手，最后还有 1 个首领；首领权重更大

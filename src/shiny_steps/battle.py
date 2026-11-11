@@ -183,7 +183,7 @@ def _storm(sw: Switch, war: War) -> bool:
 
 
 def _loss(sw: Switch, war: War) -> None:
-    """认到战败（「被风刮到巢穴外了」）：这一场到此结束，倒下次数按已经记下的写进去。"""
+    """认到战败（画面变黑）：这一场到此结束，倒下次数按已经记下的写进去。"""
     logging.info(f"战败，这一场倒下 {war.faints} 次")
     _record_faints(sw, war)
 
@@ -212,8 +212,12 @@ def _marker_shown(sw: Switch, image: ImageChecker, rect: Rect) -> bool:
 
 
 def _battle_state(sw: Switch, image: ImageChecker) -> str:
-    """当前战斗界面是哪个状态：fight、cheer、catch、loss（战败，被风刮到巢穴外）、
+    """当前战斗界面是哪个状态：fight、cheer、catch、loss（战败，画面变黑）、
     storm（有宝可梦倒下）、field（天气、场地变化的提示）；都不是返回 none。"""
+    # 战败后画面会变黑。极巨化动画之后有时也会黑一瞬间，所以紧接着再截一帧，两帧都黑才算
+    if image.is_black() and capture(sw).is_black():
+        save_check(sw, image, "loss")
+        return "loss"
     if image.has_text(sw.config.rects.battle_menu_text, "战斗"):
         return "fight"
     if image.has_text(sw.config.rects.battle_menu_text, "助威"):
@@ -222,14 +226,12 @@ def _battle_state(sw: Switch, image: ImageChecker) -> str:
     if image.has_text(sw.config.rects.battle_line2, "使用精灵球的好机会"):
         save_check(sw, image, "catch", sw.config.rects.battle_line2)
         return "catch"
-    if image.has_text(sw.config.rects.battle_line2, "巢穴外"):
-        save_check(sw, image, "loss", sw.config.rects.battle_line2)
-        return "loss"
     if image.has_text(sw.config.rects.battle_text, "倒下了"):
         save_check(sw, image, "storm", sw.config.rects.battle_text)
         return "storm"
     if Field.change(image.read_text(sw.config.rects.battle_text)) is not None:
         return "field"
+    save_check(sw, image, "none", sw.config.rects.battle_text)
     return "none"
 
 

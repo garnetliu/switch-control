@@ -63,9 +63,11 @@ def new_log(sw: Switch, name: str | None = None) -> None:
 def save_check(sw: Switch, image: ImageChecker, name: str, *rects: Rect) -> None:
     """判定成功时把截图存进 check_dir，判定用的范围画成红框。
 
-    环境变量 SAVE_CHECKS=1 时才存。文件名是「时分秒-毫秒-name」。
+    环境变量 SAVE_CHECKS 写要存的步骤名字，用逗号分开，比如 SAVE_CHECKS=join,battle；
+    现在的步骤（sw.game.step）在里面才存，没设置就都不存。文件名是「时分秒-毫秒-name」。
     """
-    if os.environ.get("SAVE_CHECKS") != "1":
+    steps = [step.strip() for step in os.environ.get("SAVE_CHECKS", "").split(",")]
+    if not sw.game.step or sw.game.step not in steps:
         return
     marked = image.bgr.copy()
     height, width = marked.shape[:2]
