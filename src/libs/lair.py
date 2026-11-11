@@ -7,13 +7,19 @@ from .xoroshiro import Xoroshiro
 class Lair:
     """一局冒险的租借候选和普通遭遇。"""
 
-    def __init__(self, data: GameData, seed: int):
+    def __init__(self, data: GameData, seed: int, extra: int = 0):
+        """extra: 第一次抽数之后多取几个随机数。
+
+        真机上有的 seed 开头会多用掉一个随机数（seed 5106430911447199167，第一次抽数抽到 26），
+        什么情况下会多用还不清楚，所以由调用的地方拿选宝可梦界面的 3 只来对，对不上就加 1 重算。
+        """
         self._data = data
         self._seed = seed
+        self._extra = extra
         self._picked: list[list] | None = None
 
     def candidates(self) -> list[str]:
-        """6 只租借候选，初始界面从里面连续取 3 只。"""
+        """6 只租借候选，选宝可梦的界面显示的是前 3 只。"""
         return [self._data.name_id(row[0], row[1]) for row in self._picks()[:6]]
 
     def encounters(self) -> dict[str, list[str]]:
@@ -70,6 +76,8 @@ class Lair:
 
         if partners > 2:
             rng.draw(27)
+        for _ in range(self._extra):
+            rng.next_u32()
         for _ in range(4):
             pick()
         for threshold in (2, 1, 0):

@@ -150,7 +150,7 @@ class PathCursorCollector:
         if row == 1:
             columns = _FIRST_ROW_COLUMNS
         else:
-            columns = [(rect[0][0], rect[1][0]) for rect in self._sw.config.rects.path_second_row]
+            columns = self._sw.config.rects.path_columns
         if len(columns) != count:
             raise RuntimeError(f"第 {row} 层有 {count} 个节点，但标签搜索区间是 {len(columns)} 列")
         return [((left, _LABEL_TOP), (right, _LABEL_BOTTOM)) for left, right in columns]

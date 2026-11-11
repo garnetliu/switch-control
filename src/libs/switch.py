@@ -89,15 +89,24 @@ class _UsbConnection:
     RECONNECT_TIMEOUT = 30
 
     def __init__(self, timeout: float = 5.0):
-        """找到 usb-botbase 并占用它的接口。找不到抛 ConnectionError。
+        """找到 usb-botbase，先复位一次，再占用它的接口。找不到抛 ConnectionError。
 
-        上次退出时复位过设备的话，要等它重新枚举，这里最多等 5 秒。
+        上一个进程可能是在发命令的中途被停掉的，botbase 还在等剩下的字节，
+        不复位的话第一次写入就会超时。复位后设备会重新枚举，要等它重新出现。
+        只在创建连接时复位一次，运行中断线重连（_reconnect）不走这里。
         """
         self.timeout_ms = int(timeout * 1000)
         self.device = None
         self.out = None
         self.into = None
-        deadline = time.monotonic() + 5
+        # 上次退出时复位过设备的话，要等它重新枚举
+        self._wait_open(5)
+        self.close()
+        self._wait_open(10)
+
+    def _wait_open(self, seconds: float) -> None:
+        """反复尝试 _open，最多等 seconds 秒，超时把最后一次的错误抛出去。"""
+        deadline = time.monotonic() + seconds
         while True:
             try:
                 self._open()

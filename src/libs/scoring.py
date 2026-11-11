@@ -116,7 +116,7 @@ def select_best_move(
     for index, move in enumerate(moves):
         if attacker.pp[index] > 0:
             score = move_score(attacker, index, defender, teammates, field)
-            logging.debug(f"第 {index + 1} 个招式 {move.name()}（得分 {score:.2f}）")
+            # logging.debug(f"第 {index + 1} 个招式 {move.name()}（得分 {score:.2f}）")
             if score > best_score:
                 best_index, best_name_id, best_score = index, move.name_id, score
     return best_index, best_name_id, best_score

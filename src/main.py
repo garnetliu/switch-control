@@ -23,6 +23,8 @@ def main() -> None:
     step = "initialize"
     try:
         while step in steps:
+            # 记下现在是哪一步，save_check 按它决定存不存截图
+            sw.game.step = step
             step = steps[step](sw)
     except Exception as error:
         logging.exception(f"程序出错，步骤 {step}")
