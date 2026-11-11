@@ -51,15 +51,27 @@ def _create_war(sw: Switch) -> War:
 
 
 def _read_team(sw: Switch) -> list[int]:
-    """重新读队伍内存，血量用内存里的当前值和最大值算。返回自己 4 个招式的剩余 PP。"""
+    """重新读队伍内存，算出每只的血量比例。返回自己 4 个招式的剩余 PP。
+
+    当前血量用内存里的值。内存记录里的最大血量不对，改用内存里的等级、个体值、努力值算；
+    数据文件里的个体值是统一写的 15，和游戏里的不一样，不能直接用。
+    """
     records = sw.pkhex.read_pk8(sw.config.addresses.party)
-    sw.game.team = [
-        (
-            sw.data.name_id(record["species"], record["form"]),
-            record["hp"] / record["maxHp"] if record["maxHp"] else 1.0,
+    team = []
+    hps = []
+    for record in records:
+        name = sw.data.name_id(record["species"], record["form"])
+        pokemon = replace(
+            sw.data.pokemon_object(name),
+            level=record["level"],
+            ivs=tuple(record["ivs"]),
+            evs=tuple(record["evs"]),
         )
-        for record in records
-    ]
+        max_hp = pokemon.stats[0]
+        team.append((name, record["hp"] / max_hp if max_hp else 1.0))
+        hps.append(f"{pokemon.name(sw.config.language)} {record['hp']}/{max_hp}")
+    sw.game.team = team
+    logging.info(f"队伍血量: {'，'.join(hps)}")
     sw.game.save()
     own_pp = list(records[0]["pp"])
     logging.info(f"队伍: {sw.game.team}，自己的 PP: {own_pp}")

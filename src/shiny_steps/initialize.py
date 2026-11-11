@@ -25,9 +25,7 @@ def initialize(sw: Switch) -> str:
         "对话框消失",
         button="B",
     )
-    rounds = len(sw.game.lock_results)
-    if rounds and rounds % sw.config.log_cleanup_rounds == 0:
-        _clean_logs(sw)
+    _clean_logs(sw)
     return "join"
 
 
@@ -43,4 +41,4 @@ def _clean_logs(sw: Switch) -> None:
         else:
             path.unlink()
             removed += 1
-    logging.info(f"已经打了 {len(sw.game.lock_results)} 局，清空 logs，删掉 {removed} 个文件")
+    logging.info(f"清空 logs，删掉 {removed} 个文件")

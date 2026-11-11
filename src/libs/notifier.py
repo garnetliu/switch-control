@@ -8,6 +8,7 @@ import json
 import logging
 import mimetypes
 import os
+import threading
 import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
@@ -31,7 +32,14 @@ class Notifier:
         self._warned_missing = False
 
     def send(self, text: str, files: Sequence[str | Path] | None = None) -> None:
-        """发一条消息，files 里的图片作为附件一起发。任何失败只记日志，不抛出。"""
+        """在后台线程里发一条消息，不等发完就返回。files 里的图片作为附件一起发。
+
+        线程不是守护线程：程序要退出时会等它发完（最多等两个网络请求的超时）。
+        """
+        threading.Thread(target=self._send, args=(text, files), name="notifier").start()
+
+    def _send(self, text: str, files: Sequence[str | Path] | None) -> None:
+        """发一条消息，任何失败只记日志，不抛出。"""
         url = self._url
         if not url:
             if not self._warned_missing:

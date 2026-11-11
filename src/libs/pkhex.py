@@ -31,6 +31,9 @@ return Input.GetProperty("records").EnumerateArray()
             pp = new[] { pk.Move1_PP, pk.Move2_PP, pk.Move3_PP, pk.Move4_PP },
             hp = pk.Stat_HPCurrent,
             maxHp = pk.Stat_HPMax,
+            level = pk.CurrentLevel,
+            ivs = new[] { pk.IV_HP, pk.IV_ATK, pk.IV_DEF, pk.IV_SPA, pk.IV_SPD, pk.IV_SPE },
+            evs = new[] { pk.EV_HP, pk.EV_ATK, pk.EV_DEF, pk.EV_SPA, pk.EV_SPD, pk.EV_SPE },
             checksumValid = pk.ChecksumValid,
             encryptionConstant = pk.EncryptionConstant.ToString("X8"),
         };

@@ -34,7 +34,7 @@ def _no_catch(sw: Switch) -> None:
     else:
         _report(sw, -1, "一只都没抓到", lock)
         _back_to_scientist(sw)
-        _press_until_thanks_gone(sw)
+        _press_until_black(sw)
 
 
 def _check_shiny(sw: Switch) -> int:
@@ -115,7 +115,7 @@ def _decide_next_run(sw: Switch, shiny: int) -> None:
     if shiny >= 0:
         _report(sw, shiny, f"带走第 {shiny + 1} 只闪光", lock)
         _take(sw, shiny)
-        _press_until_thanks_gone(sw)
+        _press_until_black(sw)
     elif keep:
         _report(sw, shiny, "不带走，重启游戏保留路线", lock)
         logging.info("重启游戏，keep path")
@@ -123,7 +123,7 @@ def _decide_next_run(sw: Switch, shiny: int) -> None:
     else:
         _report(sw, shiny, "不带走", lock)
         _back_to_scientist(sw)
-        _press_until_thanks_gone(sw)
+        _press_until_black(sw)
 
 
 def _report(sw: Switch, shiny: int, outcome: str, lock: str) -> None:
@@ -265,11 +265,11 @@ def _find_shiny(sw: Switch) -> list[bool]:
     for index, name in enumerate(names):
         image = wait_for(
             sw,
-            lambda screen: bool(screen.read_text(rects.summary_name).strip()),
+            lambda screen: bool(_summary_name(sw, screen)),
             sw.config.timeout,
             f"资料页上第 {index + 1} 只（{name}）的名字",
         )
-        shown = image.read_text(rects.summary_name).strip()
+        shown = _summary_name(sw, image)
         shiny = _is_shiny(sw, image)
         if shiny:
             logging.warning(f"闪光！第 {index + 1} 只 {name}")
@@ -292,16 +292,23 @@ def _find_shiny(sw: Switch) -> list[bool]:
         act_until(
             sw,
             lambda: sw.stick("LEFT", 0, -sw.config.stick_max, sw.config.stick_tick),
-            lambda screen, before=shown: (
-                screen.read_text(rects.summary_name).strip() not in ("", before)
-            ),
+            lambda screen, before=shown: _summary_name(sw, screen) not in ("", before),
             "资料页换到下一只",
         )
     return results
 
 
+def _summary_name(sw: Switch, image: ImageChecker) -> str:
+    """资料页上的名字。
+
+    名字区域比名字宽很多，只有两个字的名字（比如「袋兽」）用 read_text 只识别不检测时读不出来，
+    所以先检测文字位置再识别。
+    """
+    return "".join(text for text, _ in image.text_lines(sw.config.rects.summary_name)).strip()
+
+
 def _back_to_scientist(sw: Switch) -> None:
-    """一直按 B，直到出现「不带宝可梦回去了，你确定吗？」的是 / 否；再一直按 A，直到科学家的「辛苦了。」消失。"""
+    """一直按 B，直到出现「不带宝可梦回去了，你确定吗？」的是 / 否。"""
     press_until(
         sw,
         lambda screen: (
@@ -327,23 +334,10 @@ def _is_shiny(sw: Switch, image: ImageChecker) -> bool:
     return sw.config.shiny_min < value <= sw.config.shiny_max
 
 
-def _press_until_thanks_gone(sw: Switch) -> None:
-    """一直按 A，先等科学家的结束语出来，再按到它消失。
+def _press_until_black(sw: Switch) -> None:
+    """一直按 A，画面变黑就停。
 
-    带走和不带走之后都是：报酬页面 → 转场黑屏 → 回到科学家面前说结束语。
-    打赢了说「辛苦了。」，打输了说「真是太遗憾了」。
+    带走和不带走之后都是：报酬页面 → 转场黑屏 → 回到科学家面前。黑屏之后科学家说什么不固定
+    （打赢了有时还会写下位置记录），这里不再等结束语，后面的对话交给 initialize。
     """
-    farewells = ("辛苦了", "真是太遗憾了")
-    press_until(
-        sw,
-        lambda screen: any(screen.has_text(sw.config.rects.dialog, text) for text in farewells),
-        "科学家的「辛苦了。」或「真是太遗憾了」",
-        timeout=sw.config.timeout * 2,
-    )
-    press_until(
-        sw,
-        lambda screen: not any(
-            screen.has_text(sw.config.rects.dialog, text) for text in farewells
-        ),
-        "科学家的结束语消失",
-    )
+    press_until(sw, lambda screen: screen.is_black(), "转场黑屏", timeout=sw.config.timeout * 2)
