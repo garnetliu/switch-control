@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 
 from libs import ImageChecker, Switch
-from tools.log import save_check
+from tools.save_image import save_check
 
 
 def capture(sw: Switch) -> ImageChecker:

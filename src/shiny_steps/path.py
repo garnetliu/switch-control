@@ -3,9 +3,25 @@
 import logging
 
 from libs import ImageChecker, PathCursorCollector, Switch
-from tools import act_until, next_columns, press_until, rental_boss_score, wait_for
+from tools import (
+    act_until,
+    keep_image,
+    next_columns,
+    press_until,
+    rental_boss_score,
+    wait_for,
+)
 from tools.text import contains
 from type import Rect
+
+# 每个分支在底部文字里要认的关键词
+_KEYWORDS = {
+    "battle": "出现了",
+    "backpacker": "遇到了背包客",
+    "scientist": "遇到了研究员",
+    "berry": "树果",
+    "fork": "要走哪条路",
+}
 
 
 def path(sw: Switch) -> str:
@@ -26,6 +42,7 @@ def path(sw: Switch) -> str:
         )
         state = _match_state(sw, image, states)
         assert state is not None
+        keep_image(sw, image, f"路线上的界面-{_KEYWORDS[state]}")
 
         if state == "battle":
             # 战斗
@@ -49,29 +66,30 @@ def path(sw: Switch) -> str:
 
 
 def _match_state(sw: Switch, image: ImageChecker, states: tuple[str, ...]) -> str | None:
-    """底部文字只识别一次，再按 states 的顺序和关键词比较。"""
-    keywords = {
-        "battle": "出现了",
-        "backpacker": "遇到了背包客",
-        "scientist": "遇到了研究员",
-        "berry": "树果",
-        "fork": "要走哪条路",
-    }
-    found = image.read_text(sw.config.rects.path_text)
-    return next(
-        (state for state in states if contains(found, keywords[state])),
-        None,
-    )
+    """先读黑色中间面板的第一行，按 states 的顺序比背包客、研究员、树果、岔路口的关键词；
+    都没有，再读黑色占满面板的第一行，看是不是「×××出现了」。
+    """
+    rects = sw.config.rects
+    found = image.read_text(rects.black_center_line1)
+    for state in [s for s in states if s != "battle"]:
+        if contains(found, _KEYWORDS[state]):
+            return state
+    if "battle" in states and contains(
+        image.read_text(rects.black_full_line1), _KEYWORDS["battle"]
+    ):
+        return "battle"
+    return None
 
 
 def _handle_berry(sw: Switch) -> None:
     """按 A 推进树果对话，直到文字框里不再有「树果」。"""
-    press_until(
+    image = press_until(
         sw,
-        lambda screen: not screen.has_text(sw.config.rects.path_text, "树果"),
+        lambda screen: not screen.has_text(sw.config.rects.black_center_line1, "树果"),
         "树果的对话结束",
         timeout=sw.config.timeout,
     )
+    keep_image(sw, image, "树果的对话结束")
 
 
 def _handle_fork(sw: Switch) -> None:
@@ -109,6 +127,7 @@ def _move_fork_cursor(sw: Switch, cursors: dict[int, Rect], column: int) -> None
         sw.config.timeout,
         "岔路口光标",
     )
+    keep_image(sw, image, "岔路口光标")
     start = _path_cursor_index(sw, image, rects)
     for _ in range(len(rects)):
         current = _path_cursor_index(sw, image, rects)
@@ -126,6 +145,7 @@ def _move_fork_cursor(sw: Switch, cursors: dict[int, Rect], column: int) -> None
             ),
             "岔路口光标移动",
         )
+        keep_image(sw, image, "岔路口光标移动")
     raise RuntimeError(f"岔路口光标移了 {len(rects)} 次，还是没到第 {column + 1} 列")
 
 
@@ -148,15 +168,17 @@ def _handle_backpacker(sw: Switch) -> None:
         sw.config.timeout,
         "背包客的道具面板",
     )
+    keep_image(sw, image, "背包客的道具面板")
     items = [image.read_text(rect).strip() for rect in sw.config.rects.backpacker_items]
     logging.info(f"背包客的道具: {items}")
     sw.click("A", 0)
-    wait_for(
+    image = wait_for(
         sw,
         lambda screen: not _backpacker_shown(sw, screen),
         sw.config.timeout,
         "背包客的道具面板消失",
     )
+    keep_image(sw, image, "背包客的道具面板消失")
 
 
 def _handle_scientist(sw: Switch) -> None:
@@ -180,19 +202,21 @@ def _handle_scientist(sw: Switch) -> None:
         f"研究员：平均分 {average:.2f}，{own} 的分数 {own_score:.2f}，{'换' if take else '不换'}"
     )
 
-    wait_for(
+    image = wait_for(
         sw,
-        lambda screen: screen.has_text(sw.config.rects.path_text, "希望交换成"),
+        lambda screen: screen.has_text(sw.config.rects.black_center_line1, "希望交换成"),
         sw.config.timeout,
         "研究员问换不换",
     )
+    keep_image(sw, image, "研究员问换不换")
     sw.click("A" if take else "B", 0)
-    wait_for(
+    image = wait_for(
         sw,
-        lambda screen: not screen.has_text(sw.config.rects.path_text, "希望交换成"),
+        lambda screen: not screen.has_text(sw.config.rects.black_center_line1, "希望交换成"),
         sw.config.timeout,
         "研究员问话消失",
     )
+    keep_image(sw, image, "研究员问话消失")
 
 
 def _backpacker_shown(sw: Switch, image: ImageChecker) -> bool:

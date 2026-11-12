@@ -5,6 +5,8 @@
 采样时用属性标签定位每一列：seed 里每个节点的遭遇宝可梦决定了这一列可能出现的属性。
 光标是标签附近的白色箭头，有的列在标签左下、有的在右下，所以光标停在这一列时找出箭头本身，
 用它的外框加上边距作为这一列的坐标。
+
+每到岔路口还顺手收集属性图标：这一层可能出现的属性里有还没换成真机抠图的，就从截图上抠下来存好。
 """
 
 import logging
@@ -27,34 +29,36 @@ _FIRST_ROW_COLUMNS = ((0.28, 0.45), (0.67, 0.84))
 # 岔路口找属性标签的纵向范围，和旧流程的 FORK_LABEL_RECT 一致，避开底部文字框
 _LABEL_TOP = 0.05
 _LABEL_BOTTOM = 0.80
+# 下面带「比例」的长度都是占画面高度的比例，横向的也按高度算，用的时候乘上这张图的高度。
+# 括号里是 1080 行的画面上量到的像素数。
 # 找光标箭头的范围，相对属性图标左上角（x, y）的偏移。真机上箭头在图标左下或右下，
-# 外框约 64×64，离图标左上角横向 -90 到 +150、纵向 +85 到 +160 像素
-_SEARCH_LEFT = -200
-_SEARCH_TOP = 40
-_SEARCH_RIGHT = 250
-_SEARCH_BOTTOM = 230
-# 箭头至少有这么多白色像素，小的白点不算；宽、高都不超过这么多像素，大块的白色不是箭头
-_ARROW_MIN_PIXELS = 500
-_ARROW_MAX_SIZE = 110
-# 左侧白色的队伍面板右边缘，找箭头时不看这左边的部分（面板和里面的对话气泡都是白色）
-_PANEL_RIGHT = 260
-# 箭头会上下晃动，外框四周再放这么多像素
-_ARROW_MARGIN = 20
+# 离图标左上角横向 -90 到 +150、纵向 +85 到 +160 像素，外框约 64×64 像素
+_SEARCH_LEFT = -0.185  # -200
+_SEARCH_TOP = 0.037  # 40
+_SEARCH_RIGHT = 0.231  # 250
+_SEARCH_BOTTOM = 0.213  # 230
+# 箭头的白色面积至少是画面高度平方的这么多（500 像素），小的白点不算；
+# 宽、高都不超过这么多（110 像素），大块的白色不是箭头
+_ARROW_MIN_AREA = 0.00043
+_ARROW_MAX_SIZE = 0.102
+# 左侧白色的队伍面板右边缘，占画面宽度的比例（260 像素）。找箭头时不看这左边的部分
+# （面板和里面的对话气泡都是白色）
+_PANEL_RIGHT = 0.135
+# 箭头会上下晃动，外框四周再放这么多（20 像素）
+_ARROW_MARGIN = 0.0185
 # 还没采样的列
 _MISSING: Rect = ((0, 0), (0, 0))
-# 截图统一缩放到这个尺寸，偏移量按它量出来
-_SCREEN_WIDTH = 1920
-_SCREEN_HEIGHT = 1080
-# 同一个图标被几个属性模板匹配上时，这个像素距离内只留分数最高的
-_HIT_DISTANCE = 40
-# 镜头稳定：连续两帧标签位置相差不超过这么多像素
-_STABLE_PIXELS = 4
+# 同一个图标被几个属性模板匹配上时，这个距离内只留分数最高的（40 像素）
+_HIT_DISTANCE = 0.037
+# 镜头稳定：连续两帧标签位置相差不超过这么多（4 像素）
+_STABLE = 0.0037
 # 开始采样前先等这么久，排除切界面瞬间的坏帧
 _SETTLE_TIMEOUT = 1.5
 # 推一次摇杆后等列号变化的最长时间，没变化就当作输入被吞，重推
 _MOVE_TIMEOUT = 1.5
-# 截图目录，和 logs/catches 同级
-_LOG_DIRECTORY = "path_cursors"
+# 收集属性图标：最多等这么久认出稳定的一帧；匹配度至少这么高才抠，免得把认错的存下来
+_COLLECT_TIMEOUT = 3.0
+_COLLECT_SCORE = 0.85
 
 
 class _Hit(NamedTuple):
@@ -88,7 +92,7 @@ class PathCursorCollector:
         self._first: ImageChecker | None = None
         self._last: ImageChecker | None = None
         self._failed = False
-        self._directory = sw.config.log_dir / _LOG_DIRECTORY
+        self._directory = sw.config.keep_dir
         self._map_type = ""
         self._row = 0
         self._allowed: list[set[str]] = []
@@ -107,12 +111,13 @@ class PathCursorCollector:
         nodes = maps["rows"].get(str(row), [])
         if not nodes:
             raise RuntimeError(f"seed 里没有第 {row} 层的节点")
+        self._map_type, self._row = map_type, row
+        self._allowed = self._allowed_types(nodes)
+        self._bands = self._column_bands(row, len(nodes))
+        self._collect_icons()
         known = list(self._sw.config.rects.path_cursors[map_type][start])
         missing = tuple(column for column, rect in zip(columns, known) if rect == _MISSING)
         if missing:
-            self._map_type, self._row = map_type, row
-            self._allowed = self._allowed_types(nodes)
-            self._bands = self._column_bands(row, len(nodes))
             logging.info(
                 f"岔路口 {map_type} 从 {start} 出发，第 {row} 层第 {[c + 1 for c in missing]} 列"
                 "的光标坐标还没收集，开始采样"
@@ -131,6 +136,48 @@ class PathCursorCollector:
             self._save_source()
             logging.info(f"岔路口 {map_type} 从 {start} 出发的光标坐标: {tuple(known)}")
         return tuple(known)
+
+    def _collect_icons(self) -> None:
+        """这一层可能出现的属性里还有没换成真机抠图的，就趁岔路口画面静止时从截图上抠下来。
+
+        认不出稳定的一帧就算了，下次到岔路口再收集，不影响后面移动光标。
+        """
+        data = self._sw.data
+        wanted = set().union(*self._allowed) - data.collected_type_icons()
+        if not wanted:
+            return
+        frame = self._steady_frame(_COLLECT_TIMEOUT)
+        if frame is None:
+            logging.info(f"岔路口没认出稳定的一帧，这次不收集属性图标（还缺 {sorted(wanted)}）")
+            return
+        for hit in frame.hits:
+            if hit.type_id not in wanted or hit.score < _COLLECT_SCORE:
+                continue
+            height, width = self._icons[hit.type_id].shape[:2]
+            area = frame.image.bgr[hit.y : hit.y + height, hit.x : hit.x + width]
+            icon = cv2.inRange(
+                cv2.cvtColor(area, cv2.COLOR_BGR2HSV),
+                self._sw.config.label_icon_lower,
+                self._sw.config.label_icon_upper,
+            )
+            data.save_type_icon(hit.type_id, icon)
+            wanted.discard(hit.type_id)
+            logging.info(
+                f"收集到 {hit.type_id} 的属性图标（匹配度 {hit.score:.3f}），"
+                f"已有 {len(data.collected_type_icons())}/{len(self._icons)}"
+            )
+
+    def _steady_frame(self, timeout: float) -> _Frame | None:
+        """在 timeout 秒里等连续两帧的标签类型和位置都一致，返回后一帧；等不到返回 None。"""
+        deadline = time.monotonic() + timeout
+        previous = None
+        while time.monotonic() < deadline:
+            frame = self._read_frame(self._capture())
+            if frame is not None and previous is not None and _same(previous, frame):
+                return frame
+            previous = frame
+            time.sleep(self._sw.config.interval)
+        return None
 
     def _allowed_types(self, nodes: list) -> list[set[str]]:
         """每列可能出现的属性。双属性宝可梦在地图上显示哪个属性不确定，所以用集合。"""
@@ -264,11 +311,10 @@ class PathCursorCollector:
                 (float(result[y, x]), x0 + int(x), y0 + int(y), type_id) for y, x in zip(ys, xs)
             )
         # 同一位置被几个属性模板匹配上时只留分数最高的
+        distance = _HIT_DISTANCE * height
         hits: list[_Hit] = []
         for score, x, y, type_id in sorted(candidates, reverse=True):
-            if any(
-                abs(x - hit.x) <= _HIT_DISTANCE and abs(y - hit.y) <= _HIT_DISTANCE for hit in hits
-            ):
+            if any(abs(x - hit.x) <= distance and abs(y - hit.y) <= distance for hit in hits):
                 continue
             hits.append(_Hit(type_id, score, x, y, self._white(image, x, y)))
         return hits
@@ -278,8 +324,9 @@ class PathCursorCollector:
         arrow = self._arrow(image, x, y)
         if arrow is None:
             return 0.0
-        (left, top), (right, bottom) = _search_region(x, y)
-        area = (right - left) * _SCREEN_WIDTH * (bottom - top) * _SCREEN_HEIGHT
+        height, width = image.bgr.shape[:2]
+        (left, top), (right, bottom) = _search_region(x, y, width, height)
+        area = (right - left) * width * (bottom - top) * height
         return float(arrow[4]) / area
 
     def _cursor_rect(self, image: ImageChecker, hit: _Hit) -> Rect | None:
@@ -288,16 +335,21 @@ class PathCursorCollector:
         if arrow is None:
             return None
         left, top, width, height, _ = arrow
+        screen_height, screen_width = image.bgr.shape[:2]
+        margin = round(_ARROW_MARGIN * screen_height)
         return _pixel_rect(
-            left - _ARROW_MARGIN,
-            top - _ARROW_MARGIN,
-            left + width + _ARROW_MARGIN,
-            top + height + _ARROW_MARGIN,
+            left - margin,
+            top - margin,
+            left + width + margin,
+            top + height + margin,
+            screen_width,
+            screen_height,
         )
 
     def _arrow(self, image: ImageChecker, x: int, y: int) -> tuple[int, int, int, int, int] | None:
         """属性图标附近箭头大小的白块里面积最大的一块：(左, 上, 宽, 高, 面积)，像素坐标。"""
-        region = _search_region(x, y)
+        screen_height, screen_width = image.bgr.shape[:2]
+        region = _search_region(x, y, screen_width, screen_height)
         mask = cv2.inRange(
             image.crop(region, "hsv"),
             self._sw.config.cursor_white_lower,
@@ -307,15 +359,15 @@ class PathCursorCollector:
         blobs = [
             stats[i]
             for i in range(1, count)
-            if stats[i][4] >= _ARROW_MIN_PIXELS
-            and stats[i][2] <= _ARROW_MAX_SIZE
-            and stats[i][3] <= _ARROW_MAX_SIZE
+            if stats[i][4] >= _ARROW_MIN_AREA * screen_height**2
+            and stats[i][2] <= _ARROW_MAX_SIZE * screen_height
+            and stats[i][3] <= _ARROW_MAX_SIZE * screen_height
         ]
         if not blobs:
             return None
         left, top, width, height, area = (int(v) for v in max(blobs, key=lambda blob: blob[4]))
-        x0 = round(region[0][0] * _SCREEN_WIDTH)
-        y0 = round(region[0][1] * _SCREEN_HEIGHT)
+        x0 = round(region[0][0] * screen_width)
+        y0 = round(region[0][1] * screen_height)
         return x0 + left, y0 + top, width, height, area
 
     def _capture(self) -> ImageChecker:
@@ -426,24 +478,23 @@ class PathCursorCollector:
         return lines
 
 
-def _search_region(x: int, y: int) -> Rect:
-    """属性图标左上角附近找光标箭头的范围，比例坐标。左边不超过队伍面板。"""
+def _search_region(x: int, y: int, width: int, height: int) -> Rect:
+    """属性图标左上角附近找光标箭头的范围，比例坐标。左边不超过队伍面板。width、height 是截图的大小。"""
     return _pixel_rect(
-        max(x + _SEARCH_LEFT, _PANEL_RIGHT), y + _SEARCH_TOP, x + _SEARCH_RIGHT, y + _SEARCH_BOTTOM
+        max(x + round(_SEARCH_LEFT * height), round(_PANEL_RIGHT * width)),
+        y + round(_SEARCH_TOP * height),
+        x + round(_SEARCH_RIGHT * height),
+        y + round(_SEARCH_BOTTOM * height),
+        width,
+        height,
     )
 
 
-def _pixel_rect(left: int, top: int, right: int, bottom: int) -> Rect:
-    """像素坐标转成比例坐标，超出画面的部分截掉，保留 4 位小数。"""
+def _pixel_rect(left: int, top: int, right: int, bottom: int, width: int, height: int) -> Rect:
+    """像素坐标转成比例坐标，超出画面的部分截掉，保留 4 位小数。width、height 是截图的大小。"""
     return (
-        (
-            round(max(left, 0) / _SCREEN_WIDTH, 4),
-            round(max(top, 0) / _SCREEN_HEIGHT, 4),
-        ),
-        (
-            round(min(right, _SCREEN_WIDTH) / _SCREEN_WIDTH, 4),
-            round(min(bottom, _SCREEN_HEIGHT) / _SCREEN_HEIGHT, 4),
-        ),
+        (round(max(left, 0) / width, 4), round(max(top, 0) / height, 4)),
+        (round(min(right, width) / width, 4), round(min(bottom, height) / height, 4)),
     )
 
 
@@ -451,9 +502,10 @@ def _same(first: _Frame, second: _Frame) -> bool:
     """两帧的标签类型顺序和位置都几乎一样。"""
     if first.index != second.index or len(first.hits) != len(second.hits):
         return False
+    stable = max(round(_STABLE * second.image.bgr.shape[0]), 1)
     return all(
         before.type_id == after.type_id
-        and abs(before.x - after.x) <= _STABLE_PIXELS
-        and abs(before.y - after.y) <= _STABLE_PIXELS
+        and abs(before.x - after.x) <= stable
+        and abs(before.y - after.y) <= stable
         for before, after in zip(first.hits, second.hits)
     )

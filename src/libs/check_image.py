@@ -1,7 +1,8 @@
 """检查截图内容。
 
 区域用比例坐标 ((左, 上), (右, 下))，数值是占图片宽高的比例，和分辨率无关。
-截图会先去掉黑边、缩放到 1920x1080，再按比例裁剪，见 docs/实测-分辨率定位.md。
+截图保持原始大小，不去黑边、不缩放，直接按比例裁剪。
+要用像素数的地方（图标匹配、连通区域大小）都写成占画面高度的比例，用的时候再乘上这张图的高度。
 颜色用 OpenCV 的 HSV：H 取 0 到 180，S、V 取 0 到 255。
 """
 
@@ -28,24 +29,17 @@ def _shared_ocr() -> RapidOCR:
 
 
 class ImageChecker:
-    """对一张截图做各种检查。截图只解码和缩放一次，同一张图的多次检查共用。"""
+    """对一张截图做各种检查。截图只解码一次，同一张图的多次检查共用。"""
 
     def __init__(self, image: bytes):
         """image: 截图的 JPEG 或 PNG 字节。解码失败会抛 ValueError。"""
         self._ocr = _shared_ocr()
-        base_size = (1920, 1080)
-        # 行或列的平均亮度不超过这个值，当作黑边
-        black_bar = 8
+        # Switch 的截图本身没有黑边，不去黑边：整屏很暗的画面（比如战败时黑屏上只有一条对话框）
+        # 去黑边会把画面内容裁掉，按比例找的范围就全错位了
         img = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
         if img is None:
             raise ValueError("无法解码图片")
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        rows = np.flatnonzero(gray.mean(axis=1) > black_bar)
-        cols = np.flatnonzero(gray.mean(axis=0) > black_bar)
-        if rows.size and cols.size:
-            img = img[rows[0] : rows[-1] + 1, cols[0] : cols[-1] + 1]
-        interpolation = cv2.INTER_AREA if img.shape[1] > base_size[0] else cv2.INTER_CUBIC
-        self._bgr = cv2.resize(img, base_size, interpolation=interpolation)
+        self._bgr = img
         self._hsv = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2HSV)
         self._gray = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2GRAY)
         # 在这张图上检查过的区域，判定成功时画进截图里，见 tools.log.save_check
@@ -53,11 +47,11 @@ class ImageChecker:
 
     @property
     def bgr(self) -> np.ndarray:
-        """去黑边、缩放到 1920x1080 之后的彩色图（BGR）。"""
+        """截图的彩色图（BGR），原始大小。"""
         return self._bgr
 
     def save(self, path: str) -> None:
-        """把截图（去黑边、缩放到 1920x1080 之后的）存成图片文件，格式按扩展名。"""
+        """把截图存成图片文件，格式按扩展名。"""
         cv2.imwrite(path, self.bgr)
 
     def crop(self, rect: Rect, channel: str = "bgr") -> np.ndarray:
@@ -134,8 +128,10 @@ class ImageChecker:
             (0, 0, 220),
             (180, 30, 255),
         )
-        # 文字是深色的，会把白底分开；闭运算把文字的空洞填掉，留下整块菜单
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8))
+        # 文字是深色的，会把白底分开；闭运算把文字的空洞填掉，留下整块菜单。
+        # 闭运算的大小是画面高度的 0.023（1080 行的画面上是 25 像素）
+        size = max(round(height * 0.023), 3)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((size, size), np.uint8))
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             return None
