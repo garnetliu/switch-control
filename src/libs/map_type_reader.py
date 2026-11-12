@@ -13,7 +13,7 @@ class MapTypeReader:
 
     镜头移动很快，一帧识别得越久截到的帧越少，所以分两步找：
     先只在最左一列找标签，上下找满整个画面；找到了，再以它的高度为准，
-    在上下各 label_drop 像素的一条里找另外三列。四列都是第 2 层的才算数，只看这一帧，不跨帧累计。
+    在往上 label_rise、往下 label_drop（占画面高度的比例）的一条里找另外三列。四列都是第 2 层的才算数，只看这一帧，不跨帧累计。
     seed 里第 2、3 层每列有哪些属性是已知的，用它逐个判断标签属于第几层。
     """
 
@@ -23,7 +23,7 @@ class MapTypeReader:
     def __init__(self, sw: Switch):
         self._sw = sw
         self._icons = sw.data.type_icons()
-        self._icon_height = max(icon.shape[0] for icon in self._icons.values())
+        self._icon_height = max(int(icon.shape[0]) for icon in self._icons.values())
         self._allowed: dict[int, list[set[str]]] = {2: [], 3: []}
         if sw.game.maps is not None:
             rentals = sw.data.rental_pokemon()
@@ -38,10 +38,13 @@ class MapTypeReader:
         config = self._sw.config
         height = image.bgr.shape[0]
         columns = config.rects.path_columns
-        first: Rect = ((columns[0][0], 0.0), (columns[0][1], 1.0))
+        rise = round(config.label_rise * height)
+        drop = round(config.label_drop * height)
+        left, right = config.rects.path_first_column
+        first: Rect = ((left, 0.0), (right, 1.0))
         for type_id, y in self._find_labels(image, first):
-            top = max(y - config.label_drop, 0)
-            bottom = min(y + config.label_drop + self._icon_height, height)
+            top = max(y - rise, 0)
+            bottom = min(y + drop + self._icon_height, height)
             labels = [(0, type_id, y)]
             strips: list[Rect] = []
             for col, (left, right) in enumerate(columns[1:], start=1):
@@ -55,7 +58,7 @@ class MapTypeReader:
                 continue
             self.rects = (first, *strips)
             ys = [y for _, y in second.values()]
-            spread = max(ys) - min(ys)
+            spread = (max(ys) - min(ys)) / height
             closest = min(config.path_types, key=lambda standard: abs(standard - spread))
             return config.path_types[closest]
         return None

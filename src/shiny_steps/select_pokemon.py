@@ -3,6 +3,7 @@
 import logging
 import time
 import unicodedata
+from pathlib import Path
 
 from libs import ImageChecker, Switch
 from tools import act_until, capture, move_menu_option, press_until, restart, save_check, wait_for
@@ -93,9 +94,9 @@ def _save_list_screenshots(sw: Switch, results: list[bool]) -> None:
             _move_list_cursor(sw, index + 1)
 
 
-def _save_screenshot(sw: Switch, image: ImageChecker, kind: str, shiny: bool) -> None:
-    """存一张战果截图：闪光的存进 catch_dir，文件名带 shiny-，Switch 自己也截一张存进相册；
-    不是闪光的存进 result_dir。kind 是 summary（资料页）或 list（带走列表）。
+def _save_screenshot(sw: Switch, image: ImageChecker, kind: str, shiny: bool) -> Path:
+    """存一张战果截图，返回存下的文件：闪光的存进 catch_dir，文件名带 shiny-，Switch 自己也截一张
+    存进相册；不是闪光的存进 result_dir。kind 是 summary（资料页）或 list（带走列表）。
     """
     directory = sw.config.catch_dir if shiny else sw.config.result_dir
     directory.mkdir(parents=True, exist_ok=True)
@@ -105,6 +106,7 @@ def _save_screenshot(sw: Switch, image: ImageChecker, kind: str, shiny: bool) ->
     logging.info(f"战果截图: {path}")
     if shiny:
         sw.click("CAPTURE", 0)
+    return path
 
 
 def _decide_next_run(sw: Switch, shiny: int, values: list[float]) -> None:
@@ -133,12 +135,12 @@ def _decide_next_run(sw: Switch, shiny: int, values: list[float]) -> None:
 def _report(sw: Switch, shiny: int, values: list[float], outcome: str, lock: str) -> None:
     """把这一局的战报写进日志并推送，附上这一局存下的战果截图。格式：
 
-    第 N 轮战报：胜/负，倒下 X 次，Y 分钟，抓到 n/4（N 是 lock_results 里记录的局数）
-    路线：A（属性） → B（属性） → C（属性）
-    路线得分：S
-    首发：名字（第 k 位）
-    逐关：每一关抓到、团灭还是没抓，对手和属性，这一关倒下几次；团灭之后的关卡不写
-    闪光（逐只）：每只是闪光还是非闪、闪光框的占比和阈值、名字
+    第 N 轮战报：（N 是 lock_results 里记录的局数）
+    胜/负，倒下 X 次，Y 分钟，抓到 n/4
+    路线：A → B → C
+    得分：S，首发 名字（第 k 位）
+    逐关：每一关抓到、团灭还是没抓，对手和属性；团灭之后的关卡不写。下面各另起一行，和「抓到」对齐：
+    抓到的写是闪光还是非闪、闪光框的占比和阈值；这一关有倒下的写倒下几次
     处理：这一局结束时怎么处理抓到的宝可梦
     锁定：这张图锁定的情况，锁定以来的局数和总胜率、继续锁定还是解锁
     """
@@ -155,7 +157,8 @@ def _report(sw: Switch, shiny: int, values: list[float], outcome: str, lock: str
     won = game.num_caught == 4
     minutes: float = (time.time() - game.started) / 60
     lines = [
-        f"第 {len(game.lock_results)} 轮战报：{'胜' if won else '负'}，倒下 {4 - game.lives} 次，{minutes:.1f} 分钟，抓到 {game.num_caught}/4"
+        f"第 {len(game.lock_results)} 轮战报：",
+        f"{'胜' if won else '负'}，倒下 {4 - game.lives} 次，{minutes:.1f} 分钟，抓到 {game.num_caught}/4",
     ]
     nodes: list[str] = []
     if maps is not None and maps["route"]:
@@ -163,16 +166,15 @@ def _report(sw: Switch, shiny: int, values: list[float], outcome: str, lock: str
     starter = "?"
     if game.lock_pokemon_index is not None and game.lock_pokemon_index < len(game.candidates):
         starter = f"{name(game.candidates[game.lock_pokemon_index])}（第 {game.lock_pokemon_index + 1} 位）"
-    route = " → ".join(f"{name(node)}（{types(node)}）" for node in nodes) or "?"
+    route = " → ".join(name(node) for node in nodes) or "?"
     lines.append(f"路线：{route}")
-    lines.append(f"路线得分：{game.route_score:.3f}")
-    lines.append(f"首发：{starter}")
+    lines.append(f"得分：{game.route_score:.3f}，首发 {starter}")
 
     lines.append("逐关：")
     stages = []
     opponents: list[str] = [*nodes, game.boss]
     for index, opponent in enumerate(opponents):
-        label = "首领" if index == len(nodes) else f"第{index + 1}关"
+        label = "首\u3000领" if index == len(nodes) else f"第{'一二三'[index]}关"
         if index < game.num_caught:
             result = "抓到"
         elif game.lives == 0:
@@ -180,21 +182,23 @@ def _report(sw: Switch, shiny: int, values: list[float], outcome: str, lock: str
         else:
             result = "没抓"
         result += f" {name(opponent)}（{types(opponent)}）"
-        if index < len(game.faints) and game.faints[index]:
-            result += f"·倒下 {game.faints[index]} 次"
-        stages.append((label, result))
+        faints = game.faints[index] if index < len(game.faints) else 0
+        stages.append((label, result, faints))
         # 团灭之后的关卡没有打，不写
         if result.startswith("团灭"):
             break
-    label_width = max(_display_width(label) for label, _ in stages) + 1
-    for label, result in stages:
+    label_width = max(_display_width(label) for label, _, _ in stages) + 1
+    for index, (label, result, faints) in enumerate(stages):
         lines.append(f"  {_pad(label, label_width)}{result}")
+        # 闪光判定和倒下次数各另起一行，和上一行的「抓到」对齐；values 按抓到的顺序，和关卡一一对应
+        if index < len(values):
+            kind = "闪光" if _is_shiny(sw, values[index]) else "非闪"
+            lines.append(
+                f"  {_pad('', label_width)}{kind}（{values[index]:05.2f} / 阈值 {sw.config.shiny_min}）"
+            )
+        if faints:
+            lines.append(f"  {_pad('', label_width)}倒下 {faints} 次")
 
-    if values:
-        lines.append("闪光（逐只）：")
-        for name_id, value in zip(game.caught, values, strict=False):
-            kind = "闪光" if _is_shiny(sw, value) else "非闪"
-            lines.append(f"  {kind}（{value:.2f} / 阈值 {sw.config.shiny_min}） {name(name_id)}")
     lines.append(f"处理：{outcome}")
     lines.append(f"锁定：{lock}")
 
@@ -288,7 +292,8 @@ def _find_shiny(sw: Switch) -> list[float]:
                 sw.config.timeout,
                 "资料页右边的宝可梦",
             )
-            _save_screenshot(sw, image, "summary", True)
+            path = _save_screenshot(sw, image, "summary", True)
+            sw.notifier.send_everyone(f"闪光！第 {index + 1} 只 {name}", files=[path])
         else:
             logging.info(f"第 {index + 1} 只「{name}」不是闪光")
         results.append(value)
@@ -317,7 +322,7 @@ def _back_to_scientist(sw: Switch) -> None:
     press_until(
         sw,
         lambda screen: (
-            screen.has_text(sw.config.rects.dialog, "不带宝可梦回去")
+            screen.has_text(sw.config.rects.white_center_line1, "不带宝可梦回去")
             and screen.selected(list(sw.config.rects.yes_no)) >= 0
         ),
         "不带走的确认",

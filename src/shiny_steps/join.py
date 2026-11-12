@@ -7,6 +7,7 @@ from libs import Lair, MapTypeReader, Switch
 from tools import (
     act_until,
     capture,
+    keep_image,
     menu_last_item,
     move_menu_option,
     next_columns,
@@ -121,7 +122,7 @@ def _assign_new_path(sw: Switch) -> None:
     frames = []
     while True:
         image = capture(sw)
-        if image.has_text(sw.config.rects.den_text, "要走哪条路"):
+        if image.has_text(sw.config.rects.black_center_line1, "要走哪条路"):
             frames.append(image.bgr)
             break
         if sw.game.maps is not None and sw.game.maps["type"] is None:
@@ -130,6 +131,7 @@ def _assign_new_path(sw: Switch) -> None:
             if map_type is not None:
                 # 读出类型的这一帧存下来，红框是实际找标签的范围：最左一列和另外三列的窄条
                 save_check(sw, image, f"地图类型 {map_type}", *reader.rects)
+                keep_image(sw, image, f"地图类型-{map_type}")
                 sw.game.maps["type"] = map_type
                 _assign_route(sw)
                 sw.game.save()

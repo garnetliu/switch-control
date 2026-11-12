@@ -17,7 +17,9 @@ def menu_last_item(
     """
     if area is None:
         area = sw.config.rects.menu_search
-    if area == sw.config.rects.menu_search and not screen.read_text(sw.config.rects.dialog):
+    if area == sw.config.rects.menu_search and not screen.read_text(
+        sw.config.rects.white_center_line1
+    ):
         return ""
     found = screen.find_menu(area)
     if found is None:

@@ -162,16 +162,14 @@ def _should_swap(sw: Switch, caught_name: str) -> bool:
 
 
 def _apply_swap(sw: Switch, caught_name: str, take: bool) -> None:
-    """选换或不换，等结果出来。队伍在 path 里重新读。"""
+    """选换或不换，等画面变黑。队伍在 path 里重新读。"""
     own_name = sw.game.team[0][0]
 
     logging.info(f"决定{'换成 ' + caught_name if take else '不换，继续用 ' + own_name}")
-    # 换按 A，不换按 B，一直按到下面出现换或者不换的结果文字
-    image = act_until(
+    # 换按 A，不换按 B，一直按到画面变黑
+    act_until(
         sw,
         lambda: sw.click("A" if take else "B", 0),
-        lambda screen: bool(screen.read_text(sw.config.rects.swap_result).strip()),
-        "换不换的结果",
+        lambda screen: screen.is_black(),
+        "换不换之后的黑屏",
     )
-    result = image.read_text(sw.config.rects.swap_result).strip()
-    logging.info(f"结果: {result}")

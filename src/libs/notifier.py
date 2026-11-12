@@ -9,6 +9,7 @@ import logging
 import mimetypes
 import os
 import threading
+import time
 import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
@@ -21,6 +22,9 @@ class Notifier:
     MAX_LENGTH = 2000
     MAX_FILES = 10
     TRUNCATED = "…（已截断）"
+    # 发不出去时最多发几次，每两次之间等几秒
+    RETRIES = 10
+    RETRY_WAIT = 30
     # 发文字、发图片的网络请求最多等几秒
     TEXT_TIMEOUT = 5
     FILE_TIMEOUT = 20
@@ -34,9 +38,14 @@ class Notifier:
     def send(self, text: str, files: Sequence[str | Path] | None = None) -> None:
         """在后台线程里发一条消息，不等发完就返回。files 里的图片作为附件一起发。
 
-        线程不是守护线程：程序要退出时会等它发完（最多等两个网络请求的超时）。
+        发不出去会重试，最多发 RETRIES 次，每两次之间等 RETRY_WAIT 秒。
+        线程不是守护线程：程序要退出时会等它发完或者重试完。
         """
         threading.Thread(target=self._send, args=(text, files), name="notifier").start()
+
+    def send_everyone(self, text: str, files: Sequence[str | Path] | None = None) -> None:
+        """发一条 @全体 的消息：正文前面加上 @everyone，其它和 send 一样。"""
+        self.send(f"@everyone {text}", files)
 
     def _send(self, text: str, files: Sequence[str | Path] | None) -> None:
         """发一条消息，任何失败只记日志，不抛出。"""
@@ -50,30 +59,37 @@ class Notifier:
             text = text[: self.MAX_LENGTH - len(self.TRUNCATED)] + self.TRUNCATED
         paths = [Path(path) for path in (files or [])]
         paths = [path for path in paths if path.is_file()][: self.MAX_FILES]
-        try:
-            if paths:
-                try:
-                    self._post_files(url, text, paths)
-                except Exception as error:  # 图片发不出去就退化成纯文字
-                    logging.warning(f"发送通知的图片失败，改发文字: {error}")
-                else:
+        # 请求只组一次：图片现在就读进来，重试时图片文件可能已经被下一局的初始化删掉了
+        request, timeout = self._json_request(url, text), self.TEXT_TIMEOUT
+        if paths:
+            try:
+                request, timeout = self._files_request(url, text, paths), self.FILE_TIMEOUT
+            except OSError as error:
+                logging.warning(f"读不到通知的图片，改发文字: {error}")
+        for attempt in range(1, self.RETRIES + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=timeout):
                     return
-            self._post_json(url, text)
-        except Exception as error:  # 通知失败不能影响主流程
-            logging.warning(f"发送通知失败: {error}")
+            except Exception as error:  # 通知失败不能影响主流程
+                logging.warning(f"发送通知失败（第 {attempt} 次）: {error}")
+            if attempt < self.RETRIES:
+                time.sleep(self.RETRY_WAIT)
+        logging.warning(f"通知发了 {self.RETRIES} 次都没发出去，放弃")
 
     @staticmethod
     def _headers(content_type: str) -> dict[str, str]:
         return {"Content-Type": content_type, "User-Agent": "control-switch/0.1"}
 
-    def _post_json(self, url: str, text: str) -> None:
+    def _json_request(self, url: str, text: str) -> urllib.request.Request:
+        """只有文字的请求。"""
         body = json.dumps({"content": text}).encode()
-        request = urllib.request.Request(url, data=body, headers=self._headers("application/json"))
-        with urllib.request.urlopen(request, timeout=self.TEXT_TIMEOUT):
-            pass
+        return urllib.request.Request(url, data=body, headers=self._headers("application/json"))
 
-    def _post_files(self, url: str, text: str, paths: list[Path]) -> None:
-        """用 multipart/form-data 发文字和附件，附件字段名是 files[0]、files[1]……"""
+    def _files_request(self, url: str, text: str, paths: list[Path]) -> urllib.request.Request:
+        """文字和图片放在同一个请求里（multipart/form-data），Discord 上是一条消息。
+
+        附件字段名是 files[0]、files[1]……
+        """
         boundary = f"----control-switch-{os.urandom(8).hex()}"
         chunks: list[bytes] = [
             f"--{boundary}\r\n".encode(),
@@ -97,10 +113,8 @@ class Notifier:
                 ]
             )
         chunks.append(f"--{boundary}--\r\n".encode())
-        request = urllib.request.Request(
+        return urllib.request.Request(
             url,
             data=b"".join(chunks),
             headers=self._headers(f"multipart/form-data; boundary={boundary}"),
         )
-        with urllib.request.urlopen(request, timeout=self.FILE_TIMEOUT):
-            pass

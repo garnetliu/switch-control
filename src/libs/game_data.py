@@ -96,12 +96,34 @@ class GameData:
         return form_name_ids
 
     def type_icons(self) -> dict[str, Any]:
-        """路线图上的属性图标模板：{属性: 单通道图}。"""
+        """路线图上的属性图标模板：{属性: 单通道黑白图}，和截图一样是原始大小。
+
+        图在 data/type_icons/属性名.png。还没在真机上抠到的属性，先用老图标缩小得到的临时图，
+        抠到之后用 save_type_icon 换掉。
+        """
         type_icons = self._type_icons_cache
         if type_icons is None:
-            type_icons = pickle.loads((self._directory / "type_icons.pickle").read_bytes())
+            type_icons = {
+                path.stem: cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+                for path in sorted((self._directory / "type_icons").glob("*.png"))
+            }
             self._type_icons_cache = type_icons
         return type_icons
+
+    def collected_type_icons(self) -> set[str]:
+        """已经换成真机抠图的属性，名单在 data/type_icons/collected.json。"""
+        path = self._directory / "type_icons" / "collected.json"
+        return set(json.loads(path.read_text(encoding="utf-8"))) if path.exists() else set()
+
+    def save_type_icon(self, type_id: str, icon: Any) -> None:
+        """把真机上抠到的属性图标存下来，换掉原来的那一张，并记进已收集的名单。"""
+        directory = self._directory / "type_icons"
+        cv2.imwrite(str(directory / f"{type_id}.png"), icon)
+        collected = sorted(self.collected_type_icons() | {type_id})
+        (directory / "collected.json").write_text(
+            json.dumps(collected, indent=2) + "\n", encoding="utf-8"
+        )
+        self.type_icons()[type_id] = icon
 
     def pokemon_sprites(self) -> list[tuple[str, Any]]:
         """租借宝可梦的精灵图：(name_id, 图)，用来认队伍栏。"""
