@@ -4,7 +4,6 @@ import logging
 
 from libs import ImageChecker
 from swsh.lair.next_columns import next_columns
-from swsh.lair.path_cursor_collector import PathCursorCollector
 from swsh.lair.score import rental_boss_score
 from swsh.lair.switch import LairSwitch
 from tools import (
@@ -107,7 +106,7 @@ def _handle_fork(sw: LairSwitch) -> None:
     columns = next_columns(maps["type"], current_row, current_col)
     if col not in columns:
         raise RuntimeError(f"路线目标第 {row} 层第 {col + 1} 列不在当前节点能走到的 {columns} 里")
-    rects = PathCursorCollector(sw).ensure((current_row, current_col), columns)
+    rects = sw.config.rects.path_cursors[maps["type"]][(current_row, current_col)]
     _move_fork_cursor(sw, dict(zip(columns, rects)), col)
     sw.click("A", 0)
     maps["current_index"] = index + 1

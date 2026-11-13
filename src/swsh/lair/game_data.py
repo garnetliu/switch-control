@@ -1,7 +1,6 @@
 """游戏数据：data/swsh/ 里的数据文件。"""
 
 import json
-import pickle
 from typing import Any
 
 import cv2
@@ -26,11 +25,9 @@ class GameData:
         self._boss_matchups_cache: dict[str, dict[str, float]] | None = None
         self._rental_scores_cache: dict[str, float] | None = None
         self._type_icons_cache: dict[str, Any] | None = None
-        self._misc_icons_cache: dict[str, Any] | None = None
         self._boss_data_cache: dict[str, dict] | None = None
         self._rental_objects_cache: dict[str, Pokemon] | None = None
         self._boss_objects_cache: dict[str, Pokemon] | None = None
-        self._pokemon_sprites_cache: list[tuple[str, Any]] | None = None
 
     def boss_pokemon(self) -> dict[str, Boss]:
         """传说宝可梦，name_id 到名字。"""
@@ -99,8 +96,7 @@ class GameData:
     def type_icons(self) -> dict[str, Any]:
         """路线图上的属性图标模板：{属性: 单通道黑白图}，和截图一样是原始大小。
 
-        图在 data/swsh/type_icons/属性名.png。还没在真机上抠到的属性，先用老图标缩小得到的临时图，
-        抠到之后用 save_type_icon 换掉。
+        图在 data/swsh/type_icons/属性名.png，都是从真机截图上抠下来的。
         """
         type_icons = self._type_icons_cache
         if type_icons is None:
@@ -110,40 +106,6 @@ class GameData:
             }
             self._type_icons_cache = type_icons
         return type_icons
-
-    def collected_type_icons(self) -> set[str]:
-        """已经换成真机抠图的属性，名单在 data/swsh/type_icons/collected.json。"""
-        path = self._directory / "type_icons" / "collected.json"
-        return set(json.loads(path.read_text(encoding="utf-8"))) if path.exists() else set()
-
-    def save_type_icon(self, type_id: str, icon: Any) -> None:
-        """把真机上抠到的属性图标存下来，换掉原来的那一张，并记进已收集的名单。"""
-        directory = self._directory / "type_icons"
-        cv2.imwrite(str(directory / f"{type_id}.png"), icon)
-        collected = sorted(self.collected_type_icons() | {type_id})
-        (directory / "collected.json").write_text(
-            json.dumps(collected, indent=2) + "\n", encoding="utf-8"
-        )
-        self.type_icons()[type_id] = icon
-
-    def pokemon_sprites(self) -> list[tuple[str, Any]]:
-        """租借宝可梦的精灵图：(name_id, 图)，用来认队伍栏。"""
-        sprites = self._pokemon_sprites_cache
-        if sprites is None:
-            sprites = pickle.loads((self._directory / "pokemon_sprites.pickle").read_bytes())
-            self._pokemon_sprites_cache = sprites
-        return sprites
-
-    def misc_icons(self) -> dict[str, Any]:
-        """战斗界面用的图标模板：{名字: BGR 图}。"""
-        misc_icons = self._misc_icons_cache
-        if misc_icons is None:
-            misc_icons = {
-                path.stem: cv2.imread(str(path))
-                for path in (self._directory / "misc_icons").glob("*.png")
-            }
-            self._misc_icons_cache = misc_icons
-        return misc_icons
 
     def pokemon_data(self, name_id: str) -> dict:
         """按 name_id 取完整数据，先在租借表里找，再找首领表。"""
