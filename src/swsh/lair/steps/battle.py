@@ -111,14 +111,84 @@ def _choose_move(sw: LairSwitch, war: War) -> None:
     logging.info(f"用第 {best + 1} 个招式 {move.name()}，得分 {score:.2f}")
 
     _move_cursor_to(sw, image, best)
-    # 选招式后可能还有选目标的界面，不单独判断，一直按 A，直到战斗文字出现「×××使出了」
+    _use_move(sw)
+    war.use_move(best)
+
+
+def _use_move(sw: LairSwitch) -> None:
+    """光标已经在要用的招式上：按 A 出招，一直到战斗文字出现「×××使出了」。
+
+    按 A 到招式列表消失。之后要是出了选目标的界面，先看光标所在的卡片能不能选：
+    能选就一直按 A；不能选（比如花瓣舞，光标默认在对手上，但只能选自己）就把光标移到能选的卡片上再按 A。
+    """
+
+    def used(screen: ImageChecker) -> bool:
+        return screen.has_text(sw.config.rects.black_full_line1, "使出了")
+
+    # 选目标界面上我方卡片的名牌正好落在招式列表第一行的光标框里，会被当成招式光标，
+    # 所以认到选目标的光标也算招式列表消失了
     act_until(
         sw,
         lambda: sw.click("A", 0),
-        lambda screen: screen.has_text(sw.config.rects.black_full_line1, "使出了"),
-        "出招",
+        lambda screen: _target_cursor(sw, screen) >= 0 or _move_cursor(sw, screen) == -1,
+        "招式列表消失",
     )
-    war.use_move(best)
+    image = wait_for(
+        sw,
+        lambda screen: _target_cursor(sw, screen) >= 0 or used(screen),
+        sw.config.timeout,
+        "选目标的界面或者出招",
+    )
+    if _target_cursor(sw, image) >= 0 and _target_blocked(sw):
+        _move_target_cursor(sw)
+    act_until(sw, lambda: sw.click("A", 0), used, "出招")
+
+
+def _target_cursor(sw: LairSwitch, image: ImageChecker) -> int:
+    """选目标界面的光标在哪张卡片上：0 是对手，1 到 4 是我方四张；不在选目标界面返回 -1。"""
+    rects = (sw.config.rects.target_cursor, *sw.config.rects.ally_target_cursor_rects)
+    marks = [_marker_shown(sw, image, rect) for rect in rects]
+    return marks.index(True) if marks.count(True) == 1 else -1
+
+
+def _target_selectable(sw: LairSwitch, image: ImageChecker, index: int) -> bool:
+    """选目标界面第 index 张卡片能不能选：能选的是不透明的白底或黑底，不能选的是半透明的灰底。"""
+    rect = (sw.config.rects.target_card, *sw.config.rects.ally_target_card_rects)[index]
+    white = image.color_ratio(
+        rect, sw.config.target_card_white_lower, sw.config.target_card_white_upper
+    )
+    dark = image.color_ratio(rect, sw.config.marker_dark_lower, sw.config.marker_dark_upper)
+    return max(white, dark) > sw.config.target_card_ratio
+
+
+def _target_blocked(sw: LairSwitch) -> bool:
+    """光标停在一张不能选的卡片上返回 True。
+
+    界面刚出来时卡片还在淡入，所以连着看 3 张：有一张能选，或者已经不在选目标界面了，就返回 False。
+    """
+    for _ in range(3):
+        image = capture(sw, "选目标的光标能不能选")
+        index = _target_cursor(sw, image)
+        if index == -1 or _target_selectable(sw, image, index):
+            return False
+        time.sleep(sw.config.interval)
+    return True
+
+
+def _move_target_cursor(sw: LairSwitch) -> None:
+    """光标所在的卡片不能选：先按下移到我方那一排，再一张一张往右，停在第一张能选的卡片上。"""
+    for button in ("DDOWN", "DRIGHT", "DRIGHT", "DRIGHT"):
+        before = _target_cursor(sw, capture(sw, "选目标的光标"))
+        act_until(
+            sw,
+            lambda button=button: sw.click(button, 0),
+            lambda screen, before=before: _target_cursor(sw, screen) not in (before, -1),
+            "选目标的光标移动",
+        )
+        if not _target_blocked(sw):
+            logging.info(f"选目标的光标默认位置不能选，按 {button} 移到了能选的卡片上")
+            return
+    raise RuntimeError("选目标界面上没有找到能选的卡片")
 
 
 def _dynamax(sw: LairSwitch) -> ImageChecker:
