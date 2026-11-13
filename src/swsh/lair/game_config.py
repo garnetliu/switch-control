@@ -284,7 +284,7 @@ class GameConfig(BaseConfig):
     """极巨大冒险的配置。"""
 
     # 要找的传说宝可梦，数据文件里的 name_id
-    boss = "solgaleo"
+    boss = "mewtwo"
     # 数据文件和图片资源
     data_dir = ROOT / "data" / "swsh"
     # 运行状态快照：YAML 文件 run/game.yaml

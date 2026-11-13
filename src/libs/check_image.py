@@ -39,6 +39,8 @@ class ImageChecker:
         img = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
         if img is None:
             raise ValueError("无法解码图片")
+        # Switch 给的原始字节留着，存图时直接写进文件，不再压缩第二次
+        self._raw = image
         self._bgr = img
         self._hsv = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2HSV)
         self._gray = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2GRAY)
@@ -49,7 +51,16 @@ class ImageChecker:
         return self._bgr
 
     def save(self, path: str) -> None:
-        """把截图存成图片文件，格式按扩展名。"""
+        """把截图存成图片文件，格式按扩展名。
+
+        原始字节是 JPEG、要存的也是 .jpg 时直接写原始字节，和 Switch 给的完全一样；
+        其它情况把像素重新编码。
+        """
+        is_jpeg = self._raw[:2] == b"\xff\xd8"
+        if is_jpeg and path.lower().endswith((".jpg", ".jpeg")):
+            with open(path, "wb") as file:
+                file.write(self._raw)
+            return
         cv2.imwrite(path, self.bgr)
 
     def crop(self, rect: Rect, channel: str = "bgr") -> np.ndarray:
