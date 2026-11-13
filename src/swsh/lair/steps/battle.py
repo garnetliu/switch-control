@@ -122,9 +122,6 @@ def _use_move(sw: LairSwitch) -> None:
     能选就一直按 A；不能选（比如花瓣舞，光标默认在对手上，但只能选自己）就把光标移到能选的卡片上再按 A。
     """
 
-    def used(screen: ImageChecker) -> bool:
-        return screen.has_text(sw.config.rects.black_full_line1, "使出了")
-
     # 选目标界面上我方卡片的名牌正好落在招式列表第一行的光标框里，会被当成招式光标，
     # 所以认到选目标的光标也算招式列表消失了
     act_until(
@@ -133,15 +130,19 @@ def _use_move(sw: LairSwitch) -> None:
         lambda screen: _target_cursor(sw, screen) >= 0 or _move_cursor(sw, screen) == -1,
         "招式列表消失",
     )
-    image = wait_for(
+    wait_for(
         sw,
-        lambda screen: _target_cursor(sw, screen) >= 0 or used(screen),
+        lambda screen: _target_cursor(sw, screen) >= 0,
         sw.config.timeout,
         "选目标的界面或者出招",
     )
-    if _target_cursor(sw, image) >= 0 and _target_blocked(sw):
-        _move_target_cursor(sw)
-    act_until(sw, lambda: sw.click("A", 0), used, "出招")
+    _move_target_cursor(sw)
+    act_until(
+        sw,
+        lambda: sw.click("A", 0),
+        lambda screen: screen.has_text(sw.config.rects.black_full_line1, "使出了"),
+        "出招",
+    )
 
 
 def _target_cursor(sw: LairSwitch, image: ImageChecker) -> int:
@@ -178,17 +179,16 @@ def _target_blocked(sw: LairSwitch) -> bool:
 def _move_target_cursor(sw: LairSwitch) -> None:
     """光标所在的卡片不能选：先按下移到我方那一排，再一张一张往右，停在第一张能选的卡片上。"""
     for button in ("DDOWN", "DRIGHT", "DRIGHT", "DRIGHT"):
+        if not _target_blocked(sw):
+            logging.info("选目标的光标在能选的卡片上")
+            return
         before = _target_cursor(sw, capture(sw, "选目标的光标"))
         act_until(
             sw,
-            lambda button=button: sw.click(button, 0),
-            lambda screen, before=before: _target_cursor(sw, screen) not in (before, -1),
+            lambda: sw.click(button, 0),
+            lambda screen: _target_cursor(sw, screen) not in (before, -1),
             "选目标的光标移动",
         )
-        if not _target_blocked(sw):
-            logging.info(f"选目标的光标默认位置不能选，按 {button} 移到了能选的卡片上")
-            return
-    raise RuntimeError("选目标界面上没有找到能选的卡片")
 
 
 def _dynamax(sw: LairSwitch) -> ImageChecker:
