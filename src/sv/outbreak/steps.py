@@ -69,6 +69,8 @@ def _fill_knockouts(sw: OutbreakSwitch, region: str, index: int) -> None:
 
 def refresh(sw: OutbreakSwitch) -> str:
     """开野餐再收起，身边的宝可梦会重新生成。"""
+    # 新的一轮从这里开始，上一轮没出错，截图丢掉
+    sw.frames.clear()
     open_picnic(sw)
     close_picnic(sw)
     time.sleep(sw.config.spawn_wait)
@@ -94,6 +96,6 @@ def scan(sw: OutbreakSwitch) -> str:
     logging.info("找到了：" + "；".join(lines))
     sw.config.catch_dir.mkdir(parents=True, exist_ok=True)
     path = sw.config.catch_dir / f"shiny-{time.strftime('%Y%m%d-%H%M%S')}-sv-outbreak.jpg"
-    capture(sw).save(str(path))
+    capture(sw, "闪光").save(str(path))
     sw.notifier.send_everyone("大量出现刷到闪光，已经存档，等你来抓\n" + "\n".join(lines), [path])
     return "done"

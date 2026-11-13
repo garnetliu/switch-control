@@ -3,14 +3,39 @@
 import logging
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 from libs import ImageChecker, Switch
-from tools.save_image import save_check
+from libs.switch import Frame
 
 
-def capture(sw: Switch) -> ImageChecker:
-    """截一张当前画面。"""
-    return ImageChecker(sw.pixel_peek())
+def capture(sw: Switch, what: str) -> ImageChecker:
+    """截一张当前画面，记在内存里（sw.frames），不写文件。what 是这张图在看什么。
+
+    出错时入口用 save_frames 把这一局记下的图都写进日志目录；
+    没出错就在新的一局开始时用 sw.frames.clear() 丢掉。
+    """
+    data = sw.pixel_peek()
+    sw.frames.append(Frame(time.time(), sw.step, what, data))
+    return ImageChecker(data)
+
+
+def save_frames(sw: Switch) -> list[Path]:
+    """把内存里这一局的截图按顺序写进 failed_dir/这一次的时间/，返回写下的文件。
+
+    文件名是「序号-时分秒-步骤-在看什么」。
+    """
+    directory = sw.config.failed_dir / time.strftime("%Y%m%d-%H%M%S")
+    directory.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for index, frame in enumerate(sw.frames):
+        stamp = time.strftime("%H%M%S", time.localtime(frame.time))
+        what = frame.what.replace("/", "_")
+        path = directory / f"{index:04d}-{stamp}-{frame.step}-{what}.jpg"
+        path.write_bytes(frame.data)
+        paths.append(path)
+    logging.warning(f"这一局的 {len(paths)} 张截图存在 {directory}")
+    return paths
 
 
 def wait_for(
@@ -27,15 +52,11 @@ def wait_for(
     """
     interval = sw.config.interval if interval is None else interval
     deadline = time.monotonic() + timeout
-    first = None
     while True:
-        image = capture(sw)
-        first = first or image
+        image = capture(sw, what)
         if condition(image):
-            save_check(sw, image, what, *image.checked)
             return image
         if time.monotonic() >= deadline:
-            save_timeout_frames(sw, first, image, f"等了 {timeout} 秒，画面一直没有出现：{what}")
             raise TimeoutError(f"等了 {timeout} 秒，画面一直没有出现：{what}")
         time.sleep(interval)
 
@@ -50,7 +71,7 @@ def press_until(
     """一直按 button，直到 done(截图) 为真，返回那张截图。
 
     每次按之前都先判定，已经满足就不再按，不会按在要等的菜单上。
-    超过 timeout 秒还没满足，存下截图并抛 TimeoutError。
+    超过 timeout 秒还没满足，抛 TimeoutError。
     what: 在等什么，写进日志和报错里。
     """
     return act_until(
@@ -74,20 +95,16 @@ def act_until(
     """一直做 action，直到 condition(截图) 为真，返回那张截图。
 
     每做一次之后 interval 秒里一直看画面，满足就返回；没满足就再做一次。
-    超过 timeout 秒还没满足，存下截图并抛 TimeoutError。
+    超过 timeout 秒还没满足，抛 TimeoutError。
     """
     timeout = sw.config.timeout if timeout is None else timeout
     deadline = time.monotonic() + timeout
-    first = None
     attempt = 0
     while True:
-        image = capture(sw)
-        first = first or image
+        image = capture(sw, what)
         if condition(image):
-            save_check(sw, image, what, *image.checked)
             return image
         if time.monotonic() >= deadline:
-            save_timeout_frames(sw, first, image, f"等了 {timeout} 秒，画面一直没有出现：{what}")
             raise TimeoutError(f"等了 {timeout} 秒，画面一直没有出现：{what}")
         if attempt:
             logging.debug(f"没有反应，再做一次（在等{what}）")
@@ -95,22 +112,9 @@ def act_until(
         attempt += 1
         poll_deadline = time.monotonic() + interval
         while True:
-            image = capture(sw)
+            image = capture(sw, what)
             if condition(image):
-                save_check(sw, image, what, *image.checked)
                 return image
             if time.monotonic() >= poll_deadline:
                 break
             time.sleep(sw.config.interval)
-
-
-def save_timeout_frames(sw: Switch, first: ImageChecker, last: ImageChecker, reason: str) -> None:
-    """等画面超时时，把开始等时和最后一帧的截图存进日志目录，连同超时原因一起推送。"""
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    paths = []
-    for name, frame in (("first", first), ("last", last)):
-        path = sw.config.log_dir / f"timeout-{stamp}-{name}.jpg"
-        frame.save(str(path))
-        logging.warning(f"超时的截图: {path}")
-        paths.append(path)
-    sw.notifier.send(f"超时：{reason}", files=paths)

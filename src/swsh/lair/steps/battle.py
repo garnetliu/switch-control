@@ -9,7 +9,7 @@ from swsh.field import Field
 from swsh.lair.switch import LairSwitch
 from swsh.lair.war import War
 from swsh.pokemon import Pokemon
-from tools import act_until, capture, save_check, wait_for
+from tools import act_until, capture, wait_for
 from type import Rect
 
 
@@ -18,7 +18,7 @@ def battle(sw: LairSwitch) -> str:
     war = _create_war(sw)
 
     while True:
-        image = capture(sw)
+        image = capture(sw, "战斗")
         state = _battle_state(sw, image)
 
         if state == "fight":
@@ -221,21 +221,16 @@ def _battle_state(sw: LairSwitch, image: ImageChecker) -> str:
     if image.has_text(sw.config.rects.battle_menu_text, "战斗"):
         return "fight"
     if image.has_text(sw.config.rects.battle_menu_text, "助威"):
-        save_check(sw, image, "cheer", sw.config.rects.battle_menu_text)
         return "cheer"
     if image.has_text(sw.config.rects.black_full_line2, "使用精灵球的好机会"):
-        save_check(sw, image, "catch", sw.config.rects.black_full_line2)
         return "catch"
     # 战败时黑屏上出两行字：「×××他们」「被风刮到巢穴外了……」
     if image.has_text(sw.config.rects.black_full_line2, "巢穴外"):
-        save_check(sw, image, "loss", sw.config.rects.black_full_line2)
         return "loss"
     if image.has_text(sw.config.rects.black_full_line1, "倒下了"):
-        save_check(sw, image, "storm", sw.config.rects.black_full_line1)
         return "storm"
     if Field.change(image.read_text(sw.config.rects.black_full_line1)) is not None:
         return "field"
-    save_check(sw, image, "none", sw.config.rects.black_full_line1)
     return "none"
 
 

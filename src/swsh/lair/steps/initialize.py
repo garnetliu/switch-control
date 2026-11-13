@@ -15,6 +15,8 @@ def initialize(sw: LairSwitch) -> str:
     """
     # 每一局一个日志文件：新的一局从这里开始，换一个新文件
     new_log(sw, "start")
+    # 上一局没出错，截图丢掉
+    sw.frames.clear()
 
     rects = sw.config.rects
     title_id = sw.title_id().upper()
@@ -41,11 +43,11 @@ def initialize(sw: LairSwitch) -> str:
 def _clean_logs(sw: LairSwitch) -> None:
     """清空这个脚本的日志目录，直接删除，不进回收站。
 
-    留下 start（运行日志）和 keep（长期留着的截图）。
+    留下 start（运行日志）和 failed（出错时存下的截图）。
     """
     removed = 0
     for path in sw.config.log_dir.iterdir():
-        if path.name in ("start", sw.config.keep_dir.name):
+        if path.name in ("start", sw.config.failed_dir.name):
             continue
         if path.is_dir():
             removed += sum(1 for item in path.rglob("*") if item.is_file())

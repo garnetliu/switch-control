@@ -1,8 +1,6 @@
 import logging
 import time
 
-import cv2
-
 from swsh.lair.lair import Lair
 from swsh.lair.map import MapNode, Maps
 from swsh.lair.map_type_reader import MapTypeReader
@@ -11,11 +9,9 @@ from swsh.lair.switch import LairSwitch
 from tools import (
     act_until,
     capture,
-    keep_image,
     menu_last_item,
     move_menu_option,
     press_until,
-    save_check,
     wait_for,
 )
 
@@ -128,40 +124,20 @@ def _assign_new_path(sw: LairSwitch) -> None:
     wait_for(sw, lambda screen: not screen.is_black(), sw.config.timeout, "开场黑屏结束")
     reader = MapTypeReader(sw)
     deadline = time.monotonic() + sw.config.timeout
-    # 读类型用过的每一帧先留着，最后没读出来就存下来，拿去离线重跑
-    frames = []
     while True:
-        image = capture(sw)
+        image = capture(sw, "读地图类型")
         if image.has_text(sw.config.rects.black_center_line1, "要走哪条路"):
-            frames.append(image.bgr)
             break
         if sw.game.maps is not None and sw.game.maps["type"] is None:
-            frames.append(image.bgr)
             map_type = reader.update(image)
             if map_type is not None:
-                # 读出类型的这一帧存下来，红框是实际找标签的范围：最左一列和另外三列的窄条
-                save_check(sw, image, f"地图类型 {map_type}", *reader.rects)
-                keep_image(sw, image, f"地图类型-{map_type}")
                 sw.game.maps["type"] = map_type
                 _assign_route(sw)
                 sw.game.save()
         if time.monotonic() >= deadline:
             raise TimeoutError(f"等了 {sw.config.timeout} 秒，路线图一直没有出现")
     if sw.game.maps is None or sw.game.maps["type"] is None:
-        _save_map_frames(sw, frames)
         raise RuntimeError("没读到路线图类型")
-
-
-def _save_map_frames(sw: LairSwitch, frames: list) -> None:
-    """把读地图类型时截到的帧按顺序存进日志目录的 map_type/这一次的时间/。
-
-    下一次启动时 initialize 会清空 logs，要看的话先把这个目录拷出去。
-    """
-    directory = sw.config.log_dir / "map_type" / time.strftime("%Y%m%d-%H%M%S")
-    directory.mkdir(parents=True, exist_ok=True)
-    for index, frame in enumerate(frames):
-        cv2.imwrite(str(directory / f"{index:03d}.jpg"), frame)
-    logging.warning(f"没读到路线图类型，读图用的 {len(frames)} 帧存在 {directory}")
 
 
 def _assign_route(sw: LairSwitch) -> None:

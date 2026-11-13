@@ -43,11 +43,6 @@ class BaseConfig:
     interval = 0.3
 
     @property
-    def check_dir(self) -> Path:
-        """判定成功时的截图，环境变量 SAVE_CHECKS 里写了现在的步骤才存。"""
-        return self.log_dir / "checks"
-
-    @property
-    def keep_dir(self) -> Path:
-        """长期留着的截图，清空日志时不删。"""
-        return self.log_dir / "keep"
+    def failed_dir(self) -> Path:
+        """出错时存下的这一局的截图，清空日志时不删。"""
+        return self.log_dir / "failed"

@@ -21,7 +21,7 @@ def restart_to_title(sw: Switch) -> None:
     """
     rects = sw.config.rects
     # 已经在 HOME 上就不能再按 HOME：HOME 上按 HOME 是回到游戏（真机上因此重启失败过）
-    if not _home_shown(sw, capture(sw)):
+    if not _home_shown(sw, capture(sw, "是不是在 HOME 菜单")):
         sw.click("HOME", 0)
         wait_for(sw, lambda screen: _home_shown(sw, screen), sw.config.timeout, "HOME 菜单")
     # HOME 菜单刚出来时按的 Y 会被吞掉（真机上出现过，画面停在 HOME），所以一直按到确认框出来
@@ -50,12 +50,12 @@ def restart_to_title(sw: Switch) -> None:
 
 def enter_game(sw: Switch) -> None:
     """开场彩色画面出现之后用：持续按 A，每次截图检查，画面变黑就停止。"""
-    screen = capture(sw)
+    screen = capture(sw, "进游戏")
     presses = 0
     while not screen.is_black():
         sw.click("A", 0)
         presses += 1
-        screen = capture(sw)
+        screen = capture(sw, "进游戏")
     logging.info(f"画面变黑，停止按 A（共按 {presses} 次）")
 
 

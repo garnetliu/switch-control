@@ -8,7 +8,6 @@ from swsh.lair.score import rental_boss_score
 from swsh.lair.switch import LairSwitch
 from tools import (
     act_until,
-    keep_image,
     press_until,
     wait_for,
 )
@@ -43,7 +42,6 @@ def path(sw: LairSwitch) -> str:
         )
         state = _match_state(sw, image, states)
         assert state is not None
-        keep_image(sw, image, f"路线上的界面-{_KEYWORDS[state]}")
 
         if state == "battle":
             # 战斗
@@ -84,13 +82,12 @@ def _match_state(sw: LairSwitch, image: ImageChecker, states: tuple[str, ...]) -
 
 def _handle_berry(sw: LairSwitch) -> None:
     """按 A 推进树果对话，直到文字框里不再有「树果」。"""
-    image = press_until(
+    press_until(
         sw,
         lambda screen: not screen.has_text(sw.config.rects.black_center_line1, "树果"),
         "树果的对话结束",
         timeout=sw.config.timeout,
     )
-    keep_image(sw, image, "树果的对话结束")
 
 
 def _handle_fork(sw: LairSwitch) -> None:
@@ -128,7 +125,6 @@ def _move_fork_cursor(sw: LairSwitch, cursors: dict[int, Rect], column: int) -> 
         sw.config.timeout,
         "岔路口光标",
     )
-    keep_image(sw, image, "岔路口光标")
     start = _path_cursor_index(sw, image, rects)
     for _ in range(len(rects)):
         current = _path_cursor_index(sw, image, rects)
@@ -146,7 +142,6 @@ def _move_fork_cursor(sw: LairSwitch, cursors: dict[int, Rect], column: int) -> 
             ),
             "岔路口光标移动",
         )
-        keep_image(sw, image, "岔路口光标移动")
     raise RuntimeError(f"岔路口光标移了 {len(rects)} 次，还是没到第 {column + 1} 列")
 
 
@@ -169,17 +164,15 @@ def _handle_backpacker(sw: LairSwitch) -> None:
         sw.config.timeout,
         "背包客的道具面板",
     )
-    keep_image(sw, image, "背包客的道具面板")
     items = [image.read_text(rect).strip() for rect in sw.config.rects.backpacker_items]
     logging.info(f"背包客的道具: {items}")
     sw.click("A", 0)
-    image = wait_for(
+    wait_for(
         sw,
         lambda screen: not _backpacker_shown(sw, screen),
         sw.config.timeout,
         "背包客的道具面板消失",
     )
-    keep_image(sw, image, "背包客的道具面板消失")
 
 
 def _handle_scientist(sw: LairSwitch) -> None:
@@ -203,21 +196,19 @@ def _handle_scientist(sw: LairSwitch) -> None:
         f"研究员：平均分 {average:.2f}，{own} 的分数 {own_score:.2f}，{'换' if take else '不换'}"
     )
 
-    image = wait_for(
+    wait_for(
         sw,
         lambda screen: screen.has_text(sw.config.rects.black_center_line1, "希望交换成"),
         sw.config.timeout,
         "研究员问换不换",
     )
-    keep_image(sw, image, "研究员问换不换")
     sw.click("A" if take else "B", 0)
-    image = wait_for(
+    wait_for(
         sw,
         lambda screen: not screen.has_text(sw.config.rects.black_center_line1, "希望交换成"),
         sw.config.timeout,
         "研究员问话消失",
     )
-    keep_image(sw, image, "研究员问话消失")
 
 
 def _backpacker_shown(sw: LairSwitch, image: ImageChecker) -> bool:

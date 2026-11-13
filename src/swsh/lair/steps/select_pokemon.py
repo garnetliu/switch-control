@@ -7,7 +7,7 @@ from pathlib import Path
 
 from libs import ImageChecker
 from swsh.lair.switch import LairSwitch
-from tools import act_until, capture, move_menu_option, press_until, restart, save_check, wait_for
+from tools import act_until, capture, move_menu_option, press_until, restart, wait_for
 
 
 def select_pokemon(sw: LairSwitch) -> str:
@@ -26,7 +26,7 @@ def _no_catch(sw: LairSwitch) -> None:
     logging.info("一只都没抓到")
     # 一只都没抓到时后面是什么界面还没见过，等 15 秒截一张留着，之后照着改逻辑
     time.sleep(15)
-    save_check(sw, capture(sw), "没抓住的界面", sw.config.rects.result_title)
+    capture(sw, "没抓住的界面")
     keep, lock = sw.game.finish_run(took_shiny=False)
     # 战报先发，后面收尾的按键卡住或出错也不影响
     if keep:
@@ -235,7 +235,7 @@ def _take(sw: LairSwitch, index: int) -> None:
 def _move_list_cursor(sw: LairSwitch, index: int) -> None:
     """把带走列表的光标移到第 index 只（按抓到的顺序，从 0 开始）。"""
     rows = list(sw.config.rects.result_rows[: sw.game.num_caught])
-    current = capture(sw).selected(rows)
+    current = capture(sw, "带走列表的光标").selected(rows)
     # 往上推是 +stick_max，往下推是 -stick_max
     direction = 1 if index < current else -1
     act_until(

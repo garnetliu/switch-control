@@ -42,8 +42,6 @@ class ImageChecker:
         self._bgr = img
         self._hsv = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2HSV)
         self._gray = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2GRAY)
-        # 在这张图上检查过的区域，判定成功时画进截图里，见 tools.log.save_check
-        self.checked: list[Rect] = []
 
     @property
     def bgr(self) -> np.ndarray:
@@ -60,8 +58,6 @@ class ImageChecker:
         return self._crop(image, rect)
 
     def _crop(self, img: np.ndarray, rect: Rect) -> np.ndarray:
-        if rect not in self.checked:
-            self.checked.append(rect)
         h, w = img.shape[:2]
         (left, top), (right, bottom) = rect
         return img[round(top * h) : round(bottom * h), round(left * w) : round(right * w)]

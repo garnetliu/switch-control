@@ -11,6 +11,7 @@ import socket
 import struct
 import threading
 import time
+from typing import NamedTuple
 
 import usb.core
 import usb.util
@@ -211,14 +212,28 @@ class _UsbConnection:
         return f"{struct.unpack('<Q', data)[0]:016X}"
 
 
+class Frame(NamedTuple):
+    """记在内存里的一张截图。"""
+
+    # 截图的时间（time.time()）
+    time: float
+    # 截图时在哪一步、在看什么
+    step: str
+    what: str
+    # 截图的 JPEG 字节
+    data: bytes
+
+
 class Switch:
     """一条连接。初始化时按 .env 自动连接。"""
 
     def __init__(self, config: BaseConfig):
         # 配置挂在连接上，步骤里用 sw.config 取
         self.config = config
-        # 现在是哪一步，入口的循环每一步之前写进来，save_check 按它决定存不存截图
+        # 现在是哪一步，入口的循环每一步之前写进来
         self.step = ""
+        # 这一局截过的图，只放在内存里；出错时入口才把它们写进日志目录，新的一局开始时清空
+        self.frames: list[Frame] = []
         # 往 Discord 推送消息，步骤里用 sw.notifier 取
         self.notifier = Notifier()
         self._connect()

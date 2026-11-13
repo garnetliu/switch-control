@@ -47,12 +47,11 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 ## 环境变量
 
-全部变量和说明都在 `.env.example` 里，复制成 `.env` 再改。连接和通知之外，还有两个开关，不写就是关。`KEEP_PATH` 只有极巨大冒险用：
+全部变量和说明都在 `.env.example` 里，复制成 `.env` 再改。连接和通知之外，还有一个开关，只有极巨大冒险用，不写就是关：
 
 | 变量 | 作用 |
 |---|---|
 | `KEEP_PATH` | 设成 `1` 才开启。一局没刷到闪光、打赢并且倒下次数和用时都在范围内时，重启游戏保留这张图（keep path）。重启要付极矿石，矿石不够时不要开 |
-| `SAVE_CHECKS` | 写要存截图的步骤名字，用逗号分开（极巨大冒险是 `initialize`、`join`、`path`、`battle`、`catch`、`select_pokemon`），比如 `SAVE_CHECKS=join,battle`。这些步骤里每次画面判定成功，把截图存进这个脚本的日志目录下的 `checks/`，判定用的区域画成红框 |
 
 ## 流程
 
@@ -101,6 +100,6 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 | `data/swsh` | 剑盾的宝可梦、招式、路线和图片数据 |
 | `run` | 极巨大冒险这一局的状态 `game.yaml`，用来断线恢复和 keep path |
 | `catches` | 闪光宝可梦的截图 |
-| `logs` | 日志和截图，每个脚本一个目录：`logs/swsh-lair/`、`logs/sv-outbreak/`。极巨大冒险不是闪光的战果截图在 `logs/swsh-lair/results/` |
+| `logs` | 日志和截图，每个脚本一个目录：`logs/swsh-lair/`、`logs/sv-outbreak/`。截图平时只放在内存里，程序出错时才把这一局的截图写进这个目录下的 `failed/`。极巨大冒险不是闪光的战果截图在 `logs/swsh-lair/results/` |
 | `docs` | 实测记录和待测试的事项 |
 | `docker` | PKHeX 服务的容器 |
