@@ -19,10 +19,10 @@ from typing import NamedTuple
 import cv2
 import numpy as np
 
+from libs import ImageChecker
 from type import Rect
 
-from .check_image import ImageChecker
-from .switch import Switch
+from .switch import LairSwitch
 
 # 第 1 层只有两列，x 区间沿用旧流程的实测值（config/layout.py 的 PATH_RECTS[1]）
 _FIRST_ROW_COLUMNS = ((0.28, 0.45), (0.67, 0.84))
@@ -84,7 +84,7 @@ class _Frame(NamedTuple):
 class PathCursorCollector:
     """岔路口的光标区域：还没收集时移动光标逐列采样。"""
 
-    def __init__(self, sw: Switch):
+    def __init__(self, sw: LairSwitch):
         self._sw = sw
         self._icons = sw.data.type_icons()
         self._maps = sw.game.maps
@@ -463,7 +463,7 @@ class PathCursorCollector:
 
     def _format_cursors(self) -> list[str]:
         """按 game_config.py 里的缩进生成 path_cursors 的源码，行尾注释写这一组是第几排的哪几列。"""
-        from tools.next_columns import next_columns
+        from .next_columns import next_columns
 
         lines = ["    path_cursors: ClassVar[dict[str, PathCursors]] = {\n"]
         for map_type, starts in self._sw.config.rects.path_cursors.items():

@@ -2,10 +2,10 @@
 
 import cv2
 
+from libs import ImageChecker
 from type import Rect
 
-from .check_image import ImageChecker
-from .switch import Switch
+from .switch import LairSwitch
 
 
 class MapTypeReader:
@@ -20,7 +20,7 @@ class MapTypeReader:
     # 一列里最多找几个标签：第 1、2、3 层
     MAX_LABELS_PER_COLUMN = 3
 
-    def __init__(self, sw: Switch):
+    def __init__(self, sw: LairSwitch):
         self._sw = sw
         self._icons = sw.data.type_icons()
         self._icon_height = max(int(icon.shape[0]) for icon in self._icons.values())

@@ -4,17 +4,17 @@ import logging
 import re
 from dataclasses import replace
 
-from libs import Switch
-from libs.scoring import (
+from swsh.lair.switch import LairSwitch
+from swsh.pokemon import Pokemon
+from swsh.scoring import (
     evaluate_average_matchup,
     evaluate_matchup,
     weighted_score,
 )
 from tools import act_until, wait_for
-from type import Pokemon
 
 
-def catch(sw: Switch) -> str:
+def catch(sw: LairSwitch) -> str:
     """抓当前这只；首领抓完返回 "select_pokemon"，普通对手返回 "path"。"""
     boss = sw.game.num_caught == 3
     _catch_pokemon(sw, boss)
@@ -28,7 +28,7 @@ def catch(sw: Switch) -> str:
     return "path"
 
 
-def _catch_pokemon(sw: Switch, boss: bool) -> None:
+def _catch_pokemon(sw: LairSwitch, boss: bool) -> None:
     """选「捕捉」，在选球界面向左翻到要用的球，扔出去。"""
     ball = sw.config.legendary_ball if boss else sw.config.base_ball
     wait_for(
@@ -84,7 +84,7 @@ def _catch_pokemon(sw: Switch, boss: bool) -> None:
     sw.game.num_caught += 1
 
 
-def _swap_pokemon(sw: Switch) -> None:
+def _swap_pokemon(sw: LairSwitch) -> None:
     """等换不换的界面，决定要不要换成新抓到的，等结果并按结果更新队伍。"""
     image = wait_for(
         sw,
@@ -112,7 +112,7 @@ def _swap_pokemon(sw: Switch) -> None:
     _apply_swap(sw, caught_name, take)
 
 
-def _should_swap(sw: Switch, caught_name: str) -> bool:
+def _should_swap(sw: LairSwitch, caught_name: str) -> bool:
     """给换和不换打分，换成新抓到的分数更高返回 True。"""
     maps = sw.game.maps
     caught = replace(sw.data.pokemon_object(caught_name), hp=1.0)
@@ -161,7 +161,7 @@ def _should_swap(sw: Switch, caught_name: str) -> bool:
     return take_score > leave_score
 
 
-def _apply_swap(sw: Switch, caught_name: str, take: bool) -> None:
+def _apply_swap(sw: LairSwitch, caught_name: str, take: bool) -> None:
     """选换或不换，等画面变黑。队伍在 path 里重新读。"""
     own_name = sw.game.team[0][0]
 

@@ -2,13 +2,15 @@
 
 import logging
 
-from libs import ImageChecker, PathCursorCollector, Switch
+from libs import ImageChecker
+from swsh.lair.next_columns import next_columns
+from swsh.lair.path_cursor_collector import PathCursorCollector
+from swsh.lair.score import rental_boss_score
+from swsh.lair.switch import LairSwitch
 from tools import (
     act_until,
     keep_image,
-    next_columns,
     press_until,
-    rental_boss_score,
     wait_for,
 )
 from tools.text import contains
@@ -24,7 +26,7 @@ _KEYWORDS = {
 }
 
 
-def path(sw: Switch) -> str:
+def path(sw: LairSwitch) -> str:
     """一直处理路线上的分支，直到进入战斗，返回 "battle"。
 
     每个分支一次调用最多处理一次，处理完就从 states 里删掉：
@@ -65,7 +67,7 @@ def path(sw: Switch) -> str:
         states = tuple(other for other in states if other != state)
 
 
-def _match_state(sw: Switch, image: ImageChecker, states: tuple[str, ...]) -> str | None:
+def _match_state(sw: LairSwitch, image: ImageChecker, states: tuple[str, ...]) -> str | None:
     """先读黑色中间面板的第一行，按 states 的顺序比背包客、研究员、树果、岔路口的关键词；
     都没有，再读黑色占满面板的第一行，看是不是「×××出现了」。
     """
@@ -81,7 +83,7 @@ def _match_state(sw: Switch, image: ImageChecker, states: tuple[str, ...]) -> st
     return None
 
 
-def _handle_berry(sw: Switch) -> None:
+def _handle_berry(sw: LairSwitch) -> None:
     """按 A 推进树果对话，直到文字框里不再有「树果」。"""
     image = press_until(
         sw,
@@ -92,7 +94,7 @@ def _handle_berry(sw: Switch) -> None:
     keep_image(sw, image, "树果的对话结束")
 
 
-def _handle_fork(sw: Switch) -> None:
+def _handle_fork(sw: LairSwitch) -> None:
     """把岔路口光标移到计划路线上的下一个节点，按 A 确认。"""
     maps = sw.game.maps
     index = maps["current_index"]
@@ -112,7 +114,7 @@ def _handle_fork(sw: Switch) -> None:
     sw.game.save()
 
 
-def _move_fork_cursor(sw: Switch, cursors: dict[int, Rect], column: int) -> None:
+def _move_fork_cursor(sw: LairSwitch, cursors: dict[int, Rect], column: int) -> None:
     """把岔路口光标移到第 column 列。cursors 是能走到的几列的光标区域：{列号: 区域}。
 
     先用每个光标区域里的白色占比判断当前列，再按 column 在左还是右推左摇杆；
@@ -149,7 +151,7 @@ def _move_fork_cursor(sw: Switch, cursors: dict[int, Rect], column: int) -> None
     raise RuntimeError(f"岔路口光标移了 {len(rects)} 次，还是没到第 {column + 1} 列")
 
 
-def _path_cursor_index(sw: Switch, image: ImageChecker, rects: tuple[Rect, ...]) -> int:
+def _path_cursor_index(sw: LairSwitch, image: ImageChecker, rects: tuple[Rect, ...]) -> int:
     """几个光标区域里白色占比最高的序号，没有明显的返回 -1。"""
     ratios = [
         image.color_ratio(rect, sw.config.cursor_white_lower, sw.config.cursor_white_upper)
@@ -159,7 +161,7 @@ def _path_cursor_index(sw: Switch, image: ImageChecker, rects: tuple[Rect, ...])
     return best if ratios[best] > sw.config.cursor_white_ratio else -1
 
 
-def _handle_backpacker(sw: Switch) -> None:
+def _handle_backpacker(sw: LairSwitch) -> None:
     """等背包客的蓝色道具面板出来，读一下道具名，拿默认道具，再等面板消失。"""
     # 「遇到了背包客」之后对话自己翻页，道具面板才出来
     image = wait_for(
@@ -181,7 +183,7 @@ def _handle_backpacker(sw: Switch) -> None:
     keep_image(sw, image, "背包客的道具面板消失")
 
 
-def _handle_scientist(sw: Switch) -> None:
+def _handle_scientist(sw: LairSwitch) -> None:
     """研究员问要不要换租借宝可梦：平均分更高就换。
 
     平均分排除候选池和这一局路线上的遭遇宝可梦。
@@ -219,7 +221,7 @@ def _handle_scientist(sw: Switch) -> None:
     keep_image(sw, image, "研究员问话消失")
 
 
-def _backpacker_shown(sw: Switch, image: ImageChecker) -> bool:
+def _backpacker_shown(sw: LairSwitch, image: ImageChecker) -> bool:
     """蓝色道具面板正显示着。"""
     return (
         image.color_ratio(

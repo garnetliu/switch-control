@@ -1,72 +1,28 @@
-"""通过本机 PKHeX.Core API 解析游戏内的 PK8 记录。"""
+"""调用本机的 PKHeX.Core API：把一段 C# 脚本和输入发过去执行，拿回结果。"""
 
 import json
 import os
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Sequence
 from typing import Any
 
 
 class Pkhex:
-    """调用 PKHeX.Core API 解析 PK8 记录。"""
+    """PKHeX.Core API 的客户端。服务用 docker/pkhex-reader 启动。"""
 
     DEFAULT_API_URL = "http://127.0.0.1:8787/api/v1/execute"
     RETRY_DELAYS = (1, 2, 4, 8)
-    PK8_SIZE = 0x158
-    READ_ATTEMPTS = 16
-    READ_INTERVAL = 0.5
-    PK8_BATCH_SCRIPT = """
-return Input.GetProperty("records").EnumerateArray()
-    .Select((record, index) =>
-    {
-        var pk = new PK8(Convert.FromHexString(record.GetString()!));
-        return new
-        {
-            index,
-            species = pk.Species,
-            form = pk.Form,
-            moves = new[] { pk.Move1, pk.Move2, pk.Move3, pk.Move4 },
-            pp = new[] { pk.Move1_PP, pk.Move2_PP, pk.Move3_PP, pk.Move4_PP },
-            hp = pk.Stat_HPCurrent,
-            maxHp = pk.Stat_HPMax,
-            level = pk.CurrentLevel,
-            ivs = new[] { pk.IV_HP, pk.IV_ATK, pk.IV_DEF, pk.IV_SPA, pk.IV_SPD, pk.IV_SPE },
-            evs = new[] { pk.EV_HP, pk.EV_ATK, pk.EV_DEF, pk.EV_SPA, pk.EV_SPD, pk.EV_SPE },
-            checksumValid = pk.ChecksumValid,
-            encryptionConstant = pk.EncryptionConstant.ToString("X8"),
-        };
-    })
-    .ToArray();
-"""
 
-    def __init__(self, peek: Callable[[int, int], bytes], api_url: str | None = None):
-        self._peek = peek
+    def __init__(self, api_url: str | None = None):
         self._api_url = api_url or os.environ.get("PKHEX_API_URL", self.DEFAULT_API_URL)
 
-    def read_pk8(self, addresses: Sequence[int]) -> list[dict[str, Any]]:
-        """按地址读取一批 PK8；校验和不对就隔一会儿重读。"""
-        for attempt in range(self.READ_ATTEMPTS):
-            records = self.parse_pk8_batch(
-                [self._peek(address, self.PK8_SIZE) for address in addresses]
-            )
-            if all(record["checksumValid"] for record in records):
-                return records
-            if attempt < self.READ_ATTEMPTS - 1:
-                time.sleep(self.READ_INTERVAL)
-        raise RuntimeError("PK8 内存记录校验失败")
+    def execute(self, code: str, data: dict[str, Any]) -> Any:
+        """执行一段 C# 脚本，data 在脚本里是 Input，返回脚本 return 的值。
 
-    def parse_pk8_batch(self, records: Sequence[bytes]) -> list[dict[str, Any]]:
-        """用 PKHeX 解析一批 PK8 原始记录。"""
-        if not records:
-            return []
-        body = json.dumps(
-            {
-                "code": self.PK8_BATCH_SCRIPT,
-                "input": {"records": [record.hex() for record in records]},
-            }
-        ).encode()
+        连不上会重试几次，还是不行或者脚本报错抛 RuntimeError。
+        """
+        body = json.dumps({"code": code, "input": data}).encode()
         request = urllib.request.Request(
             self._api_url,
             data=body,
@@ -79,6 +35,10 @@ return Input.GetProperty("records").EnumerateArray()
                     with urllib.request.urlopen(request, timeout=15) as response:
                         payload = json.load(response)
                     break
+                except urllib.error.HTTPError as error:
+                    # 服务有回应，是脚本本身不对（比如编译不过），重试没有用
+                    detail = error.read().decode(errors="replace")
+                    raise RuntimeError(f"PKHeX API 执行脚本失败：{detail}") from error
                 except (
                     urllib.error.URLError,
                     TimeoutError,
@@ -99,7 +59,4 @@ return Input.GetProperty("records").EnumerateArray()
             ) from exc
         if "error" in payload:
             raise RuntimeError(f"PKHeX API 解析失败：{payload['error']}")
-        result = payload.get("result")
-        if not isinstance(result, list) or len(result) != len(records):
-            raise RuntimeError("PKHeX API 返回的记录数量不正确")
-        return result
+        return payload.get("result")

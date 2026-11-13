@@ -1,31 +1,24 @@
-"""新的入口：创建 switch，把连接传给每一步。"""
+"""入口：python src/main.py <游戏/脚本>。按名字找到脚本，创建连接，一步一步跑。"""
 
 import logging
+import sys
 
 from dotenv import load_dotenv
 
-from libs import Switch
-from shiny_steps import battle, catch, initialize, join, path, select_pokemon
+from scripts import load_script
 from tools.log import init_log
 
 
-def main() -> None:
-    sw = Switch()
+def main(name: str) -> None:
+    script = load_script(name)
+    sw = script.connect()
     init_log(sw, "start")
-    steps = {
-        "initialize": initialize,
-        "join": join,
-        "path": path,
-        "battle": battle,
-        "catch": catch,
-        "select_pokemon": select_pokemon,
-    }
-    step = "initialize"
+    step = script.START
     try:
-        while step in steps:
+        while step in script.STEPS:
             # 记下现在是哪一步，save_check 按它决定存不存截图
-            sw.game.step = step
-            step = steps[step](sw)
+            sw.step = step
+            step = script.STEPS[step](sw)
     except Exception as error:
         logging.exception(f"程序出错，步骤 {step}")
         sw.notifier.send(f"程序出错：{type(error).__name__}: {error}\n步骤：{step}")
@@ -34,4 +27,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     load_dotenv()
-    main()
+    main(sys.argv[1] if len(sys.argv) > 1 else "swsh/lair")

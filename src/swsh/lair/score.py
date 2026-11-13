@@ -1,9 +1,9 @@
 """按租借相性和首领相性给宝可梦打分。"""
 
-from libs import Switch
+from .switch import LairSwitch
 
 
-def rental_boss_score(sw: Switch, name: str, boss: str, floor: int) -> float:
+def rental_boss_score(sw: LairSwitch, name: str, boss: str, floor: int) -> float:
     """算租借宝可梦 name 对 boss 的加权分。
 
     floor 是当前层数，每过一层少一个普通对手要打，首领权重固定为 2。

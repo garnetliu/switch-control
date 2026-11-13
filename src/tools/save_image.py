@@ -31,10 +31,10 @@ def save_check(sw: Switch, image: ImageChecker, name: str, *rects: Rect) -> None
     """判定成功时把截图存进 check_dir，判定用的范围画成红框。
 
     环境变量 SAVE_CHECKS 写要存的步骤名字，用逗号分开，比如 SAVE_CHECKS=join,battle；
-    现在的步骤（sw.game.step）在里面才存，没设置就都不存。文件名是「时分秒-毫秒-name」。
+    现在的步骤（sw.step）在里面才存，没设置就都不存。文件名是「时分秒-毫秒-name」。
     """
     steps = [step.strip() for step in os.environ.get("SAVE_CHECKS", "").split(",")]
-    if not sw.game.step or sw.game.step not in steps:
+    if not sw.step or sw.step not in steps:
         return
     now = time.time()
     stamp = f"{time.strftime('%H%M%S', time.localtime(now))}-{int(now * 1000) % 1000:03d}"
@@ -45,7 +45,7 @@ def save_check(sw: Switch, image: ImageChecker, name: str, *rects: Rect) -> None
 def keep_image(sw: Switch, image: ImageChecker, name: str) -> None:
     """每种画面长期留一张：原图存到 keep_dir/name.jpg，不看环境变量，已经有同名的就不存。
 
-    keep_dir 这个目录 initialize 清空 logs 时不删。
+    keep_dir 这个目录清空日志时不删。
     """
     path = sw.config.keep_dir / f"{name.replace('/', '_')}.jpg"
     if path.exists():

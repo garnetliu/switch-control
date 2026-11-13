@@ -7,11 +7,17 @@ from tools.wait import capture, press_until, wait_for
 
 
 def restart(sw: Switch) -> None:
-    """关掉游戏再重新打开，直到开场画面变黑并停止按键。
+    """关掉游戏再重新打开，直到开场画面变黑并停止按键。"""
+    restart_to_title(sw)
+    enter_game(sw)
+    logging.info("游戏已重启")
+
+
+def restart_to_title(sw: Switch) -> None:
+    """关掉游戏再重新打开，等到开场的彩色画面出现为止，不按键进游戏。
 
     做法：HOME 菜单上按 Y 切换用户，要先关掉正在运行的软件，确认框默认选中「关闭」，按 A；
     关掉之后出现选用户的界面，按 A 用默认选中的用户，游戏就直接重新启动了。
-    冒险途中重启会放弃这一局，下次和科学家说话时要付极矿石作为罚款。
     """
     rects = sw.config.rects
     # 已经在 HOME 上就不能再按 HOME：HOME 上按 HOME 是回到游戏（真机上因此重启失败过）
@@ -34,18 +40,17 @@ def restart(sw: Switch) -> None:
     )
     sw.click("A", 0)
     logging.info("游戏已关闭，重新启动")
-    _enter_game(sw)
-    logging.info("游戏已重启")
-
-
-def _enter_game(sw: Switch) -> None:
-    """等开场彩色画面出现后持续按 A，每次截图检查，画面变黑就停止。"""
-    screen = wait_for(
+    wait_for(
         sw,
         lambda screen: _game_running(sw) and _colorful(sw, screen),
         sw.config.boot_timeout,
         "开场的彩色画面",
     )
+
+
+def enter_game(sw: Switch) -> None:
+    """开场彩色画面出现之后用：持续按 A，每次截图检查，画面变黑就停止。"""
+    screen = capture(sw)
     presses = 0
     while not screen.is_black():
         sw.click("A", 0)
@@ -60,7 +65,7 @@ def _home_shown(sw: Switch, screen: ImageChecker) -> bool:
 
 
 def _game_running(sw: Switch) -> bool:
-    """前台正在运行的是剑或盾。"""
+    """前台正在运行的是这个脚本的游戏。"""
     return sw.title_id().strip().upper() in sw.config.game_title_ids
 
 

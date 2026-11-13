@@ -3,22 +3,24 @@ import time
 
 import cv2
 
-from libs import Lair, MapTypeReader, Switch
+from swsh.lair.lair import Lair
+from swsh.lair.map import MapNode, Maps
+from swsh.lair.map_type_reader import MapTypeReader
+from swsh.lair.next_columns import next_columns
+from swsh.lair.switch import LairSwitch
 from tools import (
     act_until,
     capture,
     keep_image,
     menu_last_item,
     move_menu_option,
-    next_columns,
     press_until,
     save_check,
     wait_for,
 )
-from type import MapNode, Maps
 
 
-def join(sw: Switch) -> str:
+def join(sw: LairSwitch) -> str:
     # 记下开始时间，清掉上一局打到一半的数据
     sw.game.start_run()
     boss = _select_target(sw)
@@ -27,7 +29,7 @@ def join(sw: Switch) -> str:
     return "path"
 
 
-def _select_target(sw: Switch):
+def _select_target(sw: LairSwitch):
     """从科学家面前开始对话，在传说菜单里选中 BOSS 并确认，一直到进入选初始宝可梦的界面。
 
     initialize 已经处理过中途退出的罚款和提醒，并关掉了对话框；这里按 A 重新开始对话：
@@ -38,7 +40,14 @@ def _select_target(sw: Switch):
     BOSS 不在菜单里（刷到闪光带走之后那只就不在列表里了，或者存档改过）时，改成选菜单的第一项，
     这一局就刷它；菜单里全是「不指定」时抛 RuntimeError。
     """
-    image = press_until(sw, lambda screen: menu_last_item(sw, screen) == "不指定", "传说菜单")
+    rects = sw.config.rects
+    image = press_until(
+        sw,
+        lambda screen: (
+            menu_last_item(screen, rects.menu_search, dialog=rects.white_center_line1) == "不指定"
+        ),
+        "传说菜单",
+    )
     bosses = sw.data.boss_pokemon()
     boss = _select_boss(sw, sw.config.boss)
     wanted = bosses[boss].name()
@@ -52,6 +61,7 @@ def _select_target(sw: Switch):
         wanted,
         lambda: sw.click("DDOWN", 0),
         "选择传说Boss",
+        rects.menu_search,
     )
     # 选好传说之后：「要保存目前为止的冒险记录吗？」→「是 / 否」→ 选「是」保存。
     # 一直按 A 到画面变黑（保存中）就停，参考 lib/game.py 的 _enter_game
@@ -60,7 +70,7 @@ def _select_target(sw: Switch):
     solo = "发起单人挑战！"
     image = wait_for(
         sw,
-        lambda screen: menu_last_item(sw, screen, 1, area=sw.config.rects.lobby_menu) == solo,
+        lambda screen: menu_last_item(screen, rects.lobby_menu, 1) == solo,
         sw.config.timeout,
         "极巨大冒险的大厅",
     )
@@ -76,7 +86,7 @@ def _select_target(sw: Switch):
     return boss
 
 
-def _select_starter(sw: Switch, boss: str) -> None:
+def _select_starter(sw: LairSwitch, boss: str) -> None:
     """从内存读取三只租借宝可梦，选择得分最高的。
 
     屏幕只用来看光标停在哪只上；宝可梦信息都从内存读取。队友等第一场战斗再读（见 battle._read_team），
@@ -102,7 +112,7 @@ def _select_starter(sw: Switch, boss: str) -> None:
     sw.click("A", 0)
 
 
-def _select_path(sw: Switch) -> None:
+def _select_path(sw: LairSwitch) -> None:
     """等路线图出现，读出整张路线图，给每条路线打分，把分数最高的记为这一局的目标路线。
 
     只决定走哪条，真正在岔路口移动光标是下一步 path 的事。
@@ -113,7 +123,7 @@ def _select_path(sw: Switch) -> None:
         _assign_new_path(sw)
 
 
-def _assign_new_path(sw: Switch) -> None:
+def _assign_new_path(sw: LairSwitch) -> None:
     """开场镜头往上移动时只读地图类型，等到路线图出现。"""
     wait_for(sw, lambda screen: not screen.is_black(), sw.config.timeout, "开场黑屏结束")
     reader = MapTypeReader(sw)
@@ -142,8 +152,8 @@ def _assign_new_path(sw: Switch) -> None:
         raise RuntimeError("没读到路线图类型")
 
 
-def _save_map_frames(sw: Switch, frames: list) -> None:
-    """把读地图类型时截到的帧按顺序存进 logs/map_type/这一次的时间/。
+def _save_map_frames(sw: LairSwitch, frames: list) -> None:
+    """把读地图类型时截到的帧按顺序存进日志目录的 map_type/这一次的时间/。
 
     下一次启动时 initialize 会清空 logs，要看的话先把这个目录拷出去。
     """
@@ -154,7 +164,7 @@ def _save_map_frames(sw: Switch, frames: list) -> None:
     logging.warning(f"没读到路线图类型，读图用的 {len(frames)} 帧存在 {directory}")
 
 
-def _assign_route(sw: Switch) -> None:
+def _assign_route(sw: LairSwitch) -> None:
     """地图类型出来后，按 seed 的遭遇和首领相性给所有路线打分，存最高分路线。"""
     maps = sw.game.maps
     map_type = maps["type"]
@@ -187,7 +197,7 @@ def _assign_route(sw: Switch) -> None:
     )
 
 
-def _move_starter_cursor(sw: Switch) -> None:
+def _move_starter_cursor(sw: LairSwitch) -> None:
     """读界面上的三只候选，选得分最高的，把黑色光标移过去。"""
 
     rects = sw.config.rects.starter_candidates
@@ -212,7 +222,7 @@ def _move_starter_cursor(sw: Switch) -> None:
     )
 
 
-def _select_boss(sw: Switch, target: str) -> str:
+def _select_boss(sw: LairSwitch, target: str) -> str:
     """读四个 Lair note 的 species，目标 target 还在就返回它，不在就返回第一个 boss 的 name_id。"""
     species = [
         int.from_bytes(sw.peek(address, 2), "little") for address in sw.config.addresses.lair_notes
@@ -227,7 +237,7 @@ def _select_boss(sw: Switch, target: str) -> str:
     raise RuntimeError(f"Lair note 里找不到第一个 boss：{species}")
 
 
-def _read_seed(sw: Switch) -> int:
+def _read_seed(sw: LairSwitch) -> int:
     """读这一局的冒险 seed。"""
     raw = sw.peek(sw.config.addresses.seed, 8)
     if len(raw) != 8:
@@ -237,7 +247,7 @@ def _read_seed(sw: Switch) -> int:
     return seed
 
 
-def _matching_lair(sw: Switch, seed: int, shown: list[str]) -> Lair:
+def _matching_lair(sw: LairSwitch, seed: int, shown: list[str]) -> Lair:
     """按 seed 算租借和遭遇，算出来的前 3 只租借要和选宝可梦界面上的 3 只（shown）一样。
 
     不一样就在开头多取 1 个随机数重算，最多多取 lair_extra_max 个；都对不上抛 RuntimeError。
@@ -260,7 +270,7 @@ def _matching_lair(sw: Switch, seed: int, shown: list[str]) -> Lair:
     )
 
 
-def _assign_new_starter(sw: Switch) -> None:
+def _assign_new_starter(sw: LairSwitch) -> None:
     """seed 变了时重新算这一局的候选池和遭遇。"""
     seed = sw.game.seed
     assert seed is not None

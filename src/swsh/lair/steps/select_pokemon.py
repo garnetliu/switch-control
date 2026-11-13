@@ -5,11 +5,12 @@ import time
 import unicodedata
 from pathlib import Path
 
-from libs import ImageChecker, Switch
+from libs import ImageChecker
+from swsh.lair.switch import LairSwitch
 from tools import act_until, capture, move_menu_option, press_until, restart, save_check, wait_for
 
 
-def select_pokemon(sw: Switch) -> str:
+def select_pokemon(sw: LairSwitch) -> str:
     """查闪光，带走或留下，再决定下一局，返回 "initialize"。"""
     if sw.game.num_caught == 0:
         _no_catch(sw)
@@ -20,7 +21,7 @@ def select_pokemon(sw: Switch) -> str:
         return "initialize"
 
 
-def _no_catch(sw: Switch) -> None:
+def _no_catch(sw: LairSwitch) -> None:
     """一只都没抓到：截一张后面的界面，算输一局判断锁不锁定，先写战报，再重启或结束这一局。"""
     logging.info("一只都没抓到")
     # 一只都没抓到时后面是什么界面还没见过，等 15 秒截一张留着，之后照着改逻辑
@@ -38,7 +39,7 @@ def _no_catch(sw: Switch) -> None:
         _press_until_black(sw)
 
 
-def _check_shiny(sw: Switch) -> tuple[int, list[float]]:
+def _check_shiny(sw: LairSwitch) -> tuple[int, list[float]]:
     """等带走宝可梦的界面，查闪光，截图后回到列表。
 
     返回 (要带走的那只的序号，没有闪光是 -1；每只闪光框的占比，写进战报)。
@@ -64,7 +65,7 @@ def _check_shiny(sw: Switch) -> tuple[int, list[float]]:
     return shiny, values
 
 
-def _save_list_screenshots(sw: Switch, results: list[bool]) -> None:
+def _save_list_screenshots(sw: LairSwitch, results: list[bool]) -> None:
     """在带走列表上从第一只往下，把闪光的和最后一只（神兽）的截图存下来。没有闪光也要截神兽。
 
     资料页查完最后一只还会往下切一次，绕回第一只，所以退回列表时光标在第一只上。
@@ -94,7 +95,7 @@ def _save_list_screenshots(sw: Switch, results: list[bool]) -> None:
             _move_list_cursor(sw, index + 1)
 
 
-def _save_screenshot(sw: Switch, image: ImageChecker, kind: str, shiny: bool) -> Path:
+def _save_screenshot(sw: LairSwitch, image: ImageChecker, kind: str, shiny: bool) -> Path:
     """存一张战果截图，返回存下的文件：闪光的存进 catch_dir，文件名带 shiny-，Switch 自己也截一张
     存进相册；不是闪光的存进 result_dir。kind 是 summary（资料页）或 list（带走列表）。
     """
@@ -109,7 +110,7 @@ def _save_screenshot(sw: Switch, image: ImageChecker, kind: str, shiny: bool) ->
     return path
 
 
-def _decide_next_run(sw: Switch, shiny: int, values: list[float]) -> None:
+def _decide_next_run(sw: LairSwitch, shiny: int, values: list[float]) -> None:
     """决定下一局：带走闪光、重启游戏 keep path，或者结束这一局。
 
     先用 game.finish_run 记下胜负、算锁定还是解锁，再写战报，最后按键收尾；
@@ -132,7 +133,7 @@ def _decide_next_run(sw: Switch, shiny: int, values: list[float]) -> None:
         _press_until_black(sw)
 
 
-def _report(sw: Switch, shiny: int, values: list[float], outcome: str, lock: str) -> None:
+def _report(sw: LairSwitch, shiny: int, values: list[float], outcome: str, lock: str) -> None:
     """把这一局的战报写进日志并推送，附上这一局存下的战果截图。格式：
 
     第 N 轮战报：（N 是 lock_results 里记录的局数）
@@ -225,13 +226,13 @@ def _pad(text: str, width: int) -> str:
     return text + " " * max(0, width - _display_width(text))
 
 
-def _take(sw: Switch, index: int) -> None:
+def _take(sw: LairSwitch, index: int) -> None:
     """带走第 index 只：光标移到那只上，一直按 A 到画面变黑。"""
     _move_list_cursor(sw, index)
     logging.info(f"带走了第 {index + 1} 只 {sw.game.caught[index]}")
 
 
-def _move_list_cursor(sw: Switch, index: int) -> None:
+def _move_list_cursor(sw: LairSwitch, index: int) -> None:
     """把带走列表的光标移到第 index 只（按抓到的顺序，从 0 开始）。"""
     rows = list(sw.config.rects.result_rows[: sw.game.num_caught])
     current = capture(sw).selected(rows)
@@ -245,7 +246,7 @@ def _move_list_cursor(sw: Switch, index: int) -> None:
     )
 
 
-def _find_shiny(sw: Switch) -> list[float]:
+def _find_shiny(sw: LairSwitch) -> list[float]:
     """从第一只开始，按顺序打开资料页查闪光，返回每只闪光框的占比，用 _is_shiny 判断是不是闪光。"""
     rects = sw.config.rects
     # 光标在列表第一只上，按 A 弹出菜单，菜单的位置是固定的
@@ -309,7 +310,7 @@ def _find_shiny(sw: Switch) -> list[float]:
     return results
 
 
-def _summary_name(sw: Switch, image: ImageChecker) -> str:
+def _summary_name(sw: LairSwitch, image: ImageChecker) -> str:
     """资料页上的名字。
 
     区域要贴着名字那一格：区域里空白太多时，两个字的名字（比如「袋兽」）用 read_text 读不出来。
@@ -317,7 +318,7 @@ def _summary_name(sw: Switch, image: ImageChecker) -> str:
     return image.read_text(sw.config.rects.summary_name)
 
 
-def _back_to_scientist(sw: Switch) -> None:
+def _back_to_scientist(sw: LairSwitch) -> None:
     """一直按 B，直到出现「不带宝可梦回去了，你确定吗？」的是 / 否。"""
     press_until(
         sw,
@@ -330,7 +331,7 @@ def _back_to_scientist(sw: Switch) -> None:
     )
 
 
-def _shiny_value(image: ImageChecker, sw: Switch) -> float:
+def _shiny_value(image: ImageChecker, sw: LairSwitch) -> float:
     """资料页闪光框里高饱和像素的占比，换算成 0 到 255。"""
     value = (
         image.color_ratio(
@@ -344,12 +345,12 @@ def _shiny_value(image: ImageChecker, sw: Switch) -> float:
     return value
 
 
-def _is_shiny(sw: Switch, value: float) -> bool:
+def _is_shiny(sw: LairSwitch, value: float) -> bool:
     """闪光框的占比在范围内就是闪光。"""
     return sw.config.shiny_min < value <= sw.config.shiny_max
 
 
-def _press_until_black(sw: Switch) -> None:
+def _press_until_black(sw: LairSwitch) -> None:
     """一直按 A，画面变黑就停。
 
     带走和不带走之后都是：报酬页面 → 转场黑屏 → 回到科学家面前。黑屏之后科学家说什么不固定

@@ -6,9 +6,9 @@ import time
 
 from ruamel.yaml import YAML
 
-from type import GameStateSnapshot, Maps
-
 from .game_config import GameConfig
+from .map import Maps
+from .snapshot import GameStateSnapshot
 
 
 class GameState:
@@ -34,7 +34,6 @@ class GameState:
                 faints=[],
                 route_score=0.0,
                 balls={},
-                step="",
                 started=0.0,
             )
         self.boss: str = state.get("boss", self._config.boss)  # boss 可能在 config 里没设置
@@ -67,8 +66,6 @@ class GameState:
         self.route_score: float = state.get("route_score", 0.0)
         # 各种球还剩几个：{球名: 数量}
         self.balls: dict[str, int] = state.get("balls", {})
-        # 当前所在的步骤
-        self.step = state.get("step", "")
         # 这一局开始的时间（time.time()），join 一开始记下
         self.started: float = state.get("started", 0.0)
 
@@ -195,6 +192,5 @@ class GameState:
             faints=self.faints,
             route_score=self.route_score,
             balls=self.balls,
-            step=self.step,
             started=self.started,
         )

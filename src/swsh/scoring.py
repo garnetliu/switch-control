@@ -9,8 +9,8 @@ import logging
 from collections.abc import Iterable
 from dataclasses import replace
 
-from type.field import Field
-from type.pokemon import Move, Pokemon
+from swsh.field import Field
+from swsh.pokemon import Move, Pokemon
 
 TYPES = (
     "normal",

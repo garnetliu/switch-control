@@ -22,5 +22,4 @@ class GameStateSnapshot(TypedDict):
     faints: list[int]
     route_score: float
     balls: dict[str, int]
-    step: str
     started: float

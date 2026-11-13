@@ -1,7 +1,8 @@
 """从极巨大冒险 seed 计算租借候选和普通遭遇。"""
 
+from libs.xoroshiro import Xoroshiro
+
 from .game_data import GameData
-from .xoroshiro import Xoroshiro
 
 
 class Lair:

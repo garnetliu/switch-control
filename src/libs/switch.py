@@ -1,7 +1,7 @@
 """和 Switch 上的 botbase 通信：Wi-Fi 用 sys-botbase（TCP），USB 用 usb-botbase。
 
 用哪种由 .env 的 SWITCH_CONNECTION 决定：usb，或者 wifi（默认，要配 SWITCH_IP、SWITCH_PORT）。
-两种连接对外的方法完全一样。Switch(boss) 在初始化时自动连接。
+两种连接对外的方法完全一样。Switch(config) 在初始化时自动连接。
 """
 
 import atexit
@@ -15,11 +15,8 @@ import time
 import usb.core
 import usb.util
 
-from .game_config import GameConfig
-from .game_data import GameData
-from .game_state import GameState
+from .config import BaseConfig
 from .notifier import Notifier
-from .pkhex import Pkhex
 
 # 摇杆坐标的最大值
 STICK_MAX = 0x7FFF
@@ -215,14 +212,13 @@ class _UsbConnection:
 
 
 class Switch:
-    """一条连接和这一局的状态。初始化时按 .env 自动连接。"""
+    """一条连接。初始化时按 .env 自动连接。"""
 
-    def __init__(self):
-        # 配置和这一局的状态挂在连接上，步骤里用 sw.config、sw.game 取
-        self.config = GameConfig()
-        self.game = GameState(self.config)
-        self.data = GameData(self.config)
-        self.pkhex = Pkhex(self.peek)
+    def __init__(self, config: BaseConfig):
+        # 配置挂在连接上，步骤里用 sw.config 取
+        self.config = config
+        # 现在是哪一步，入口的循环每一步之前写进来，save_check 按它决定存不存截图
+        self.step = ""
         # 往 Discord 推送消息，步骤里用 sw.notifier 取
         self.notifier = Notifier()
         self._connect()
@@ -320,6 +316,21 @@ class Switch:
         return self._request_bytes(
             f"pointerPeek {size:#x} " + " ".join(f"{jump:#x}" for jump in jumps)
         )
+
+    def pointer_all(self, jumps: list[int]) -> int:
+        """按指针链算出绝对地址，不读数据。jumps 的写法和 pointer_peek 一样。"""
+        data = self._request_bytes("pointerAll " + " ".join(f"{jump:#x}" for jump in jumps))
+        # usb-botbase 回的是原始的 8 字节（小端）；sys-botbase 回的是打印出来的十六进制数（大端）
+        usb = isinstance(self._connection, _UsbConnection)
+        return int.from_bytes(data, "little" if usb else "big")
+
+    def peek_absolute(self, address: int, size: int) -> bytes:
+        """读绝对地址 address 处的 size 个字节。"""
+        return self._request_bytes(f"peekAbsolute {address:#x} {size:#x}")
+
+    def poke_absolute(self, address: int, data: bytes) -> None:
+        """把 data 写到绝对地址 address。"""
+        self._send(f"pokeAbsolute {address:#x} 0x{data.hex()}")
 
     def close(self):
         """断开连接。没连接时调用也没问题。"""

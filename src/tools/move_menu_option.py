@@ -16,16 +16,14 @@ def move_menu_option(
     target: int | str,
     move: Callable[[], None],
     what: str,
-    area: Rect | None = None,
+    area: Rect,
 ) -> int:
     """把菜单光标移到目标项，返回下标。
 
     target 是序号或文字；文字按编辑距离和菜单里的选项比。
     move 是移一格的操作，比如按 DDOWN 或 DUP。
-    area 是找菜单的搜索范围，默认是对话菜单的范围。
+    area 是找菜单的搜索范围。
     """
-    if area is None:
-        area = sw.config.rects.menu_search
     found = image.find_menu(area)
     if found is None:
         raise RuntimeError(f"{what}里找不到菜单")

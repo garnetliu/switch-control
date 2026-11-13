@@ -1,11 +1,13 @@
-"""新代码的配置：路径、计时、界面区域、游戏参数。"""
+"""极巨大冒险的配置：路径、界面区域、游戏参数。"""
 
-from pathlib import Path
 from typing import ClassVar
 
-from type import Hsv, PathCursors, Rect
+from libs.config import ROOT, BaseConfig, BaseRects
+from swsh import TITLE_IDS
+from type import Hsv, Rect
 
-ROOT = Path(__file__).resolve().parents[2]
+# 岔路口的光标区域：{(出发层号, 出发列号): (能走到的每一列的光标区域, ...)}
+PathCursors = dict[tuple[int, int], tuple[Rect, ...]]
 
 
 class Addresses:
@@ -41,7 +43,7 @@ class Addresses:
     battle_state_shield = 0x3F128626
 
 
-class Rects:
+class Rects(BaseRects):
     """画面上的坐标范围。"""
 
     # 画面底部的文字面板一共三种：黑色占满左右的、黑色只在中间的、白色在中间的。
@@ -144,10 +146,6 @@ class Rects:
     summary_name: Rect = ((0.23, 0.12), (0.421, 0.175))
     summary_sprite: Rect = ((0.60, 0.22), (0.97, 0.88))
     shiny: Rect = ((0.075, 0.53), (0.105, 0.58))
-    # 重启游戏：HOME 菜单底部「切换用户」的提示、关闭软件的确认框、选用户界面的标题
-    home_hint: Rect = ((0.5, 0.9), (1.0, 1.0))
-    close_dialog: Rect = ((0.45, 0.38), (0.8, 0.5))
-    user_picker: Rect = ((0.0, 0.45), (0.5, 0.55))
     yes_no: tuple[Rect, Rect] = (
         ((0.68, 0.645), (0.82, 0.705)),
         ((0.68, 0.705), (0.82, 0.765)),
@@ -274,13 +272,13 @@ class Rects:
     }
 
 
-class GameConfig:
-    """新代码的配置。"""
+class GameConfig(BaseConfig):
+    """极巨大冒险的配置。"""
 
     # 要找的传说宝可梦，数据文件里的 name_id
     boss = "solgaleo"
     # 数据文件和图片资源
-    data_dir = ROOT / "data"
+    data_dir = ROOT / "data" / "swsh"
     # 运行状态快照：YAML 文件 run/game.yaml
     game_state_file = ROOT / "run" / "game.yaml"
     # 游戏的语言，对应数据文件里 names 的键
@@ -290,14 +288,9 @@ class GameConfig:
     # 画面上的坐标范围
     rects = Rects()
     # 日志和出错时的截图
-    log_dir = ROOT / "logs"
-    # 判定成功时的截图，环境变量 SAVE_CHECKS 里写了现在的步骤才存
-    check_dir = ROOT / "logs" / "checks"
-    # 长期留着的截图，initialize 清空 logs 时不删
-    keep_dir = ROOT / "logs" / "keep"
+    log_dir = ROOT / "logs" / "swsh-lair"
     # 战果截图：闪光的放 catch_dir，不是闪光的放 result_dir
-    catch_dir = ROOT / "catches"
-    result_dir = ROOT / "logs" / "results"
+    result_dir = log_dir / "results"
     # 路线图第 2 层四个标签里最高和最低的间距对应的地图类型，间距是占画面高度的比例。
     # 三种都是真机实测：换算到 1080 行的画面上，2x2 是 143 像素，2x3 是 180 像素，3x2 是 67 像素
     path_types: ClassVar[dict[float, str]] = {0.132: "2x2", 0.167: "2x3", 0.062: "3x2"}
@@ -357,11 +350,6 @@ class GameConfig:
     dynamax_lower: Hsv = (0, 0, 200)
     dynamax_upper: Hsv = (180, 50, 255)
     dynamax_ratio = 10 / 255
-    # 摇杆坐标最大值和推一格保持的时间
-    stick_max = 0x7FFF
-    stick_tick = 0.08
-    # 等画面变化和操作超时
-    timeout = 60.0
     # seed 算出的前 3 只租借和选宝可梦界面对不上时，开头最多多取几个随机数重算（真机上只见过多取 1 个）
     lair_extra_max = 3
     # 没锁定的图：打赢、倒下不超过 lock_max_faints 次、用时不超过 lock_max_minutes 分钟，就锁定这张图（keep path）
@@ -372,14 +360,5 @@ class GameConfig:
     lock_window_rounds = 10
     lock_early_fails = 2
     lock_min_win_rate = 0.9
-    # 重启游戏：等选用户界面、等开场彩色画面最多几秒
-    load_timeout = 30.0
-    boot_timeout = 60.0
     # 《宝可梦 剑》《宝可梦 盾》的 Title ID
-    game_title_ids = ("0100ABF008968000", "01008DB008C2C000")
-    # 开场画面是彩色的：鲜艳的像素（饱和度、亮度都不低）至少占这么多
-    colorful_lower: Hsv = (0, 100, 60)
-    colorful_upper: Hsv = (180, 255, 255)
-    colorful_ratio = 0.3
-    # 两次截图之间的间隔
-    interval = 0.3
+    game_title_ids = TITLE_IDS

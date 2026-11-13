@@ -1,4 +1,4 @@
-"""游戏数据：data/ 里新代码用到的数据文件。"""
+"""游戏数据：data/swsh/ 里的数据文件。"""
 
 import json
 import pickle
@@ -6,13 +6,14 @@ from typing import Any
 
 import cv2
 
-from type import Boss, Move, Pokemon
+from swsh.pokemon import Move, Pokemon
 
+from .boss import Boss
 from .game_config import GameConfig
 
 
 class GameData:
-    """加载 data/ 里的数据文件。"""
+    """加载 data/swsh/ 里的数据文件。"""
 
     def __init__(self, config: GameConfig):
         self._config = config
@@ -98,7 +99,7 @@ class GameData:
     def type_icons(self) -> dict[str, Any]:
         """路线图上的属性图标模板：{属性: 单通道黑白图}，和截图一样是原始大小。
 
-        图在 data/type_icons/属性名.png。还没在真机上抠到的属性，先用老图标缩小得到的临时图，
+        图在 data/swsh/type_icons/属性名.png。还没在真机上抠到的属性，先用老图标缩小得到的临时图，
         抠到之后用 save_type_icon 换掉。
         """
         type_icons = self._type_icons_cache
@@ -111,7 +112,7 @@ class GameData:
         return type_icons
 
     def collected_type_icons(self) -> set[str]:
-        """已经换成真机抠图的属性，名单在 data/type_icons/collected.json。"""
+        """已经换成真机抠图的属性，名单在 data/swsh/type_icons/collected.json。"""
         path = self._directory / "type_icons" / "collected.json"
         return set(json.loads(path.read_text(encoding="utf-8"))) if path.exists() else set()
 

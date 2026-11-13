@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass, field, replace
 
-from libs.scoring import select_best_move, transform_ditto
-from type import Field, Pokemon
+from swsh.field import Field
+from swsh.pokemon import Pokemon
+from swsh.scoring import select_best_move, transform_ditto
 
 
 @dataclass(kw_only=True)
