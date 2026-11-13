@@ -28,6 +28,12 @@ def _shared_ocr() -> RapidOCR:
     return RapidOCR()
 
 
+def _crop(img: np.ndarray, rect: Rect) -> np.ndarray:
+    h, w = img.shape[:2]
+    (left, top), (right, bottom) = rect
+    return img[round(top * h) : round(bottom * h), round(left * w) : round(right * w)]
+
+
 class ImageChecker:
     """对一张截图做各种检查。截图只解码一次，同一张图的多次检查共用。"""
 
@@ -66,12 +72,7 @@ class ImageChecker:
     def crop(self, rect: Rect, channel: str = "bgr") -> np.ndarray:
         """按比例裁剪截图。channel: bgr（彩色）、gray（灰度）或 hsv。"""
         image = {"bgr": self._bgr, "gray": self._gray, "hsv": self._hsv}[channel]
-        return self._crop(image, rect)
-
-    def _crop(self, img: np.ndarray, rect: Rect) -> np.ndarray:
-        h, w = img.shape[:2]
-        (left, top), (right, bottom) = rect
-        return img[round(top * h) : round(bottom * h), round(left * w) : round(right * w)]
+        return _crop(image, rect)
 
     # ---- 文字 ----
 
@@ -83,9 +84,7 @@ class ImageChecker:
         所以空的区域也能直接用来判断「有没有字」。要读多行的区域用 text_lines。
         """
         min_text_score = 0.5
-        result, _ = self._ocr(
-            self._crop(self._bgr, rect), use_det=False, use_cls=False, use_rec=True
-        )
+        result, _ = self._ocr(_crop(self._bgr, rect), use_det=False, use_cls=False, use_rec=True)
         if not result:
             return ""
         text = str(result[0][0])
@@ -182,11 +181,11 @@ class ImageChecker:
 
     def brightness(self, rect: Rect) -> float:
         """区域的平均亮度，0 到 255。"""
-        return float(self._crop(self._gray, rect).mean())
+        return float(_crop(self._gray, rect).mean())
 
     def color_ratio(self, rect: Rect, lower: Hsv, upper: Hsv) -> float:
         """区域内 HSV 在 lower 到 upper 之间的像素占比，0 到 1。"""
-        mask = cv2.inRange(self._crop(self._hsv, rect), lower, upper)
+        mask = cv2.inRange(_crop(self._hsv, rect), lower, upper)
         return float(mask.mean()) / 255
 
     def has_color(self, rect: Rect, lower: Hsv, upper: Hsv, min_ratio: float) -> bool:
@@ -198,7 +197,7 @@ class ImageChecker:
 
         空白、渐变、大块纯色接近 0，有轮廓和细节的地方更高。用来看画面里的东西有没有画出来。
         """
-        edges = cv2.Canny(self._crop(self._gray, rect), 50, 150)
+        edges = cv2.Canny(_crop(self._gray, rect), 50, 150)
         return float((edges > 0).mean())
 
     def is_black(self) -> bool:
@@ -235,9 +234,9 @@ class ImageChecker:
     ) -> tuple[float, tuple[int, int]]:
         """在区域里找模板，返回最高匹配度和模板左上角相对区域的像素位置。"""
         if lower is not None and upper is not None:
-            area = cv2.inRange(self._crop(self._hsv, rect), lower, upper)
+            area = cv2.inRange(_crop(self._hsv, rect), lower, upper)
         else:
-            area = self._crop(self._bgr, rect)
+            area = _crop(self._bgr, rect)
         if area.shape[0] < template.shape[0] or area.shape[1] < template.shape[1]:
             return 0.0, (0, 0)
         result = cv2.matchTemplate(area, template, cv2.TM_CCOEFF_NORMED)
