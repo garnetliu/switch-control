@@ -53,7 +53,7 @@ class GameState:
         self.lock_results: list[bool] = state.get("lock_results", [])
         # 锁定这张图以来每一局的胜负，锁定的那一局算第 1 局，用来判断要不要解锁
         self.path_results: list[bool] = state.get("path_results", [])
-        # 极巨矿数量，读取和减少的逻辑以后做
+        # 极矿石的数量，initialize 每一局从内存读一次
         self.dynite_ore = state.get("dynite_ore", 0)
         # 队伍名字和 hp，第一个是自己
         self.team: list[tuple[str, float]] = [tuple(item) for item in state.get("team", [])]
@@ -111,7 +111,7 @@ class GameState:
         """select_pokemon 结束时调用：记下这一局的胜负，算锁定还是解锁，返回 (锁定, 写进战报的锁定情况)。
 
         带走了闪光不锁定。环境变量 KEEP_PATH 不是 1 时也不锁定（keep path 要重启游戏，
-        下次和科学家说话要付极矿石）。
+        下次和科学家说话要付极矿石）。极矿石不多于 lock_min_ore 个时也不锁定，已经锁定的解锁。
         锁定的图：只看锁定以来的胜负，见 _should_unlock；赢了的局不管用了多久、倒下几次都保持。
         没锁定的图：打赢、倒下次数和用时都在范围内，就锁定这张图。
         """
@@ -126,6 +126,9 @@ class GameState:
         elif os.environ.get("KEEP_PATH") != "1":
             self.lock_path = False
             lock = "没有开启 KEEP_PATH，不锁定"
+        elif self.dynite_ore <= config.lock_min_ore:
+            self.lock_path = False
+            lock = f"极矿石只剩 {self.dynite_ore} 个，不锁定"
         elif self.lock_path:
             self.path_results.append(won)
             self.lock_path = not self._should_unlock()

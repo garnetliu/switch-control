@@ -34,15 +34,18 @@ class War(Field):
         elif self.dynamax_turns > 1:
             self.dynamax_turns -= 1
 
-    def best_move(self, can_dynamax: bool) -> tuple[int, float, bool]:
+    def best_move(self, can_dynamax: bool, blocked: set[int]) -> tuple[int, float, bool]:
         """这回合用哪个招式：返回招式序号、分数、要不要极巨化。
 
         can_dynamax 是画面上有没有极巨化按钮；这场已经极巨化过就不再考虑。
+        blocked 是这回合试过、被定身法之类封住用不了的招式序号，选的时候当成没 PP。
         """
-        best, _, score = select_best_move(self.own, self.opponent, self, self.teammates)
+        pp = [0 if index in blocked else left for index, left in enumerate(self.own.pp)]
+        own = replace(self.own, pp=pp)
+        best, _, score = select_best_move(own, self.opponent, self, self.teammates)
         if can_dynamax and self.dynamax_turns == -1:
             dynamax_best, _, dynamax_score = select_best_move(
-                replace(self.own, dynamax=True), self.opponent, self, self.teammates
+                replace(own, dynamax=True), self.opponent, self, self.teammates
             )
             if dynamax_score > score:
                 return dynamax_best, dynamax_score, True

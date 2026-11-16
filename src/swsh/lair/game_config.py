@@ -37,6 +37,14 @@ class Addresses:
     raid_owner_species = 0x8398A294
     # 团体战首领
     raid_boss = 0x8398A25C
+    # 背包的道具块，里面每格 4 字节小端：低 11 位是道具编号，第 15 位起 10 位是数量
+    items = 0x45067A98
+    # 精灵球口袋在道具块的 0xF0，30 格
+    ball_pouch_offset = 0xF0
+    ball_pouch_slots = 30
+    # 普通道具口袋在道具块的 0x2F8，550 格
+    item_pouch_offset = 0x2F8
+    item_pouch_slots = 550
     # 战斗状态（剑）：0 不在战斗，0x40/0x41 在战斗
     battle_state_sword = 0x3F128624
     # 战斗状态（盾）
@@ -89,6 +97,9 @@ class Rects(BaseRects):
         ((0.645, 0.80), (0.68, 0.88)),
         ((0.645, 0.89), (0.68, 0.98)),
     )
+    # 招式列表正上方的「Y 招式说明」：招式列表在的时候才有，战斗菜单上同一个位置是「Y 信息」，
+    # 选目标界面上没有字
+    move_hint: Rect = ((0.875, 0.485), (1.0, 0.54))
     # 招式列表左边的「极巨化」按钮和它左边的光标
     dynamax_button: Rect = ((0.575, 0.80), (0.61, 0.84))
     dynamax_cursor: Rect = ((0.515, 0.83), (0.55, 0.92))
@@ -370,6 +381,38 @@ class GameConfig(BaseConfig):
     # 锁定的图：打满 lock_window_rounds 局之前，输 lock_early_fails 局就解锁；
     # 打满之后看锁定以来的总胜率，低于 lock_min_win_rate 就解锁
     lock_window_rounds = 10
+    # 极矿石的道具编号；极矿石不多于 lock_min_ore 个时取消锁定（锁定的图每局重启游戏，要付极矿石）
+    dynite_ore_item = 1604
+    # 各种精灵球的道具编号
+    ball_items: ClassVar[dict[str, int]] = {
+        "大师球": 1,
+        "高级球": 2,
+        "超级球": 3,
+        "精灵球": 4,
+        "狩猎球": 5,
+        "捕网球": 6,
+        "潜水球": 7,
+        "巢穴球": 8,
+        "重复球": 9,
+        "计时球": 10,
+        "豪华球": 11,
+        "纪念球": 12,
+        "黑暗球": 13,
+        "治愈球": 14,
+        "先机球": 15,
+        "贵重球": 16,
+        "速度球": 492,
+        "等级球": 493,
+        "诱饵球": 494,
+        "沉重球": 495,
+        "甜蜜球": 496,
+        "友友球": 497,
+        "月亮球": 498,
+        "竞赛球": 499,
+        "梦境球": 576,
+        "究极球": 851,
+    }
+    lock_min_ore = 10
     lock_early_fails = 2
     lock_min_win_rate = 0.9
     # 《宝可梦 剑》《宝可梦 盾》的 Title ID

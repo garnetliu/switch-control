@@ -36,6 +36,16 @@ def initialize(sw: LairSwitch) -> str:
         "对话框消失",
         button="B",
     )
+    # 罚款在上面的对话里已经付过了，这时读到的是付完之后的数量
+    sw.game.dynite_ore = sw.ore_count()
+    sw.game.save()
+    logging.info(f"极矿石还有 {sw.game.dynite_ore} 个")
+    counts = sw.ball_counts()
+    for ball in dict.fromkeys((sw.config.base_ball, sw.config.legendary_ball)):
+        if ball in counts:
+            logging.info(f"抓宝可梦用的{ball}还有 {counts[ball]} 个")
+        else:
+            logging.warning(f"不知道{ball}的道具编号，没读数量")
     _clean_logs(sw)
     return "join"
 

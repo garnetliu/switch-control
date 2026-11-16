@@ -16,8 +16,8 @@ def select_pokemon(sw: LairSwitch) -> str:
         _no_catch(sw)
         return "initialize"
     else:
-        shiny, values = _check_shiny(sw)
-        _decide_next_run(sw, shiny, values)
+        shinies, values = _check_shiny(sw)
+        _decide_next_run(sw, shinies, values)
         return "initialize"
 
 
@@ -29,20 +29,19 @@ def _no_catch(sw: LairSwitch) -> None:
     capture(sw, "没抓住的界面")
     keep, lock = sw.game.finish_run(took_shiny=False)
     # 战报先发，后面收尾的按键卡住或出错也不影响
+    _report(sw, [], [], keep, lock)
     if keep:
-        _report(sw, -1, [], "一只都没抓到，重启游戏保留路线", lock)
         logging.info("重启游戏，keep path")
         restart(sw)
     else:
-        _report(sw, -1, [], "一只都没抓到", lock)
         _back_to_scientist(sw)
         _press_until_black(sw)
 
 
-def _check_shiny(sw: LairSwitch) -> tuple[int, list[float]]:
+def _check_shiny(sw: LairSwitch) -> tuple[list[int], list[float]]:
     """等带走宝可梦的界面，查闪光，截图后回到列表。
 
-    返回 (要带走的那只的序号，没有闪光是 -1；每只闪光框的占比，写进战报)。
+    返回 (闪光的那几只的序号，没有闪光是空列表；每只闪光框的占比，写进战报)。
     """
     wait_for(
         sw,
@@ -60,9 +59,7 @@ def _check_shiny(sw: LairSwitch) -> tuple[int, list[float]]:
         "回到带走宝可梦的界面",
     )
     _save_list_screenshots(sw, results)
-    # 有好几只闪光时带走最后一只，也就是排在最后的神兽
-    shiny = max((index for index, found in enumerate(results) if found), default=-1)
-    return shiny, values
+    return [index for index, shiny in enumerate(results) if shiny], values
 
 
 def _save_list_screenshots(sw: LairSwitch, results: list[bool]) -> None:
@@ -110,31 +107,32 @@ def _save_screenshot(sw: LairSwitch, image: ImageChecker, kind: str, shiny: bool
     return path
 
 
-def _decide_next_run(sw: LairSwitch, shiny: int, values: list[float]) -> None:
+def _decide_next_run(sw: LairSwitch, shinies: list[int], values: list[float]) -> None:
     """决定下一局：带走闪光、重启游戏 keep path，或者结束这一局。
 
     先用 game.finish_run 记下胜负、算锁定还是解锁，再写战报，最后按键收尾；
     战报先发，收尾的按键卡住或出错也不影响。
-    - 有闪光：光标移到那只上带走，不锁定。
+    - 有闪光：交给 _take，一只就带走，不止一只停下来等人选；不锁定。
     - 没有闪光：锁定就重启游戏，下一局还是这张图；不锁定就不带走，结束这一局。
     """
-    keep, lock = sw.game.finish_run(took_shiny=shiny >= 0)
-    if shiny >= 0:
-        _report(sw, shiny, values, f"带走第 {shiny + 1} 只闪光", lock)
-        _take(sw, shiny)
+    keep, lock = sw.game.finish_run(took_shiny=bool(shinies))
+    _report(sw, shinies, values, keep, lock)
+    if shinies:
+        _take(sw, shinies)
         _press_until_black(sw)
     elif keep:
-        _report(sw, shiny, values, "不带走，重启游戏保留路线", lock)
         logging.info("重启游戏，keep path")
         restart(sw)
     else:
-        _report(sw, shiny, values, "不带走", lock)
         _back_to_scientist(sw)
         _press_until_black(sw)
 
 
-def _report(sw: LairSwitch, shiny: int, values: list[float], outcome: str, lock: str) -> None:
-    """把这一局的战报写进日志并推送，附上这一局存下的战果截图。格式：
+def _report(sw: LairSwitch, shinies: list[int], values: list[float], keep: bool, lock: str) -> None:
+    """把这一局的战报写进日志并推送，附上这一局存下的战果截图。
+
+    shinies 是闪光的那几只的序号，values 是每只闪光框的占比，keep 是要不要重启游戏保留路线，
+    lock 是 game.finish_run 返回的锁定情况。格式：
 
     第 N 轮战报：（N 是 lock_results 里记录的局数）
     胜/负，倒下 X 次，Y 分钟，抓到 n/4
@@ -142,8 +140,10 @@ def _report(sw: LairSwitch, shiny: int, values: list[float], outcome: str, lock:
     得分：S，首发 名字（第 k 位）
     逐关：每一关抓到、团灭还是没抓，对手和属性；团灭之后的关卡不写。下面各另起一行，和「抓到」对齐：
     抓到的写是闪光还是非闪、闪光框的占比和阈值；这一关有倒下的写倒下几次
-    处理：这一局结束时怎么处理抓到的宝可梦
+    处理：这一局结束时怎么处理抓到的宝可梦。一只闪光带走；不止一只停下来等人选；
+    没有闪光不带走，一只都没抓到另外写明；要重启游戏保留路线的在后面加一句
     锁定：这张图锁定的情况，锁定以来的局数和总胜率、继续锁定还是解锁
+    剩余：这时从内存读到的极矿石和抓宝可梦用的球的数量
     """
     game = sw.game
     language = sw.config.language
@@ -200,8 +200,20 @@ def _report(sw: LairSwitch, shiny: int, values: list[float], outcome: str, lock:
         if faints:
             lines.append(f"  {_pad('', label_width)}倒下 {faints} 次")
 
+    numbers = "、".join(str(index + 1) for index in shinies)
+    if len(shinies) == 1:
+        outcome = f"带走第 {numbers} 只闪光"
+    elif shinies:
+        outcome = f"有 {len(shinies)} 只闪光（第 {numbers} 只），停下来等人选"
+    else:
+        outcome = "不带走" if game.num_caught else "一只都没抓到"
+        if keep:
+            outcome += "，重启游戏保留路线"
     lines.append(f"处理：{outcome}")
     lines.append(f"锁定：{lock}")
+    left = [f"极矿石 {sw.ore_count()} 个"]
+    left += [f"{ball} {count} 个" for ball, count in sw.ball_counts().items()]
+    lines.append(f"剩余：{'，'.join(left)}")
 
     report = "\n".join(lines)
     logging.info("\n" + report)
@@ -226,8 +238,20 @@ def _pad(text: str, width: int) -> str:
     return text + " " * max(0, width - _display_width(text))
 
 
-def _take(sw: LairSwitch, index: int) -> None:
-    """带走第 index 只：光标移到那只上，一直按 A 到画面变黑。"""
+def _take(sw: LairSwitch, shinies: list[int]) -> None:
+    """带走闪光：只有一只就把光标移到那只上，一直按 A 到画面变黑。
+
+    一局只能带走一只：闪光不止一只时程序不替人选，发 @全体 的通知后退出程序（SystemExit），
+    游戏留在带走宝可梦的列表上。这时战报已经发了，胜负也记了。
+    """
+    if len(shinies) > 1:
+        numbers = "、".join(str(index + 1) for index in shinies)
+        text = f"这一局有 {len(shinies)} 只闪光（第 {numbers} 只），程序停在带走宝可梦的列表上，等你来选"
+        logging.warning(text)
+        sw.notifier.send_everyone(text)
+        # 不是出错：直接退出，入口不会把它当成程序出错来存截图和发通知
+        raise SystemExit(text)
+    index = shinies[0]
     _move_list_cursor(sw, index)
     logging.info(f"带走了第 {index + 1} 只 {sw.game.caught[index]}")
 

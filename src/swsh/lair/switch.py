@@ -18,3 +18,38 @@ class LairSwitch(Switch):
         self.game = GameState(self.config)
         self.data = GameData(self.config)
         self.pkhex = Pk8Reader(Pkhex(), self.peek)
+
+    def ore_count(self) -> int:
+        """从内存读极矿石的数量。"""
+        addresses = self.config.addresses
+        return self._item_count(
+            addresses.item_pouch_offset, addresses.item_pouch_slots, self.config.dynite_ore_item
+        )
+
+    def ball_counts(self) -> dict[str, int]:
+        """从内存读配置里用来抓宝可梦的球的数量：普通的和抓首领的，一样就只有一项。
+
+        不知道道具编号的球不在结果里。
+        """
+        addresses = self.config.addresses
+        counts: dict[str, int] = {}
+        for ball in (self.config.base_ball, self.config.legendary_ball):
+            if ball in self.config.ball_items:
+                counts[ball] = self._item_count(
+                    addresses.ball_pouch_offset,
+                    addresses.ball_pouch_slots,
+                    self.config.ball_items[ball],
+                )
+        return counts
+
+    def _item_count(self, offset: int, slots: int, item: int) -> int:
+        """从内存读背包一个口袋里某个道具的数量，口袋里没有返回 0。
+
+        offset 是这个口袋在道具块里的位置，slots 是它有几格，item 是道具编号。
+        """
+        data = self.peek(self.config.addresses.items + offset, slots * 4)
+        for start in range(0, len(data), 4):
+            value = int.from_bytes(data[start : start + 4], "little")
+            if value & 0x7FF == item:
+                return (value >> 15) & 0x3FF
+        return 0

@@ -102,54 +102,93 @@ def _choose_move(sw: LairSwitch, war: War) -> None:
         lambda screen: _move_cursor(sw, screen) >= 0,
         "招式列表",
     )
-    best, score, dynamax = war.best_move(_dynamax_available(sw, image))
-    if dynamax:
-        image = _dynamax(sw)
-        war.dynamax()
-    own = war.own
-    move = own.max_moves[best] if own.dynamax else own.moves[best]
-    logging.info(f"用第 {best + 1} 个招式 {move.name()}，得分 {score:.2f}")
+    # 这回合试过、被封住用不了的招式
+    blocked: set[int] = set()
+    while True:
+        best, score, dynamax = war.best_move(_dynamax_available(sw, image), blocked)
+        if dynamax:
+            image = _dynamax(sw)
+            war.dynamax()
+        own = war.own
+        move = own.max_moves[best] if own.dynamax else own.moves[best]
+        logging.info(f"用第 {best + 1} 个招式 {move.name()}，得分 {score:.2f}")
 
-    _move_cursor_to(sw, image, best)
-    _use_move(sw)
+        _move_cursor_to(sw, image, best)
+        if _use_move(sw):
+            break
+        blocked.add(best)
+        if len(blocked) == len(own.moves):
+            raise RuntimeError("四个招式都用不了")
+        logging.info(f"{move.name()} 被封住了用不了，换一个招式")
+        # 「无法使出」这行字自己会消失，消失后回到招式列表
+        image = wait_for(
+            sw,
+            lambda screen: not _move_blocked(sw, screen) and _move_cursor(sw, screen) >= 0,
+            sw.config.timeout,
+            "回到招式列表",
+        )
     war.use_move(best)
 
 
-def _use_move(sw: LairSwitch) -> None:
-    """光标已经在要用的招式上：按 A 出招，一直到战斗文字出现「×××使出了」。
+def _move_blocked(sw: LairSwitch, image: ImageChecker) -> bool:
+    """招式被定身法之类封住：战斗文字第二行是「而无法使出×××！」。"""
+    return image.has_text(sw.config.rects.black_full_line2, "无法使出")
 
-    按 A 到招式列表消失。之后要是出了选目标的界面，先看光标所在的卡片能不能选：
-    能选就一直按 A；不能选（比如花瓣舞，光标默认在对手上，但只能选自己）就把光标移到能选的卡片上再按 A。
+
+def _use_move(sw: LairSwitch) -> bool:
+    """光标已经在要用的招式上：按 A 出招。出了招返回 True，招式被封住用不了返回 False。
+
+    按 A 到招式列表消失，之后等三种结果里的一种：
+    出现「无法使出」：招式被封住，返回 False，由外面换一个招式。
+    出现选目标的界面：光标所在的卡片不能选（比如花瓣舞，光标默认在对手上，但只能选自己）
+    就把光标移到能选的卡片上，然后一直按 A 到「×××使出了」。
+    选目标界面上好几张卡片同时带光标（比如广域防守，对象是我方全体）：不用移，直接按 A。
+    出现「×××使出了」：没有选目标界面的招式，已经出招（到现在没见过）。
     """
 
-    # 选目标界面上我方卡片的名牌正好落在招式列表第一行的光标框里，会被当成招式光标，
-    # 所以认到选目标的光标也算招式列表消失了
+    # 招式列表在不在看它上方的「招式说明」，不看光标：选目标界面上我方卡片的名牌正好落在
+    # 招式列表第一行的光标框里，会被当成招式光标；招式列表还在时背景里的训练家也会被当成选目标的光标
     act_until(
         sw,
         lambda: sw.click("A", 0),
-        lambda screen: _target_cursor(sw, screen) >= 0 or _move_cursor(sw, screen) == -1,
+        lambda screen: not screen.has_text(sw.config.rects.move_hint, "招式说明"),
         "招式列表消失",
     )
-    wait_for(
+
+    def used(screen: ImageChecker) -> bool:
+        return screen.has_text(sw.config.rects.black_full_line1, "使出了")
+
+    # 先看「无法使出」再看「使出了」：两句都带「使出」
+    image = wait_for(
         sw,
-        lambda screen: _target_cursor(sw, screen) >= 0,
+        lambda screen: _move_blocked(sw, screen) or _target_cursors(sw, screen) or used(screen),
         sw.config.timeout,
-        "选目标的界面或者出招",
+        "无法使出、选目标的界面或者出招",
     )
-    _move_target_cursor(sw)
-    act_until(
-        sw,
-        lambda: sw.click("A", 0),
-        lambda screen: screen.has_text(sw.config.rects.black_full_line1, "使出了"),
-        "出招",
-    )
+    if _move_blocked(sw, image):
+        return False
+    if len(_target_cursors(sw, image)) > 1:
+        # 对象是固定的一组（比如广域防守是我方全体）：几张卡片同时带光标，没有可以移的，直接按 A
+        logging.info("选目标界面上有好几个光标，对象是固定的，不用移")
+    else:
+        _move_target_cursor(sw)
+    act_until(sw, lambda: sw.click("A", 0), used, "出招")
+    return True
+
+
+def _target_cursors(sw: LairSwitch, image: ImageChecker) -> list[int]:
+    """选目标界面上哪些卡片左边有光标：0 是对手，1 到 4 是我方四张；不在选目标界面返回空列表。
+
+    一般只有一个；对象是固定的一组的招式（比如广域防守是我方全体），那一组卡片同时带光标。
+    """
+    rects = (sw.config.rects.target_cursor, *sw.config.rects.ally_target_cursor_rects)
+    return [index for index, rect in enumerate(rects) if _marker_shown(sw, image, rect)]
 
 
 def _target_cursor(sw: LairSwitch, image: ImageChecker) -> int:
-    """选目标界面的光标在哪张卡片上：0 是对手，1 到 4 是我方四张；不在选目标界面返回 -1。"""
-    rects = (sw.config.rects.target_cursor, *sw.config.rects.ally_target_cursor_rects)
-    marks = [_marker_shown(sw, image, rect) for rect in rects]
-    return marks.index(True) if marks.count(True) == 1 else -1
+    """选目标界面的光标在哪张卡片上：0 是对手，1 到 4 是我方四张；没有光标或者不止一个返回 -1。"""
+    cursors = _target_cursors(sw, image)
+    return cursors[0] if len(cursors) == 1 else -1
 
 
 def _target_selectable(sw: LairSwitch, image: ImageChecker, index: int) -> bool:
