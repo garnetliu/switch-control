@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
@@ -22,6 +23,10 @@ var scriptOptions = ScriptOptions.Default
         "System.Linq",
         "System.Collections.Generic",
         "PKHeX.Core");
+
+// 编译好的脚本，按脚本内容缓存：同一段脚本只编译一次。
+// 每编译一次进程里就多加载一个程序集，加载后不会卸载，每次请求都编译内存会一直涨
+var runners = new ConcurrentDictionary<string, ScriptRunner<object?>>();
 
 app.MapGet("/health", () => Results.Json(new
 {
@@ -59,24 +64,28 @@ app.MapPost("/api/v1/execute", async (ExecuteRequest request, HttpContext contex
     }
 
     var globals = new PkhexGlobals(request.Input ?? default, data);
-    var script = CSharpScript.Create<object?>(request.Code, scriptOptions, typeof(PkhexGlobals));
-    var diagnostics = script.Compile();
-    var errors = diagnostics
-        .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
-        .Select(diagnostic => new { message = diagnostic.GetMessage(), line = diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1 })
-        .ToArray();
-    if (errors.Length != 0)
-        return Results.BadRequest(new { error = "compilation_failed", diagnostics = errors });
+    if (!runners.TryGetValue(request.Code, out var runner))
+    {
+        var script = CSharpScript.Create<object?>(request.Code, scriptOptions, typeof(PkhexGlobals));
+        var diagnostics = script.Compile();
+        var errors = diagnostics
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Select(diagnostic => new { message = diagnostic.GetMessage(), line = diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1 })
+            .ToArray();
+        if (errors.Length != 0)
+            return Results.BadRequest(new { error = "compilation_failed", diagnostics = errors });
+        runner = runners.GetOrAdd(request.Code, script.CreateDelegate());
+    }
 
     try
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
         timeout.CancelAfter(TimeSpan.FromSeconds(60));
-        var state = await script.RunAsync(globals, cancellationToken: timeout.Token);
+        var value = await runner(globals, timeout.Token);
         return Results.Json(new
         {
-            result = JsonValue.Normalize(state.ReturnValue),
-            returnType = state.ReturnValue?.GetType().FullName,
+            result = JsonValue.Normalize(value),
+            returnType = value?.GetType().FullName,
         });
     }
     catch (OperationCanceledException)
