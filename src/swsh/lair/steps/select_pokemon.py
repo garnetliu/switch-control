@@ -22,20 +22,14 @@ def select_pokemon(sw: LairSwitch) -> str:
 
 
 def _no_catch(sw: LairSwitch) -> None:
-    """一只都没抓到：截一张后面的界面，算输一局判断锁不锁定，先写战报，再重启或结束这一局。"""
+    """一只都没抓到：打完直接回到科学家面前。算输一局判断锁不锁定，先写战报，锁定就重启，不锁定交给 initialize。"""
     logging.info("一只都没抓到")
-    # 一只都没抓到时后面是什么界面还没见过，等 15 秒截一张留着，之后照着改逻辑
-    time.sleep(15)
-    capture(sw, "没抓住的界面")
     keep, lock = sw.game.finish_run(took_shiny=False)
     # 战报先发，后面收尾的按键卡住或出错也不影响
     _report(sw, [], [], keep, lock)
     if keep:
         logging.info("重启游戏，keep path")
         restart(sw)
-    else:
-        _back_to_scientist(sw)
-        _press_until_black(sw)
 
 
 def _check_shiny(sw: LairSwitch) -> tuple[list[int], list[float]]:
