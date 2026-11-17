@@ -24,7 +24,7 @@ def select_pokemon(sw: LairSwitch) -> str:
 def _no_catch(sw: LairSwitch) -> None:
     """一只都没抓到：打完直接回到科学家面前。算输一局判断锁不锁定，先写战报，锁定就重启，不锁定交给 initialize。"""
     logging.info("一只都没抓到")
-    keep, lock = sw.game.finish_run(took_shiny=False)
+    keep, lock = sw.game.finish_run([])
     # 战报先发，后面收尾的按键卡住或出错也不影响
     _report(sw, [], [], keep, lock)
     if keep:
@@ -109,7 +109,7 @@ def _decide_next_run(sw: LairSwitch, shinies: list[int], values: list[float]) ->
     - 有闪光：交给 _take，一只就带走，不止一只停下来等人选；不锁定。
     - 没有闪光：锁定就重启游戏，下一局还是这张图；不锁定就不带走，结束这一局。
     """
-    keep, lock = sw.game.finish_run(took_shiny=bool(shinies))
+    keep, lock = sw.game.finish_run(shinies)
     _report(sw, shinies, values, keep, lock)
     if shinies:
         _take(sw, shinies)

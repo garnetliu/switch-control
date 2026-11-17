@@ -8,7 +8,7 @@ from ruamel.yaml import YAML
 
 from .game_config import GameConfig
 from .map import Maps
-from .snapshot import GameStateSnapshot
+from .snapshot import GameStateSnapshot, Shiny
 
 
 class GameState:
@@ -27,6 +27,8 @@ class GameState:
                 lock_pokemon_index=None,
                 lock_results=[],
                 path_results=[],
+                caught_total=0,
+                shinies=[],
                 dynite_ore=0,
                 team=[],
                 num_caught=0,
@@ -53,6 +55,10 @@ class GameState:
         self.lock_results: list[bool] = state.get("lock_results", [])
         # 锁定这张图以来每一局的胜负，锁定的那一局算第 1 局，用来判断要不要解锁
         self.path_results: list[bool] = state.get("path_results", [])
+        # 刷这只 boss 以来一共抓到多少只、出了哪些闪光，换 boss 才清掉；用来算闪率。
+        # 抓到 boss 的次数就是 lock_results 里赢的局数
+        self.caught_total: int = state.get("caught_total", 0)
+        self.shinies: list[Shiny] = state.get("shinies", [])
         # 极矿石的数量，initialize 每一局从内存读一次
         self.dynite_ore = state.get("dynite_ore", 0)
         # 队伍名字和 hp，第一个是自己
@@ -95,6 +101,8 @@ class GameState:
             return True
         if boss != self.boss:
             self.lock_results = []
+            self.caught_total = 0
+            self.shinies = []
         self.boss = boss
         self.seed = seed
         self.lock_path = False
@@ -107,8 +115,9 @@ class GameState:
         self.save()
         return False
 
-    def finish_run(self, took_shiny: bool) -> tuple[bool, str]:
-        """select_pokemon 结束时调用：记下这一局的胜负，算锁定还是解锁，返回 (锁定, 写进战报的锁定情况)。
+    def finish_run(self, shinies: list[int]) -> tuple[bool, str]:
+        """select_pokemon 结束时调用：记下这一局的胜负、抓到的数量和闪光，算锁定还是解锁，
+        返回 (锁定, 写进战报的锁定情况)。shinies 是闪光的那几只在这一局抓到的顺序里的序号。
 
         带走了闪光不锁定。环境变量 KEEP_PATH 不是 1 时也不锁定（keep path 要重启游戏，
         下次和科学家说话要付极矿石）。极矿石不多于 lock_min_ore 个时也不锁定，已经锁定的解锁。
@@ -120,7 +129,17 @@ class GameState:
         faints = 4 - self.lives
         minutes: float = (time.time() - self.started) / 60
         self.lock_results.append(won)
-        if took_shiny:
+        self.caught_total += self.num_caught
+        for index in shinies:
+            self.shinies.append(
+                Shiny(
+                    time=time.strftime("%Y-%m-%d %H:%M:%S"),
+                    round=len(self.lock_results),
+                    stage=index + 1,
+                    pokemon=self.caught[index],
+                )
+            )
+        if shinies:
             self.lock_path = False
             lock = "带走了闪光，不锁定"
         elif os.environ.get("KEEP_PATH") != "1":
@@ -188,6 +207,8 @@ class GameState:
             lock_pokemon_index=self.lock_pokemon_index,
             lock_results=self.lock_results,
             path_results=self.path_results,
+            caught_total=self.caught_total,
+            shinies=self.shinies,
             dynite_ore=self.dynite_ore,
             team=self.team,
             num_caught=self.num_caught,
