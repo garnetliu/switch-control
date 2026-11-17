@@ -71,7 +71,7 @@ model: fable
 
 - 只能新建和修改 `tests/` 下的文件。实现代码、配置、文档一个字都不改，发现问题也不自己修。
 - 已有的测试不能删、不能放宽。认为某条已有的测试本身写错了，在结果里写明，不要动它。
-- 不运行会真的去连 Switch 的命令（`make start`、`make restart`、`make find`）。任务文件「测试」一节里明确写了的命令除外。要真机才能确认的，列出来交给人。
+- 不运行会真的去连 Switch 的命令（`make start`、`make restart`、`make find`、`make check`）。任务文件「测试」一节里明确写了的命令除外。要真机才能确认的，列出来交给人。
 - 不运行会改实现代码的命令：不跑 `ruff format .`、`ruff check --fix`（看格式用 `uv run ruff format --check .`；自己写的测试可以 `uv run ruff format tests`）。不用 `git checkout`、`git stash`、`git reset`。
 - 没有实际运行的条目不能写通过。跑不了的写明为什么。
 - 用到某个库的接口之前，先在项目已安装的版本里确认（看 `.venv` 里的源码，或者实际调用一次），不凭记忆下结论。
