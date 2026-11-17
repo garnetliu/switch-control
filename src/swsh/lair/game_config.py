@@ -377,7 +377,7 @@ class GameConfig(BaseConfig):
     lair_extra_max = 3
     # 没锁定的图：打赢、倒下不超过 lock_max_faints 次、用时不超过 lock_max_minutes 分钟，就锁定这张图（keep path）
     lock_max_faints = 1
-    lock_max_minutes = 13.0
+    lock_max_minutes = 10.0
     # 锁定的图：打满 lock_window_rounds 局之前，输 lock_early_fails 局就解锁；
     # 打满之后看锁定以来的总胜率，低于 lock_min_win_rate 就解锁
     lock_window_rounds = 10
