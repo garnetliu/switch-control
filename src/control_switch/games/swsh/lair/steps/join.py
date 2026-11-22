@@ -16,10 +16,10 @@ from control_switch.games.swsh.lair.lair import Lair
 from control_switch.games.swsh.lair.map import MapNode, Maps, MapType
 from control_switch.games.swsh.lair.map_type_reader import MapTypeReader
 from control_switch.games.swsh.lair.plan import Plan, positions
-from control_switch.games.swsh.lair.switch import LairSwitch
+from control_switch.games.swsh.lair.session import LairSession
 
 
-def join(sw: LairSwitch) -> str:
+def join(sw: LairSession) -> str:
     # 记下开始时间，清掉上一局打到一半的数据
     sw.game.start_run()
     _read_legends(sw)
@@ -29,7 +29,7 @@ def join(sw: LairSwitch) -> str:
     return "path"
 
 
-def _read_legends(sw: LairSwitch) -> None:
+def _read_legends(sw: LairSession) -> None:
     """从存档读已经抓到哪些神兽、究极异兽解锁了没有，写进配置：按 seed 算租借和首领要用（见 GameData.lair_legends）。
 
     读不出来就用配置里手写的，只记一条警告。
@@ -52,7 +52,7 @@ def _read_legends(sw: LairSwitch) -> None:
     logging.debug(f"抓过的神兽 {caught}，还能遇到 {len(sw.data.lair_legends())} 只")
 
 
-def _select_target(sw: LairSwitch):
+def _select_target(sw: LairSession):
     """从科学家面前开始对话，在传说菜单里选中 BOSS 并确认，一直到进入选初始宝可梦的界面。
 
     initialize 已经处理过中途退出的罚款和提醒，并关掉了对话框；这里按 A 重新开始对话：
@@ -111,7 +111,7 @@ def _select_target(sw: LairSwitch):
     return boss
 
 
-def _select_starter(sw: LairSwitch, boss: str | None) -> bool:
+def _select_starter(sw: LairSession, boss: str | None) -> bool:
     """从内存读取三只租借宝可梦，和路线一起选总分最高的那种，返回是不是沿用了锁定的这张图。
 
     屏幕只用来看光标停在哪只上；宝可梦信息都从内存读取。队友等第一场战斗再读（见 battle._read_team），
@@ -144,7 +144,7 @@ def _select_starter(sw: LairSwitch, boss: str | None) -> bool:
     return kept
 
 
-def _select_path(sw: LairSwitch, kept: bool) -> None:
+def _select_path(sw: LairSession, kept: bool) -> None:
     """路线在选首发时已经和首发一起定了。新的图还要等路线图出现，读画面上的地图类型对一下。
 
     只决定走哪条，真正在岔路口移动光标是下一步 path 的事。
@@ -156,7 +156,7 @@ def _select_path(sw: LairSwitch, kept: bool) -> None:
         _check_map_type(sw)
 
 
-def _check_map_type(sw: LairSwitch) -> None:
+def _check_map_type(sw: LairSession) -> None:
     """开场镜头往上移动时读地图类型，等到路线图出现。
 
     读到的类型和 seed 算出来的不一样，按画面上的类型、首发不变重新选路线。
@@ -193,7 +193,7 @@ def _check_map_type(sw: LairSwitch) -> None:
         sw.game.save()
 
 
-def _assign_route(sw: LairSwitch) -> None:
+def _assign_route(sw: LairSession) -> None:
     """首发已经定了，按现在的地图类型重新选路线。"""
     seed = sw.game.seed
     assert seed is not None and sw.game.lock_pokemon_index is not None
@@ -210,7 +210,7 @@ def _assign_route(sw: LairSwitch) -> None:
 
 
 def _upstream_plan(
-    sw: LairSwitch, lair: Lair, map_type: str, layout: int | None, starters: tuple[int, ...]
+    sw: LairSession, lair: Lair, map_type: str, layout: int | None, starters: tuple[int, ...]
 ) -> Plan:
     """按 upstream.py 选首发和路线，再从开局推一遍预计的三关换法（只写日志，真打时每关再定）。
 
@@ -236,7 +236,7 @@ def _upstream_plan(
     )
 
 
-def _apply_plan(sw: LairSwitch, plan: Plan) -> None:
+def _apply_plan(sw: LairSession, plan: Plan) -> None:
     """把选好的首发和路线记进这一局的状态，写日志。"""
     sw.game.lock_pokemon_index = plan.starter
     assert sw.game.maps is not None
@@ -260,7 +260,7 @@ def _apply_plan(sw: LairSwitch, plan: Plan) -> None:
     _log_map(sw)
 
 
-def _log_map(sw: LairSwitch) -> None:
+def _log_map(sw: LairSession) -> None:
     """把租借的六只和整张路线图写进日志。"""
     pool = [_name(sw, name_id) for name_id in sw.game.rental_pool]
     logging.info(
@@ -269,7 +269,7 @@ def _log_map(sw: LairSwitch) -> None:
     logging.info("路线图（* 是选的路线）:\n" + "\n".join(_path_diagram(sw)))
 
 
-def _path_diagram(sw: LairSwitch) -> list[str]:
+def _path_diagram(sw: LairSession) -> list[str]:
     """把这一局的路线图画成 4 行，画法照搬上游：三层节点从左到右，中间是各种地图类型的连线。
 
     节点和首领用中文名，选的路线上的节点前面加 *。
@@ -308,7 +308,7 @@ def _path_diagram(sw: LairSwitch) -> list[str]:
     return ["".join(section[line] for section in sections) for line in range(4)]
 
 
-def _name(sw: LairSwitch, name_id: str) -> str:
+def _name(sw: LairSession, name_id: str) -> str:
     """宝可梦的中文名；同名不同样子的在后面标出来。"""
     name = sw.data.pokemon_object(name_id).name(sw.config.language)
     forms = (("-galar", "伽勒尔"), ("-alola", "阿罗拉"), ("-midday", "白昼"), ("-midnight", "黑夜"))
@@ -323,7 +323,7 @@ def _display_width(text: str) -> int:
     return sum(2 if unicodedata.east_asian_width(char) in ("W", "F") else 1 for char in text)
 
 
-def _move_starter_cursor(sw: LairSwitch) -> None:
+def _move_starter_cursor(sw: LairSession) -> None:
     """读界面上的三只候选，选得分最高的，把黑色光标移过去。"""
 
     rects = sw.config.rects.starter_candidates
@@ -348,7 +348,7 @@ def _move_starter_cursor(sw: LairSwitch) -> None:
     )
 
 
-def _select_boss(sw: LairSwitch, target: str | None) -> tuple[str | None, int]:
+def _select_boss(sw: LairSession, target: str | None) -> tuple[str | None, int]:
     """读四个 Lair note，返回 (要刷的 boss 的 name_id, 它在传说菜单里的下标)。
 
     菜单按 Lair note 的顺序列出里面的 boss（不是 boss 的 note 不出现），最后一项是「不指定」。
@@ -356,7 +356,8 @@ def _select_boss(sw: LairSwitch, target: str | None) -> tuple[str | None, int]:
     目标 target 还在就选它，不在就选菜单第一项。
     """
     species = [
-        int.from_bytes(sw.peek(address, 2), "little") for address in sw.config.addresses.lair_notes
+        int.from_bytes(sw.memory.peek(address, 2), "little")
+        for address in sw.config.addresses.lair_notes
     ]
     logging.debug(f"Lair notes: {species}")
     by_id = {boss.id_num: name_id for name_id, boss in sw.data.boss_pokemon().items()}
@@ -370,9 +371,9 @@ def _select_boss(sw: LairSwitch, target: str | None) -> tuple[str | None, int]:
     return menu[0], 0
 
 
-def _read_seed(sw: LairSwitch) -> int:
+def _read_seed(sw: LairSession) -> int:
     """读这一局的冒险 seed。"""
-    raw = sw.peek(sw.config.addresses.seed, 8)
+    raw = sw.memory.peek(sw.config.addresses.seed, 8)
     if len(raw) != 8:
         raise RuntimeError(f"路线 seed 读取长度错误：{len(raw)}")
     seed = int.from_bytes(raw, "little")
@@ -380,7 +381,7 @@ def _read_seed(sw: LairSwitch) -> int:
     return seed
 
 
-def _matching_lair(sw: LairSwitch, seed: int, shown: list[str]) -> Lair:
+def _matching_lair(sw: LairSession, seed: int, shown: list[str]) -> Lair:
     """按 seed 算租借和遭遇，算出来的前 3 只租借要和选宝可梦界面上的 3 只（shown）一样。
 
     不一样就在开头多取 1 个随机数重算，最多多取 lair_extra_max 个；都对不上抛 RuntimeError。
@@ -404,7 +405,7 @@ def _matching_lair(sw: LairSwitch, seed: int, shown: list[str]) -> Lair:
     )
 
 
-def _assign_new_starter(sw: LairSwitch) -> None:
+def _assign_new_starter(sw: LairSession) -> None:
     """seed 变了时重新算这一局的候选池、遭遇、地图类型和队友，一起选首发和路线。"""
     seed = sw.game.seed
     assert seed is not None

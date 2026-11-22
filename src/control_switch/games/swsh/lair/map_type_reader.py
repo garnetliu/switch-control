@@ -5,7 +5,7 @@ import cv2
 from control_switch.types import Rect
 from control_switch.vision import ImageChecker
 
-from .switch import LairSwitch
+from .session import LairSession
 
 
 class MapTypeReader:
@@ -20,7 +20,7 @@ class MapTypeReader:
     # 一列里最多找几个标签：第 1、2、3 层
     MAX_LABELS_PER_COLUMN = 3
 
-    def __init__(self, sw: LairSwitch):
+    def __init__(self, sw: LairSession):
         self._sw = sw
         self._icons = sw.data.type_icons()
         self._icon_height = max(int(icon.shape[0]) for icon in self._icons.values())

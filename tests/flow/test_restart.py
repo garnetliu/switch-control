@@ -9,12 +9,11 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
 from control_switch.config import BaseConfig
-from control_switch.device.botbase import Switch
 from control_switch.flow.restart import enter_game, restart, restart_to_title
 from control_switch.types import Hsv, Rect
 from control_switch.vision import ImageChecker
@@ -22,7 +21,7 @@ from control_switch.vision import ImageChecker
 IMAGES = Path(__file__).resolve().parents[1] / "images"
 ROUTE = (IMAGES / "路线上的界面-要走哪条路.jpg").read_bytes()
 
-SwitchFactory = Callable[..., Any]
+SessionFactory = Callable[..., Any]
 
 HOME_TEXT = "切换用户"
 CLOSE_TEXT = "将关闭软件"
@@ -77,103 +76,103 @@ def install_checks(
 
 
 def test_restart_to_title_presses_home_first_when_not_on_home(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, controller: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """一开始不在 HOME：第一个键是 HOME。"""
     install_checks(monkeypatch, home=[False, True])
-    fake = make_switch([ROUTE])
-    restart_to_title(cast(Switch, fake))
-    assert fake.pressed[0] == "HOME"
-    assert fake.pressed.count("HOME") == 1
+    sw = make_session([ROUTE])
+    restart_to_title(sw)
+    assert controller.pressed[0] == "HOME"
+    assert controller.pressed.count("HOME") == 1
 
 
 def test_restart_to_title_does_not_press_home_when_already_on_home(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, controller: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """一开始就在 HOME：一次 HOME 都不按（HOME 上再按 HOME 会回到游戏）。"""
     install_checks(monkeypatch, home=[True])
-    fake = make_switch([ROUTE])
-    restart_to_title(cast(Switch, fake))
-    assert "HOME" not in fake.pressed
+    sw = make_session([ROUTE])
+    restart_to_title(sw)
+    assert "HOME" not in controller.pressed
 
 
 def test_restart_to_title_presses_y_until_close_dialog_then_a_twice(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, controller: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """按 Y 一直按到关闭软件的确认框出现，之后按了两次 A（先确认关闭，再选用户）。"""
     install_checks(monkeypatch, home=[True], close=[False, False, False, False, True])
-    fake = make_switch([ROUTE])
-    restart_to_title(cast(Switch, fake))
-    assert fake.pressed[-2:] == ["A", "A"]
-    assert fake.pressed.count("A") == 2
-    presses_of_y = fake.pressed[:-2]
+    sw = make_session([ROUTE])
+    restart_to_title(sw)
+    assert controller.pressed[-2:] == ["A", "A"]
+    assert controller.pressed.count("A") == 2
+    presses_of_y = controller.pressed[:-2]
     assert len(presses_of_y) >= 2
     assert set(presses_of_y) == {"Y"}
 
 
 def test_restart_to_title_raises_timeout_when_user_picker_never_appears(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, controller: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """选用户的界面一直不出现：抛 TimeoutError，报错里有「选用户的界面」，只按了一次 A。"""
     install_checks(monkeypatch, picker=[False])
-    fake = make_switch([ROUTE])
+    sw = make_session([ROUTE])
     with pytest.raises(TimeoutError, match="选用户的界面"):
-        restart_to_title(cast(Switch, fake))
-    assert fake.pressed.count("A") == 1
+        restart_to_title(sw)
+    assert controller.pressed.count("A") == 1
 
 
 def test_restart_to_title_returns_when_title_id_is_lowercase_with_whitespace(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, controller: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """title_id() 是 game_title_ids 里那个值的小写、前后带空白的写法，color_ratio 刚好等于 colorful_ratio：正常返回。"""
     install_checks(monkeypatch, ratio=[COLORFUL_RATIO])
-    fake = make_switch([ROUTE], title_id=" 0100abf008968000\n")
-    restart_to_title(cast(Switch, fake))
-    assert fake.pressed[-2:] == ["A", "A"]
+    sw = make_session([ROUTE], title_id=" 0100abf008968000\n")
+    restart_to_title(sw)
+    assert controller.pressed[-2:] == ["A", "A"]
 
 
 def test_restart_to_title_times_out_when_title_id_not_in_game_title_ids(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """title_id() 不在 game_title_ids 里：color_ratio 再高也一直等，抛 TimeoutError，有「开场的彩色画面」。"""
     install_checks(monkeypatch, ratio=[1.0])
-    fake = make_switch([ROUTE], title_id="0100000000000000")
+    sw = make_session([ROUTE], title_id="0100000000000000")
     with pytest.raises(TimeoutError, match="开场的彩色画面"):
-        restart_to_title(cast(Switch, fake))
+        restart_to_title(sw)
 
 
 def test_restart_to_title_times_out_when_color_ratio_stays_below_colorful_ratio(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """title_id() 对但 color_ratio 一直低于 colorful_ratio：同样抛 TimeoutError，有「开场的彩色画面」。"""
     install_checks(monkeypatch, ratio=[COLORFUL_RATIO - 0.01])
-    fake = make_switch([ROUTE], title_id=TITLE_ID)
+    sw = make_session([ROUTE], title_id=TITLE_ID)
     with pytest.raises(TimeoutError, match="开场的彩色画面"):
-        restart_to_title(cast(Switch, fake))
+        restart_to_title(sw)
 
 
 def test_enter_game_does_not_press_a_when_screen_already_black(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, controller: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """画面一开始就是黑的：一次 A 都不按。"""
     install_checks(monkeypatch, black=[True])
-    fake = make_switch([ROUTE])
-    enter_game(cast(Switch, fake))
-    assert fake.pressed == []
+    sw = make_session([ROUTE])
+    enter_game(sw)
+    assert controller.pressed == []
 
 
 def test_enter_game_presses_a_twice_when_third_image_is_black(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, controller: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """第 3 张图才变黑：按了 2 次 A。"""
     install_checks(monkeypatch, black=[False, False, True])
-    fake = make_switch([ROUTE])
-    enter_game(cast(Switch, fake))
-    assert fake.pressed == ["A", "A"]
+    sw = make_session([ROUTE])
+    enter_game(sw)
+    assert controller.pressed == ["A", "A"]
 
 
 def test_restart_presses_keys_of_restart_to_title_then_enter_game(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, controller: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """restart 的按键记录，是 restart_to_title 和 enter_game 各自的按键按顺序合起来的。"""
     scenario: dict[str, Any] = {
@@ -182,30 +181,31 @@ def test_restart_presses_keys_of_restart_to_title_then_enter_game(
         "black": [False, False, True],
     }
     install_checks(monkeypatch, **scenario)
-    first = make_switch([ROUTE])
-    restart_to_title(cast(Switch, first))
+    restart_to_title(make_session([ROUTE]))
+    first = list(controller.pressed)
+    controller.pressed.clear()
     install_checks(monkeypatch, **scenario)
-    second = make_switch([ROUTE])
-    enter_game(cast(Switch, second))
-    expected = first.pressed + second.pressed
+    enter_game(make_session([ROUTE]))
+    second = list(controller.pressed)
+    controller.pressed.clear()
+    expected = first + second
     assert expected[0] == "HOME"
     assert expected[-2:] == ["A", "A"]
 
     install_checks(monkeypatch, **scenario)
-    combined = make_switch([ROUTE])
-    restart(cast(Switch, combined))
-    assert combined.pressed == expected
+    restart(make_session([ROUTE]))
+    assert controller.pressed == expected
 
 
 def test_restart_calls_restart_to_title_before_enter_game(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """restart 先调 restart_to_title，再调 enter_game，都传同一个连接。"""
     module: ModuleType = importlib.import_module("control_switch.flow.restart")
     calls: list[tuple[str, object]] = []
     monkeypatch.setattr(module, "restart_to_title", lambda sw: calls.append(("title", sw)))
     monkeypatch.setattr(module, "enter_game", lambda sw: calls.append(("enter", sw)))
-    sw = cast(Switch, make_switch([ROUTE]))
+    sw = make_session([ROUTE])
     restart(sw)
     assert calls == [("title", sw), ("enter", sw)]
 
@@ -215,7 +215,7 @@ class PressedTooLongError(Exception):
 
 
 def test_enter_game_raises_timeout_error_when_screen_never_turns_black(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, controller: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """防的是：画面一直不变黑时 enter_game 没有超时，无限按 A，sw.frames 无限变长。
 
@@ -223,14 +223,14 @@ def test_enter_game_raises_timeout_error_when_screen_never_turns_black(
     假连接的超时都是 1 秒；按键持续 5 秒还没停就抛 PressedTooLongError，免得测试本身卡死。
     """
     install_checks(monkeypatch, black=[False])
-    fake = make_switch([ROUTE])
+    sw = make_session([ROUTE])
     start = time.monotonic()
 
-    def click(button: str, delay: float) -> None:
-        fake.pressed.append(button)
+    def click(button: str, delay: float = 0.15) -> None:
+        controller.pressed.append(button)
         if time.monotonic() - start > 5:
-            raise PressedTooLongError(f"按了 {len(fake.pressed)} 次 A，画面不变黑就一直按")
+            raise PressedTooLongError(f"按了 {len(controller.pressed)} 次 A，画面不变黑就一直按")
 
-    monkeypatch.setattr(fake, "click", click)
+    monkeypatch.setattr(controller, "click", click)
     with pytest.raises(TimeoutError):
-        enter_game(cast(Switch, fake))
+        enter_game(sw)

@@ -1,24 +1,25 @@
-"""极巨大冒险用的连接：连接之外还带着这一局的状态、游戏数据和 PK8 读取。"""
+"""极巨大冒险用的 Session：还带着这一局的状态、游戏数据和 PK8 读取。"""
 
-from control_switch.device.botbase import Switch
+from control_switch.device import Controller, Memory, Screen
 from control_switch.games.swsh.pk8 import Pk8Reader
 from control_switch.pkhex import Pkhex
+from control_switch.session import Session
 
 from .game_config import GameConfig
 from .game_data import GameData
 from .game_state import GameState
 
 
-class LairSwitch(Switch):
-    """一条连接和这一局的状态。步骤里用 sw.config、sw.game、sw.data、sw.pkhex 取。"""
+class LairSession(Session):
+    """步骤里用 sw.config、sw.game、sw.data、sw.pkhex 取。"""
 
     config: GameConfig
 
-    def __init__(self):
-        super().__init__(GameConfig())
+    def __init__(self, screen: Screen, controller: Controller, memory: Memory | None):
+        super().__init__(GameConfig(), screen, controller, memory)
         self.game = GameState(self.config)
         self.data = GameData(self.config)
-        self.pkhex = Pk8Reader(Pkhex(), self.peek)
+        self.pkhex = Pk8Reader(Pkhex(), self.memory.peek)
 
     def ore_count(self) -> int:
         """从内存读极矿石的数量。"""
@@ -52,7 +53,7 @@ class LairSwitch(Switch):
         """
         addresses = self.config.addresses
         start, end = addresses.caught_table
-        table = self.peek(start, end - start)
+        table = self.memory.peek(start, end - start)
         pointers = {
             int.from_bytes(table[offset : offset + 4], "little"): int.from_bytes(
                 table[offset + 8 : offset + 16], "little"
@@ -65,16 +66,16 @@ class LairSwitch(Switch):
             raise RuntimeError(f"存档数据块的表里找不到这些神兽的编号：{missing}")
         low = min(pointers[key] for key in keys.values())
         high = max(pointers[key] for key in keys.values())
-        values = self.peek_absolute(low, high - low + 1)
+        values = self.memory.peek_absolute(low, high - low + 1)
         caught = tuple(
             name for name, key in keys.items() if self._flag(key, values[pointers[key] - low], name)
         )
 
         key = self.config.lair_ultra_beasts_key
-        entry = self.peek(addresses.ultra_beasts_entry, 0x10)
+        entry = self.memory.peek(addresses.ultra_beasts_entry, 0x10)
         if int.from_bytes(entry[:4], "little") != key:
             raise RuntimeError("存档数据块的表里「究极异兽解锁了没有」那一项的编号不对")
-        value = self.peek_absolute(int.from_bytes(entry[8:16], "little"), 1)[0]
+        value = self.memory.peek_absolute(int.from_bytes(entry[8:16], "little"), 1)[0]
         return caught, self._flag(key, value, "究极异兽解锁了没有")
 
     @staticmethod
@@ -90,7 +91,7 @@ class LairSwitch(Switch):
 
         offset 是这个口袋在道具块里的位置，slots 是它有几格，item 是道具编号。
         """
-        data = self.peek(self.config.addresses.items + offset, slots * 4)
+        data = self.memory.peek(self.config.addresses.items + offset, slots * 4)
         for start in range(0, len(data), 4):
             value = int.from_bytes(data[start : start + 4], "little")
             if value & 0x7FF == item:

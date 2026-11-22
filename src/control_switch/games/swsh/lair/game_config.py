@@ -47,7 +47,7 @@ class Addresses:
     # 普通道具口袋在道具块的 0x2F8，550 格
     item_pouch_offset = 0x2F8
     item_pouch_slots = 550
-    # 存档数据块的表里放神兽「抓过没有」那一段的范围（见 LairSwitch.caught_legends），每项 0x20 字节
+    # 存档数据块的表里放神兽「抓过没有」那一段的范围（见 LairSession.caught_legends），每项 0x20 字节
     caught_table = (0x4504C848, 0x4504CEA8)
     # 表里「极巨大冒险的究极异兽解锁了没有」那一项
     ultra_beasts_entry = 0x45042208

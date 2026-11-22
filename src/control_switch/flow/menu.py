@@ -3,8 +3,8 @@
 import logging
 from collections.abc import Callable
 
-from control_switch.device.botbase import Switch
 from control_switch.flow.wait import act_until
+from control_switch.session import Session
 from control_switch.types import Rect
 from control_switch.vision import ImageChecker
 from control_switch.vision.text import levenshtein
@@ -30,7 +30,7 @@ def menu_last_item(
 
 
 def move_menu_option(
-    sw: Switch,
+    sw: Session,
     image: ImageChecker,
     target: int | str,
     move: Callable[[], None],

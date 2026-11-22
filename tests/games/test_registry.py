@@ -3,6 +3,7 @@
 import pytest
 
 from control_switch.games.registry import SCRIPTS, load_script
+from control_switch.session import Session
 
 
 @pytest.mark.parametrize("name", ["swsh/lair", "sv/outbreak"])
@@ -11,6 +12,16 @@ def test_load_script_returns_module_with_steps_and_start(name: str) -> None:
     script = load_script(name)
     assert isinstance(script.STEPS, dict)
     assert script.START in script.STEPS
+
+
+@pytest.mark.parametrize("name", ["swsh/lair", "sv/outbreak"])
+def test_load_script_has_session_subclass_and_no_connect(name: str) -> None:
+    """load_script：返回的模块有 SESSION，它是 Session 的子类（不是 Session 本身）；没有 connect。"""
+    script = load_script(name)
+    assert isinstance(script.SESSION, type)
+    assert issubclass(script.SESSION, Session)
+    assert script.SESSION is not Session
+    assert not hasattr(script, "connect")
 
 
 def test_scripts_table_has_both_game_scripts() -> None:

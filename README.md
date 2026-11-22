@@ -93,8 +93,10 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 | 目录 | 内容 |
 |---|---|
 | `src/control_switch/__main__.py` | 命令行入口：`control-switch run`、`control-switch restart` |
+| `src/control_switch/session.py` | `Session`：配置、当前步骤、这一局的截图、通知，以及取图、按键、读写内存的设备 |
+| `src/control_switch/device/base.py` | 设备的三个接口：`Screen`（取图）、`Controller`（按键）、`Memory`（读写内存）；`botbase.py` 是它们的实现 |
 | `src/control_switch` | 所有游戏共用：连接 Switch（`device`）、看图（`vision`）、等画面、菜单、重启（`flow`）、日志、推送、PKHeX 请求、通用配置、类型 |
-| `src/control_switch/games/registry.py` | 脚本表。加脚本时在脚本表里加一行 |
+| `src/control_switch/games/registry.py` | 脚本表。加脚本时要在脚本的 `__init__.py` 里写 `STEPS`、`START`、`SESSION`，再在脚本表里加一行 |
 | `src/control_switch/games/swsh` | 剑盾的脚本共用的东西：对战打分、宝可梦类型、PK8 读取 |
 | `src/control_switch/games/swsh/lair` | 极巨大冒险：步骤、配置、状态、数据加载和路线图 |
 | `src/control_switch/games/sv` | 朱紫的脚本共用的东西：指针、读写存档块（`blocks.py`）、存档和野餐的操作（`actions.py`） |

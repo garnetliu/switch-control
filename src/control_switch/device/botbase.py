@@ -1,7 +1,7 @@
 """和 Switch 上的 botbase 通信：Wi-Fi 用 sys-botbase（TCP），USB 用 usb-botbase。
 
 用哪种由 .env 的 SWITCH_CONNECTION 决定：usb，或者 wifi（默认，要配 SWITCH_IP、SWITCH_PORT）。
-两种连接对外的方法完全一样。Switch(config) 在初始化时自动连接。
+两种连接对外的方法完全一样。connect_botbase() 按这个变量建连接，返回 Botbase。
 """
 
 import atexit
@@ -11,13 +11,10 @@ import socket
 import struct
 import threading
 import time
-from typing import Any, NamedTuple, cast
+from typing import Any, Protocol, cast
 
 import usb.core
 import usb.util
-
-from control_switch.config import BaseConfig
-from control_switch.notifier import Notifier
 
 # 摇杆坐标的最大值
 STICK_MAX = 0x7FFF
@@ -33,8 +30,26 @@ def _hex(value: int) -> str:
     return f"-{abs(value):#x}" if value < 0 else f"{value:#x}"
 
 
+class Connection(Protocol):
+    """Botbase 用的连接：Wi-Fi 和 USB 各一种。"""
+
+    # pointerAll 返回的 8 字节是小端（usb-botbase）还是大端（sys-botbase）
+    pointer_little_endian: bool
+
+    def send(self, cmd: str) -> None: ...
+
+    def request(self, cmd: str) -> bytes: ...
+
+    def title_id(self) -> str: ...
+
+    def close(self) -> None: ...
+
+
 class _WifiConnection:
     """sys-botbase：每条命令是一行文本，以 \\r\\n 结尾；有返回值的命令返回一行文本，以 \\n 结尾。"""
+
+    # sys-botbase 回的是打印出来的十六进制数（大端）
+    pointer_little_endian = False
 
     def __init__(self, host: str, port: int = 6000, timeout: float = 5.0):
         """连接到 Switch。连不上或超时会抛 OSError。"""
@@ -85,6 +100,8 @@ class _UsbConnection:
     # usb-botbase 的 USB 设备号
     VENDOR_ID, PRODUCT_ID = 0x057E, 0x3000
     RECONNECT_TIMEOUT = 30
+    # usb-botbase 回的是原始的 8 字节（小端）
+    pointer_little_endian = True
 
     def __init__(self, timeout: float = 5.0):
         """找到 usb-botbase，先复位一次，再占用它的接口。找不到抛 ConnectionError。
@@ -218,53 +235,16 @@ class _UsbConnection:
         return f"{struct.unpack('<Q', data)[0]:016X}"
 
 
-class Frame(NamedTuple):
-    """记在内存里的一张截图。"""
+class Botbase:
+    """botbase 的实现：取图、按键、读写内存都走同一条连接。"""
 
-    # 截图的时间（time.time()）
-    time: float
-    # 截图时在哪一步、在看什么
-    step: str
-    what: str
-    # 截图的 JPEG 字节
-    data: bytes
-
-
-class Switch:
-    """一条连接。初始化时按 .env 自动连接。"""
-
-    def __init__(self, config: BaseConfig):
-        # 配置挂在连接上，步骤里用 sw.config 取
-        self.config = config
-        # 现在是哪一步，入口的循环每一步之前写进来
-        self.step = ""
-        # 这一局截过的图，只放在内存里；出错时入口才把它们写进日志目录，新的一局开始时清空
-        self.frames: list[Frame] = []
-        # 往 Discord 推送消息，步骤里用 sw.notifier 取
-        self.notifier = Notifier()
-        self._connect()
-
-    def _connect(self) -> None:
-        self._connection: _WifiConnection | _UsbConnection
-        """按 .env 的配置连接：usb 走 USB，否则走 Wi-Fi。"""
-        if os.environ.get("SWITCH_CONNECTION", "wifi").lower() == "usb":
-            self._connection = _UsbConnection()
-        else:
-            self._connection = _WifiConnection(
-                os.environ["SWITCH_IP"], int(os.environ["SWITCH_PORT"])
-            )
-        atexit.register(self.close)
-        if threading.current_thread() is threading.main_thread():
-            # SIGKILL 拦不住；SIGTERM、SIGHUP 转成正常退出，退出时 atexit 会关掉 USB
-            for sig in (signal.SIGTERM, signal.SIGHUP):
-                signal.signal(sig, _exit_on_signal)
+    def __init__(self, connection: Connection):
+        self._connection = connection
 
     def _send(self, cmd: str):
-        assert self._connection is not None
         self._connection.send(cmd)
 
     def _request_bytes(self, cmd: str) -> bytes:
-        assert self._connection is not None
         return self._connection.request(cmd)
 
     def click(self, button: str, delay: float = 0.15):
@@ -341,9 +321,7 @@ class Switch:
     def pointer_all(self, jumps: list[int]) -> int:
         """按指针链算出绝对地址，不读数据。jumps 的写法和 pointer_peek 一样。"""
         data = self._request_bytes("pointerAll " + " ".join(f"{jump:#x}" for jump in jumps))
-        # usb-botbase 回的是原始的 8 字节（小端）；sys-botbase 回的是打印出来的十六进制数（大端）
-        usb = isinstance(self._connection, _UsbConnection)
-        return int.from_bytes(data, "little" if usb else "big")
+        return int.from_bytes(data, "little" if self._connection.pointer_little_endian else "big")
 
     def peek_absolute(self, address: int, size: int) -> bytes:
         """读绝对地址 address 处的 size 个字节。"""
@@ -356,3 +334,24 @@ class Switch:
     def close(self):
         """断开连接。没连接时调用也没问题。"""
         self._connection.close()
+
+
+def connect_botbase() -> Botbase:
+    """按 .env 的配置连接：usb 走 USB，否则走 Wi-Fi。退出时自动关闭。"""
+    connection: Connection
+    if os.environ.get("SWITCH_CONNECTION", "wifi").lower() == "usb":
+        connection = _UsbConnection()
+    else:
+        port = os.environ["SWITCH_PORT"]
+        try:
+            port_number = int(port)
+        except ValueError:
+            raise ValueError(f"SWITCH_PORT 要写整数，现在是 {port}") from None
+        connection = _WifiConnection(os.environ["SWITCH_IP"], port_number)
+    botbase = Botbase(connection)
+    atexit.register(botbase.close)
+    if threading.current_thread() is threading.main_thread():
+        # SIGKILL 拦不住；SIGTERM、SIGHUP 转成正常退出，退出时 atexit 会关掉 USB
+        for sig in (signal.SIGTERM, signal.SIGHUP):
+            signal.signal(sig, _exit_on_signal)
+    return botbase

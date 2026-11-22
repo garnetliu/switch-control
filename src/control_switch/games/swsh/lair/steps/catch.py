@@ -6,10 +6,10 @@ import re
 from control_switch.flow import act_until, wait_for
 from control_switch.games.swsh.lair import upstream
 from control_switch.games.swsh.lair.lair import Lair
-from control_switch.games.swsh.lair.switch import LairSwitch
+from control_switch.games.swsh.lair.session import LairSession
 
 
-def catch(sw: LairSwitch) -> str:
+def catch(sw: LairSession) -> str:
     """抓当前这只；首领抓完返回 "select_pokemon"，普通对手先定换不换再抓，返回 "path"。"""
     boss = sw.game.num_caught == 3
     if boss:
@@ -25,7 +25,7 @@ def catch(sw: LairSwitch) -> str:
     return "path"
 
 
-def _decide(sw: LairSwitch) -> bool:
+def _decide(sw: LairSession) -> bool:
     """这一关抓到后自己换不换：按 upstream.decide_catch 定，决定记进 game.choices。
 
     换和不换都按 seed 推出之后的队伍（不换时实际是哪个队友换上，或者没人换）比队伍分。
@@ -55,7 +55,7 @@ def _decide(sw: LairSwitch) -> bool:
     return take
 
 
-def _catch_pokemon(sw: LairSwitch, boss: bool) -> None:
+def _catch_pokemon(sw: LairSession, boss: bool) -> None:
     """选「捕捉」，在选球界面向左翻到要用的球，扔出去。"""
     ball = sw.config.legendary_ball if boss else sw.config.base_ball
     wait_for(
@@ -111,7 +111,7 @@ def _catch_pokemon(sw: LairSwitch, boss: bool) -> None:
     sw.game.num_caught += 1
 
 
-def _swap_pokemon(sw: LairSwitch, take: bool) -> None:
+def _swap_pokemon(sw: LairSession, take: bool) -> None:
     """等换不换的界面，按 take 换或不换，等结果并按结果更新队伍。"""
     image = wait_for(
         sw,
@@ -141,7 +141,7 @@ def _swap_pokemon(sw: LairSwitch, take: bool) -> None:
     _apply_swap(sw, caught_name, take)
 
 
-def walker_now(sw: LairSwitch) -> tuple[upstream.Scorer, upstream.Walker] | None:
+def walker_now(sw: LairSession) -> tuple[upstream.Scorer, upstream.Walker] | None:
     """按这一局已经做过的决定（game.choices）把随机数推到现在要做决定的地方，队伍换成内存里读到的实际队伍。
 
     算不出来返回 None。
@@ -166,7 +166,7 @@ def walker_now(sw: LairSwitch) -> tuple[upstream.Scorer, upstream.Walker] | None
     return upstream.Scorer(sw.data, game.boss), walker
 
 
-def _apply_swap(sw: LairSwitch, caught_name: str, take: bool) -> None:
+def _apply_swap(sw: LairSession, caught_name: str, take: bool) -> None:
     """选换或不换，等画面变黑。
 
     换了就把自己这只记成新抓的、满血，研究员要用；队友换没换这里看不到，等下一场战斗重新读队伍。

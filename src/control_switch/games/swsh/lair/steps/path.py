@@ -11,9 +11,9 @@ from control_switch.flow import (
 from control_switch.games.swsh.lair import upstream
 from control_switch.games.swsh.lair.lair import Lair
 from control_switch.games.swsh.lair.next_columns import next_columns
+from control_switch.games.swsh.lair.session import LairSession
 from control_switch.games.swsh.lair.steps.battle import Messages
 from control_switch.games.swsh.lair.steps.catch import walker_now
-from control_switch.games.swsh.lair.switch import LairSwitch
 from control_switch.types import Rect
 from control_switch.vision import ImageChecker
 from control_switch.vision.text import contains
@@ -28,7 +28,7 @@ _KEYWORDS = {
 }
 
 
-def path(sw: LairSwitch) -> str:
+def path(sw: LairSession) -> str:
     """一直处理路线上的分支，直到进入战斗，返回 "battle"。
 
     每个分支一次调用最多处理一次，处理完就从 states 里删掉：
@@ -91,7 +91,7 @@ def path(sw: LairSwitch) -> str:
         states = tuple(other for other in states if other != state)
 
 
-def _save_map(sw: LairSwitch, image: ImageChecker) -> None:
+def _save_map(sw: LairSession, image: ImageChecker) -> None:
     """每种地图类型、每个布局编号，在每个岔路口存一张路线图，以后认图上的研究员、背包客、树果图标用。"""
     maps = sw.game.maps
     assert maps is not None
@@ -104,7 +104,7 @@ def _save_map(sw: LairSwitch, image: ImageChecker) -> None:
 
 
 def _record_events(
-    sw: LairSwitch, start: list[int], forked: bool, before: list[str], after: list[str]
+    sw: LairSession, start: list[int], forked: bool, before: list[str], after: list[str]
 ) -> None:
     """把这一段路上遇到的事件记进表里（GameData.lair_events），什么都没遇到也记，表示走过了。"""
     maps = sw.game.maps
@@ -122,7 +122,7 @@ def _record_events(
         logging.info(f"路上的事件：选岔路之前 {before}，之后 {after}")
 
 
-def _match_state(sw: LairSwitch, image: ImageChecker, states: tuple[str, ...]) -> str | None:
+def _match_state(sw: LairSession, image: ImageChecker, states: tuple[str, ...]) -> str | None:
     """先读黑色中间面板的第一行，按 states 的顺序比背包客、研究员、树果、岔路口的关键词；
     都没有，再读黑色占满面板的第一行，看是不是「×××出现了」。
     """
@@ -138,7 +138,7 @@ def _match_state(sw: LairSwitch, image: ImageChecker, states: tuple[str, ...]) -
     return None
 
 
-def _handle_berry(sw: LairSwitch) -> None:
+def _handle_berry(sw: LairSession) -> None:
     """按 A 推进树果对话，直到文字框里不再有「树果」。"""
     press_until(
         sw,
@@ -148,7 +148,7 @@ def _handle_berry(sw: LairSwitch) -> None:
     )
 
 
-def _handle_fork(sw: LairSwitch) -> None:
+def _handle_fork(sw: LairSession) -> None:
     """把岔路口光标移到计划路线上的下一个节点，按 A 确认。"""
     maps = sw.game.maps
     assert maps is not None
@@ -169,7 +169,7 @@ def _handle_fork(sw: LairSwitch) -> None:
     sw.game.save()
 
 
-def _move_fork_cursor(sw: LairSwitch, cursors: dict[int, Rect], column: int) -> None:
+def _move_fork_cursor(sw: LairSession, cursors: dict[int, Rect], column: int) -> None:
     """把岔路口光标移到第 column 列。cursors 是能走到的几列的光标区域：{列号: 区域}。
 
     先用每个光标区域里的白色占比判断当前列，再按 column 在左还是右推左摇杆；
@@ -204,7 +204,7 @@ def _move_fork_cursor(sw: LairSwitch, cursors: dict[int, Rect], column: int) -> 
     raise RuntimeError(f"岔路口光标移了 {len(rects)} 次，还是没到第 {column + 1} 列")
 
 
-def _path_cursor_index(sw: LairSwitch, image: ImageChecker, rects: tuple[Rect, ...]) -> int:
+def _path_cursor_index(sw: LairSession, image: ImageChecker, rects: tuple[Rect, ...]) -> int:
     """几个光标区域里白色占比最高的序号，没有明显的返回 -1。"""
     ratios = [
         image.color_ratio(rect, sw.config.cursor_white_lower, sw.config.cursor_white_upper)
@@ -214,7 +214,7 @@ def _path_cursor_index(sw: LairSwitch, image: ImageChecker, rects: tuple[Rect, .
     return best if ratios[best] > sw.config.cursor_white_ratio else -1
 
 
-def _handle_backpacker(sw: LairSwitch) -> None:
+def _handle_backpacker(sw: LairSession) -> None:
     """等背包客的蓝色道具面板出来，读一下道具名，拿默认道具，再等面板消失。"""
     # 「遇到了背包客」之后对话自己翻页，道具面板才出来
     image = wait_for(
@@ -234,7 +234,7 @@ def _handle_backpacker(sw: LairSwitch) -> None:
     )
 
 
-def _handle_scientist(sw: LairSwitch) -> None:
+def _handle_scientist(sw: LairSession) -> None:
     """研究员问要不要换租借宝可梦：按 seed 算出它实际会给哪只（upstream.Walker.offer），
     换成那只后队伍分更高就换（upstream.decide_scientist），决定记进 game.choices。
 
@@ -285,7 +285,7 @@ def _handle_scientist(sw: LairSwitch) -> None:
     sw.game.save()
 
 
-def _backpacker_shown(sw: LairSwitch, image: ImageChecker) -> bool:
+def _backpacker_shown(sw: LairSession, image: ImageChecker) -> bool:
     """蓝色道具面板正显示着。"""
     return (
         image.color_ratio(

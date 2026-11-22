@@ -12,20 +12,20 @@ from control_switch.games.sv.actions import close_picnic, open_picnic, save_game
 from control_switch.games.sv.blocks import OUTBREAK_ACTIVE, OUTBREAK_KO, OUTBREAK_TOTAL
 from control_switch.log import new_log
 
-from .switch import OutbreakSwitch
+from .session import OutbreakSession
 
 
-def initialize(sw: OutbreakSwitch) -> str:
+def initialize(sw: OutbreakSession) -> str:
     """确认前台是朱/紫，找到存档块表。前台不是朱/紫抛 RuntimeError。"""
     new_log(sw, "start")
-    title_id = sw.title_id().upper()
+    title_id = sw.memory.title_id().upper()
     if title_id not in sw.config.game_title_ids:
         raise RuntimeError(f"前台不是朱/紫（Title ID {title_id}）")
     sw.blocks.locate()
     return "knockout" if sw.config.knockout else "refresh"
 
 
-def knockout(sw: OutbreakSwitch) -> str:
+def knockout(sw: OutbreakSession) -> str:
     """把正在发生的大量出现的击败数改满。
 
     照 PokeViewer.NET 的做法：存档，关掉游戏重开，停在标题画面时改内存里的击败数，再进游戏。
@@ -45,7 +45,7 @@ def knockout(sw: OutbreakSwitch) -> str:
     return "refresh"
 
 
-def _fill_knockouts(sw: OutbreakSwitch, region: str, index: int) -> None:
+def _fill_knockouts(sw: OutbreakSession, region: str, index: int) -> None:
     """把 region 的第 index 个大量出现的击败数改满，已经够了就不动。"""
     name = f"{region}第 {index + 1} 个大量出现"
     ko_key = OUTBREAK_KO[region][index]
@@ -67,7 +67,7 @@ def _fill_knockouts(sw: OutbreakSwitch, region: str, index: int) -> None:
     logging.info(f"{name}：击败数 {count} 改成 {wanted}，总数 {total}")
 
 
-def refresh(sw: OutbreakSwitch) -> str:
+def refresh(sw: OutbreakSession) -> str:
     """开野餐再收起，身边的宝可梦会重新生成。"""
     # 新的一轮从这里开始，上一轮没出错，截图丢掉
     sw.frames.clear()
@@ -77,7 +77,7 @@ def refresh(sw: OutbreakSwitch) -> str:
     return "scan"
 
 
-def scan(sw: OutbreakSwitch) -> str:
+def scan(sw: OutbreakSession) -> str:
     """存档，读身边的宝可梦。有要找的闪光就截图、推送并结束，没有就回去刷新。"""
     save_game(sw)
     pokemon = sw.blocks.read_overworld()

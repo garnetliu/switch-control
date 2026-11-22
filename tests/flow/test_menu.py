@@ -6,11 +6,10 @@
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
-from control_switch.device.botbase import Switch
 from control_switch.flow.menu import menu_last_item, move_menu_option
 from control_switch.flow.wait import wait_for
 from control_switch.types import Rect
@@ -23,7 +22,7 @@ BACKPACKER = (IMAGES / "路线上的界面-遇到了背包客.jpg").read_bytes()
 MENU_AREA: Rect = ((0.60, 0.45), (0.90, 0.79))
 EMPTY_DIALOG: Rect = ((0.0, 0.0), (0.2, 0.1))
 
-SwitchFactory = Callable[..., Any]
+SessionFactory = Callable[..., Any]
 
 ARROW_ROW_RECT: Rect = ((0.67, 0.50), (0.70, 0.55))
 ARROW_MENU: tuple[Rect, list[tuple[str, Rect]]] = (
@@ -63,13 +62,14 @@ def test_menu_last_item_returns_empty_string_when_dialog_has_no_text() -> None:
 
 
 def test_move_menu_option_index_target_already_selected_does_not_move(
-    make_switch: SwitchFactory,
+    make_session: SessionFactory,
+    controller: Any,
 ) -> None:
     """目标是序号 0 且光标已经在第 0 项：返回 0，不移动。"""
-    fake = make_switch([RESEARCHER])
+    sw = make_session([RESEARCHER])
     moves: list[int] = []
     result = move_menu_option(
-        cast(Switch, fake),
+        sw,
         ImageChecker(RESEARCHER),
         0,
         lambda: moves.append(1),
@@ -78,17 +78,17 @@ def test_move_menu_option_index_target_already_selected_does_not_move(
     )
     assert result == 0
     assert moves == []
-    assert fake.pressed == []
+    assert controller.pressed == []
 
 
 def test_move_menu_option_text_target_already_selected_does_not_move(
-    make_switch: SwitchFactory,
+    make_session: SessionFactory,
 ) -> None:
     """目标是文字 ">是"（OCR 读出来的原样）且光标已经在这项：返回 0，不移动。"""
-    fake = make_switch([RESEARCHER])
+    sw = make_session([RESEARCHER])
     moves: list[int] = []
     result = move_menu_option(
-        cast(Switch, fake),
+        sw,
         ImageChecker(RESEARCHER),
         ">是",
         lambda: moves.append(1),
@@ -100,24 +100,24 @@ def test_move_menu_option_text_target_already_selected_does_not_move(
 
 
 def test_move_menu_option_text_target_off_by_one_character_still_matches(
-    make_switch: SwitchFactory,
+    make_session: SessionFactory,
 ) -> None:
     """目标文字 ">是吗" 和读出的 ">是" 差一个字，3 个字允许差 1：能对上第 0 项。"""
-    fake = make_switch([RESEARCHER])
+    sw = make_session([RESEARCHER])
     result = move_menu_option(
-        cast(Switch, fake), ImageChecker(RESEARCHER), ">是吗", nothing, "研究员的菜单", MENU_AREA
+        sw, ImageChecker(RESEARCHER), ">是吗", nothing, "研究员的菜单", MENU_AREA
     )
     assert result == 0
 
 
 def test_move_menu_option_text_target_not_in_menu_raises_runtime_error(
-    make_switch: SwitchFactory,
+    make_session: SessionFactory,
 ) -> None:
     """目标文字和所有选项都差得远：抛 RuntimeError，报错里有目标文字和读到的选项。"""
-    fake = make_switch([RESEARCHER])
+    sw = make_session([RESEARCHER])
     with pytest.raises(RuntimeError, match="找不到「完全不相干的文字」.*定否"):
         move_menu_option(
-            cast(Switch, fake),
+            sw,
             ImageChecker(RESEARCHER),
             "完全不相干的文字",
             nothing,
@@ -126,12 +126,12 @@ def test_move_menu_option_text_target_not_in_menu_raises_runtime_error(
         )
 
 
-def test_move_menu_option_without_menu_raises_runtime_error(make_switch: SwitchFactory) -> None:
+def test_move_menu_option_without_menu_raises_runtime_error(make_session: SessionFactory) -> None:
     """图里没有菜单：抛 RuntimeError，报错里有传进去的说明。"""
-    fake = make_switch([BACKPACKER])
+    sw = make_session([BACKPACKER])
     with pytest.raises(RuntimeError, match="背包客的画面里找不到菜单"):
         move_menu_option(
-            cast(Switch, fake),
+            sw,
             ImageChecker(BACKPACKER),
             0,
             nothing,
@@ -142,7 +142,7 @@ def test_move_menu_option_without_menu_raises_runtime_error(make_switch: SwitchF
 
 @pytest.mark.parametrize("arrow", [">", "＞", " > ", "›", "》", "〉"])
 def test_move_menu_option_arrow_only_row_is_not_an_option_for_text_target(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch, arrow: str
+    make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch, arrow: str
 ) -> None:
     """光标的箭头被单独认成一行时不算选项：目标「否」是第 1 项，不是第 2 项。"""
     menu = (ARROW_MENU[0], [(arrow, ARROW_ROW_RECT), *ARROW_MENU[1][1:]])
@@ -154,56 +154,50 @@ def test_move_menu_option_arrow_only_row_is_not_an_option_for_text_target(
         return 1
 
     monkeypatch.setattr(ImageChecker, "selected", fake_selected)
-    fake = make_switch([RESEARCHER])
+    sw = make_session([RESEARCHER])
     result = move_menu_option(
-        cast(Switch, fake), ImageChecker(RESEARCHER), "否", nothing, "带箭头行的菜单", MENU_AREA
+        sw, ImageChecker(RESEARCHER), "否", nothing, "带箭头行的菜单", MENU_AREA
     )
     assert result == 1
     assert seen == [[menu[1][1][1], menu[1][2][1]]]
 
 
 def test_move_menu_option_arrow_only_row_is_not_counted_in_option_count(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """箭头单独一行时，选项个数是 2（不是 3）：移满 2 次没到目标就报错。"""
     monkeypatch.setattr(ImageChecker, "find_menu", lambda self, area: ARROW_MENU)
     results = iter([0, 1] * 4)
     monkeypatch.setattr(ImageChecker, "selected", lambda self, rects: next(results))
-    fake = make_switch([RESEARCHER])
+    sw = make_session([RESEARCHER])
     with pytest.raises(RuntimeError, match="移了 2 次"):
-        move_menu_option(
-            cast(Switch, fake), ImageChecker(RESEARCHER), 9, nothing, "带箭头行的菜单", MENU_AREA
-        )
+        move_menu_option(sw, ImageChecker(RESEARCHER), 9, nothing, "带箭头行的菜单", MENU_AREA)
 
 
 def test_move_menu_option_keeps_regular_option_starting_with_arrow_symbol(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """'>是' 去掉符号后不是空的，照常算选项：研究员那张图有 2 个选项，移满 2 次报错。"""
     results = iter([0, 1] * 4)
     monkeypatch.setattr(ImageChecker, "selected", lambda self, rects: next(results))
-    fake = make_switch([RESEARCHER])
+    sw = make_session([RESEARCHER])
     with pytest.raises(RuntimeError, match="移了 2 次"):
-        move_menu_option(
-            cast(Switch, fake), ImageChecker(RESEARCHER), 9, nothing, "研究员的菜单", MENU_AREA
-        )
+        move_menu_option(sw, ImageChecker(RESEARCHER), 9, nothing, "研究员的菜单", MENU_AREA)
 
 
 def test_move_menu_option_raises_when_cursor_moves_every_time_but_never_reaches_target(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """光标每次都换了位置（轮流 0、1），移满选项个数那么多次还没到目标：抛 RuntimeError，有「还是没到」。"""
     results = iter([0, 1] * 4)
     monkeypatch.setattr(ImageChecker, "selected", lambda self, rects: next(results))
-    fake = make_switch([RESEARCHER])
+    sw = make_session([RESEARCHER])
     with pytest.raises(RuntimeError, match="还是没到第 6 项"):
-        move_menu_option(
-            cast(Switch, fake), ImageChecker(RESEARCHER), 5, nothing, "研究员的菜单", MENU_AREA
-        )
+        move_menu_option(sw, ImageChecker(RESEARCHER), 5, nothing, "研究员的菜单", MENU_AREA)
 
 
 def test_menu_last_item_with_index_beyond_options_does_not_break_wait_for(
-    make_switch: SwitchFactory, monkeypatch: pytest.MonkeyPatch
+    make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """防的是：菜单只读出一项（还没出全、或者范围里是别的白框）时，menu_last_item(..., 1) 抛 IndexError。
 
@@ -216,10 +210,10 @@ def test_menu_last_item_with_index_beyond_options_does_not_break_wait_for(
         [("发起挑战", ((0.67, 0.50), (0.80, 0.55)))],
     )
     monkeypatch.setattr(ImageChecker, "find_menu", lambda self, area: one_option)
-    fake = make_switch([RESEARCHER])
+    sw = make_session([RESEARCHER])
     with pytest.raises(TimeoutError, match="大厅的菜单"):
         wait_for(
-            cast(Switch, fake),
+            sw,
             lambda screen: menu_last_item(screen, MENU_AREA, 1) == "发起单人挑战！",
             0.3,
             "大厅的菜单",

@@ -5,11 +5,11 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from control_switch.device.botbase import Frame, Switch
+from control_switch.session import Frame, Session
 from control_switch.vision import ImageChecker
 
 
-def capture(sw: Switch, what: str) -> ImageChecker:
+def capture(sw: Session, what: str) -> ImageChecker:
     """截一张当前画面，记在内存里（sw.frames），不写文件。what 是这张图在看什么。
 
     出错时入口用 save_frames 把这一局记下的图都写进日志目录；
@@ -20,7 +20,7 @@ def capture(sw: Switch, what: str) -> ImageChecker:
     return ImageChecker(data)
 
 
-def save_frames(sw: Switch) -> list[Path]:
+def save_frames(sw: Session) -> list[Path]:
     """把内存里这一局的截图按顺序写进 failed_dir/这一次的时间/，返回写下的文件。
 
     文件名是「序号-时分秒-步骤-在看什么」。
@@ -39,7 +39,7 @@ def save_frames(sw: Switch) -> list[Path]:
 
 
 def wait_for(
-    sw: Switch,
+    sw: Session,
     condition: Callable[[ImageChecker], bool],
     timeout: float,
     what: str,
@@ -62,7 +62,7 @@ def wait_for(
 
 
 def press_until(
-    sw: Switch,
+    sw: Session,
     done: Callable[[ImageChecker], bool],
     what: str,
     button: str = "A",
@@ -85,7 +85,7 @@ def press_until(
 
 
 def act_until(
-    sw: Switch,
+    sw: Session,
     action: Callable[[], None],
     condition: Callable[[ImageChecker], bool],
     what: str,

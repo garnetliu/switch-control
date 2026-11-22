@@ -10,6 +10,7 @@ import sys
 
 from dotenv import load_dotenv
 
+from control_switch.device.botbase import connect_botbase
 from control_switch.flow import restart, save_frames
 from control_switch.games.registry import load_script
 from control_switch.log import init_log
@@ -21,7 +22,8 @@ USAGE = "用法：control-switch run|restart [游戏/脚本]，脚本不写时�
 def run(name: str) -> None:
     """跑脚本：从脚本的起点开始一步一步跑，每一步返回下一步的名字。"""
     script = load_script(name)
-    sw = script.connect()
+    botbase = connect_botbase()
+    sw = script.SESSION(botbase, botbase, botbase)
     init_log(sw, "start")
     step = script.START
     try:
@@ -41,7 +43,9 @@ def run(name: str) -> None:
 
 def restart_game(name: str) -> None:
     """重启游戏，回到游戏里可以操作为止。"""
-    sw = load_script(name).connect()
+    script = load_script(name)
+    botbase = connect_botbase()
+    sw = script.SESSION(botbase, botbase, botbase)
     init_log(sw, "restart")
     try:
         restart(sw)

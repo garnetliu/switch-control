@@ -2,11 +2,11 @@ import logging
 import shutil
 
 from control_switch.flow import menu_last_item, press_until
-from control_switch.games.swsh.lair.switch import LairSwitch
+from control_switch.games.swsh.lair.session import LairSession
 from control_switch.log import new_log
 
 
-def initialize(sw: LairSwitch) -> str:
+def initialize(sw: LairSession) -> str:
     """确认前台是剑/盾，把游戏带到科学家面前、没有对话框的状态，返回下一步 "join"。
 
     游戏要停在科学家面前。一直按 A，把中途退出的罚款提醒（「是 / 否」光标默认在「是」上，
@@ -19,7 +19,7 @@ def initialize(sw: LairSwitch) -> str:
     sw.frames.clear()
 
     rects = sw.config.rects
-    title_id = sw.title_id().upper()
+    title_id = sw.memory.title_id().upper()
     if title_id not in sw.config.game_title_ids:
         raise RuntimeError(f"前台不是剑/盾（Title ID {title_id}）")
     press_until(
@@ -50,7 +50,7 @@ def initialize(sw: LairSwitch) -> str:
     return "join"
 
 
-def _clean_logs(sw: LairSwitch) -> None:
+def _clean_logs(sw: LairSession) -> None:
     """清空这个脚本的日志目录，直接删除，不进回收站。
 
     留下 start（运行日志）和 failed（出错时存下的截图）。

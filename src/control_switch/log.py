@@ -5,7 +5,7 @@ import sys
 import time
 from pathlib import Path
 
-from control_switch.device.botbase import Switch
+from control_switch.session import Session
 
 _formatter = logging.Formatter("%(asctime)s | %(levelname)s: %(message)s", "%H:%M:%S")
 
@@ -32,14 +32,14 @@ def _get_logger() -> logging.Logger:
     return logger
 
 
-def init_log(sw: Switch, name: str | None = None) -> None:
+def init_log(sw: Session, name: str | None = None) -> None:
     """初始化日志：终端输出，并创建第一个日志文件。已经初始化过就不做。"""
     logger = _get_logger()
     if not any(isinstance(handler, logging.FileHandler) for handler in logger.handlers):
         new_log(sw, name)
 
 
-def new_log(sw: Switch, name: str | None = None) -> None:
+def new_log(sw: Session, name: str | None = None) -> None:
     """换一个新的日志文件，之后的日志写进去。"""
     logger = _get_logger()
     for handler in list(logger.handlers):

@@ -3,19 +3,19 @@
 import logging
 import time
 
-from control_switch.device.botbase import Switch
 from control_switch.flow.wait import capture, press_until, wait_for
+from control_switch.session import Session
 from control_switch.vision import ImageChecker
 
 
-def restart(sw: Switch) -> None:
+def restart(sw: Session) -> None:
     """关掉游戏再重新打开，直到开场画面变黑并停止按键。"""
     restart_to_title(sw)
     enter_game(sw)
     logging.info("游戏已重启")
 
 
-def restart_to_title(sw: Switch) -> None:
+def restart_to_title(sw: Session) -> None:
     """关掉游戏再重新打开，等到开场的彩色画面出现为止，不按键进游戏。
 
     做法：HOME 菜单上按 Y 切换用户，要先关掉正在运行的软件，确认框默认选中「关闭」，按 A；
@@ -50,7 +50,7 @@ def restart_to_title(sw: Switch) -> None:
     )
 
 
-def enter_game(sw: Switch) -> None:
+def enter_game(sw: Session) -> None:
     """开场彩色画面出现之后用：持续按 A，每次截图检查，画面变黑就停止。超过 timeout 秒还没变黑抛 TimeoutError。"""
     screen = capture(sw, "进游戏")
     presses = 0
@@ -64,17 +64,17 @@ def enter_game(sw: Switch) -> None:
     logging.info(f"画面变黑，停止按 A（共按 {presses} 次）")
 
 
-def _home_shown(sw: Switch, screen: ImageChecker) -> bool:
+def _home_shown(sw: Session, screen: ImageChecker) -> bool:
     """HOME 菜单：游戏图标下面有「切换用户」的提示。"""
     return screen.has_text(sw.config.rects.home_hint, "切换用户")
 
 
-def _game_running(sw: Switch) -> bool:
+def _game_running(sw: Session) -> bool:
     """前台正在运行的是这个脚本的游戏。"""
-    return sw.title_id().strip().upper() in sw.config.game_title_ids
+    return sw.memory.title_id().strip().upper() in sw.config.game_title_ids
 
 
-def _colorful(sw: Switch, screen: ImageChecker) -> bool:
+def _colorful(sw: Session, screen: ImageChecker) -> bool:
     """画面是彩色的：开机 logo 和黑屏 0，选用户的界面 0.08，HOME 0.21，开场动画、标题画面和游戏里都在 0.32 以上。"""
     return (
         screen.color_ratio(((0, 0), (1, 1)), sw.config.colorful_lower, sw.config.colorful_upper)

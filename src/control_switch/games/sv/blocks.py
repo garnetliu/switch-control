@@ -8,7 +8,7 @@ key 的值来自 PKHeX.Core 的 SaveBlockAccessor9SV。
 
 from typing import Any
 
-from control_switch.device.botbase import Switch
+from control_switch.device import Memory
 from control_switch.pkhex import Pkhex
 
 # 身边已经生成的宝可梦，存档时写入。一共 OVERWORLD_SLOTS 格，每格 OVERWORLD_SLOT_SIZE 字节，开头是 PK9
@@ -106,8 +106,8 @@ return new { size = BitConverter.ToInt32(block, 1), pokemon };
 class SaveBlocks:
     """读写内存里的存档块。"""
 
-    def __init__(self, sw: Switch, pkhex: Pkhex, pointer: tuple[int, ...]):
-        self._sw = sw
+    def __init__(self, memory: Memory, pkhex: Pkhex, pointer: tuple[int, ...]):
+        self._memory = memory
         self._pkhex = pkhex
         self._pointer = pointer
         self._table = 0
@@ -116,7 +116,7 @@ class SaveBlocks:
 
     def locate(self) -> None:
         """按指针链找到块表。游戏重启之后地址会变，要重新找一次。"""
-        self._table = self._sw.pointer_all(list(self._pointer))
+        self._table = self._memory.pointer_all(list(self._pointer))
         self._addresses.clear()
 
     def _address(self, key: int) -> int:
@@ -125,14 +125,14 @@ class SaveBlocks:
             return self._addresses[key]
         if not self._table:
             self.locate()
-        bounds = self._sw.peek_absolute(self._table + 8, 16)
+        bounds = self._memory.peek_absolute(self._table + 8, 16)
         start = int.from_bytes(bounds[:8], "little")
         end = int.from_bytes(bounds[8:], "little")
         while start < end:
             middle = start + ((end - start) // _ENTRY_SIZE // 2) * _ENTRY_SIZE
-            found = int.from_bytes(self._sw.peek_absolute(middle, 4), "little")
+            found = int.from_bytes(self._memory.peek_absolute(middle, 4), "little")
             if found == key:
-                address = int.from_bytes(self._sw.peek_absolute(middle + 8, 8), "little")
+                address = int.from_bytes(self._memory.peek_absolute(middle + 8, 8), "little")
                 self._addresses[key] = address
                 return address
             if found > key:
@@ -146,7 +146,7 @@ class SaveBlocks:
 
     def _read_value(self, key: int, size: int) -> int:
         """读一个数值块：1 字节类型后面跟着 size 字节的小端数。"""
-        raw = self._sw.peek_absolute(self._address(key), _TYPE_SIZE + size)
+        raw = self._memory.peek_absolute(self._address(key), _TYPE_SIZE + size)
         return int.from_bytes(self._crypt(key, raw)[_TYPE_SIZE:], "little")
 
     def read_byte(self, key: int) -> int:
@@ -158,9 +158,9 @@ class SaveBlocks:
     def write_int(self, key: int, value: int) -> None:
         """把一个 4 字节的数值块改成 value。类型那 1 字节照原样写回去。"""
         address = self._address(key)
-        plain = self._crypt(key, self._sw.peek_absolute(address, _TYPE_SIZE + 4))
+        plain = self._crypt(key, self._memory.peek_absolute(address, _TYPE_SIZE + 4))
         changed = plain[:_TYPE_SIZE] + value.to_bytes(4, "little")
-        self._sw.poke_absolute(address, self._crypt(key, changed))
+        self._memory.poke_absolute(address, self._crypt(key, changed))
 
     def read_overworld(self) -> list[dict[str, Any]]:
         """读身边已经生成的宝可梦，空的格子不算。要先存档，游戏存档时才把它们写进这个块。
@@ -168,7 +168,7 @@ class SaveBlocks:
         每只是 {species, name, form, shiny, nature, ivs}，name 和 nature 是简体中文。
         """
         size = OVERWORLD_SLOTS * OVERWORLD_SLOT_SIZE
-        raw = self._sw.peek_absolute(self._address(OVERWORLD), _OBJECT_HEADER_SIZE + size)
+        raw = self._memory.peek_absolute(self._address(OVERWORLD), _OBJECT_HEADER_SIZE + size)
         result = self._pkhex.execute(
             _OVERWORLD_SCRIPT,
             {

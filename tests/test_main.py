@@ -1,8 +1,10 @@
 """control_switch.__main__：命令行入口 run、restart。
 
 不连 Switch：load_script 换成返回假脚本的函数，init_log 换成什么都不做的函数，
-load_dotenv 换掉，不读仓库里真实的 .env。假连接用 tests/conftest.py 的 make_switch，
-再加上记下 send 调用的假 notifier 和记下调用次数的 close()。
+load_dotenv 换掉，不读仓库里真实的 .env。connect_botbase 换成不连接、直接返回一个假设备的函数，
+这个假设备只是传给假脚本的 SESSION，不会放进 Session。假脚本的 SESSION 不管传进来什么，
+都返回用 tests/conftest.py 的假设备建的 Session，Session 的 notifier 换成记下 send 调用的假对象；
+close() 有没有被调，看建 Session 用的三个假设备各自的 close_calls。
 """
 
 import runpy
@@ -20,7 +22,8 @@ from control_switch.flow import capture
 
 IMAGE = Path(__file__).resolve().parent / "images" / "路线上的界面-要走哪条路.jpg"
 
-SwitchFactory = Callable[..., Any]
+SessionFactory = Callable[..., Any]
+MemoryFactory = Callable[..., Any]
 
 
 class RecordingNotifier:
@@ -41,7 +44,8 @@ class Calls:
         self.load_script: list[str] = []
         self.init_log: list[str | None] = []
         self.restart: list[Any] = []
-        self.close = 0
+        # connect_botbase 被调了几次
+        self.connect_botbase = 0
 
 
 @pytest.fixture(autouse=True)
@@ -56,25 +60,41 @@ def calls() -> Calls:
     return Calls()
 
 
+@pytest.fixture(autouse=True)
+def fake_botbase(monkeypatch: pytest.MonkeyPatch, calls: Calls, make_memory: MemoryFactory) -> Any:
+    """connect_botbase 换成不连接、直接返回一个假设备的函数，并记下调用次数。
+
+    这个假设备只是传给 SESSION，不会放进 Session。
+    """
+    botbase = make_memory()
+
+    def connect_botbase() -> Any:
+        calls.connect_botbase += 1
+        return botbase
+
+    monkeypatch.setattr("control_switch.__main__.connect_botbase", connect_botbase)
+    return botbase
+
+
 @pytest.fixture
-def connection(make_switch: SwitchFactory, calls: Calls) -> Any:
-    """假连接：有一张可截的图、记下 send 的 notifier、记下调用次数的 close()。"""
-    sw = make_switch([IMAGE.read_bytes()])
-    sw.notifier = RecordingNotifier()
-
-    def close() -> None:
-        calls.close += 1
-
-    sw.close = close
+def connection(make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """用假设备建的 Session：有一张可截的图、notifier 是记下 send 的假对象。"""
+    sw = make_session([IMAGE.read_bytes()])
+    monkeypatch.setattr(sw, "notifier", RecordingNotifier())
     return sw
 
 
 @pytest.fixture
 def install(monkeypatch: pytest.MonkeyPatch, calls: Calls, connection: Any) -> Callable[..., None]:
-    """返回一个函数：传入 STEPS 和 START，把 load_script 换成返回这个假脚本的函数，init_log 换成不做事。"""
+    """返回一个函数：传入 STEPS 和 START，把 load_script 换成返回这个假脚本的函数，init_log 换成不做事。
+
+    假脚本的 SESSION 不管传进来什么，都返回 connection 这个 Session。
+    """
 
     def setup(steps: dict[str, Callable[[Any], str]], start: str) -> None:
-        script = SimpleNamespace(STEPS=steps, START=start, connect=lambda: connection)
+        script = SimpleNamespace(
+            STEPS=steps, START=start, SESSION=lambda *args, **kwargs: connection
+        )
 
         def fake_load_script(name: str) -> SimpleNamespace:
             calls.load_script.append(name)
@@ -99,6 +119,13 @@ def forbid_connect(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("control_switch.__main__.load_script", fail)
 
 
+def assert_each_device_closed_once(connection: Any) -> None:
+    """建 Session 用的三个假设备：每个各被关了一次（connect_botbase 返回的那个不看）。"""
+    assert connection.screen.close_calls == 1
+    assert connection.controller.close_calls == 1
+    assert connection.memory.close_calls == 1
+
+
 def failed_files(connection: Any) -> list[Path]:
     """failed_dir 下写出的所有截图。"""
     return sorted(connection.config.failed_dir.rglob("*.jpg"))
@@ -109,6 +136,20 @@ def test_run_with_unknown_script_exits() -> None:
     with pytest.raises(SystemExit) as error:
         main(["run", "没有/这个"])
     assert "swsh/lair" in str(error.value)
+
+
+def test_run_with_unknown_script_does_not_call_connect_botbase(calls: Calls) -> None:
+    """main(["run", "没有/这个"])：抛 SystemExit，connect_botbase 一次都没被调用。"""
+    with pytest.raises(SystemExit):
+        main(["run", "没有/这个"])
+    assert calls.connect_botbase == 0
+
+
+def test_restart_with_unknown_script_does_not_call_connect_botbase(calls: Calls) -> None:
+    """main(["restart", "没有/这个"])：抛 SystemExit，connect_botbase 一次都没被调用。"""
+    with pytest.raises(SystemExit):
+        main(["restart", "没有/这个"])
+    assert calls.connect_botbase == 0
 
 
 def test_unknown_command_exits(forbid_connect: None) -> None:
@@ -289,13 +330,13 @@ def test_restart_without_script_name_calls_restart_and_closes(
     calls: Calls,
     connection: Any,
 ) -> None:
-    """main(["restart"])：默认脚本 swsh/lair，restart 收到这条连接，正常返回时 close() 被调一次。"""
+    """main(["restart"])：默认脚本 swsh/lair，restart 收到这个 Session，正常返回时建 Session 用的三个设备各被关了一次。"""
     install({}, "start")
     monkeypatch.setattr("control_switch.__main__.restart", calls.restart.append)
     main(["restart"])
     assert calls.load_script == ["swsh/lair"]
     assert calls.restart == [connection]
-    assert calls.close == 1
+    assert_each_device_closed_once(connection)
 
 
 def test_restart_initializes_log_in_restart_directory(
@@ -319,9 +360,9 @@ def test_restart_passes_script_name_to_load_script(
 
 
 def test_restart_error_propagates_and_still_closes(
-    install: Callable[..., None], monkeypatch: pytest.MonkeyPatch, calls: Calls
+    install: Callable[..., None], monkeypatch: pytest.MonkeyPatch, connection: Any
 ) -> None:
-    """restart 抛 RuntimeError：异常抛出来，close() 也被调了一次。"""
+    """restart 抛 RuntimeError：异常抛出来，建 Session 用的三个设备也各被关了一次。"""
     install({}, "start")
     error = RuntimeError("重启失败")
 
@@ -332,7 +373,7 @@ def test_restart_error_propagates_and_still_closes(
     with pytest.raises(RuntimeError) as raised:
         main(["restart"])
     assert raised.value is error
-    assert calls.close == 1
+    assert_each_device_closed_once(connection)
 
 
 def test_python_m_control_switch_runs_main(

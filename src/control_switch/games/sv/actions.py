@@ -7,12 +7,12 @@
 import logging
 from typing import cast
 
-from control_switch.device.botbase import Switch
 from control_switch.flow import capture
 from control_switch.games.sv.config import SvConfig
+from control_switch.session import Session
 
 
-def save_game(sw: Switch) -> None:
+def save_game(sw: Session) -> None:
     """在野外存档，存完回到野外。"""
     config = cast(SvConfig, sw.config)
     logging.info("存档")
@@ -27,7 +27,7 @@ def save_game(sw: Switch) -> None:
     capture(sw, "野外")
 
 
-def open_picnic(sw: Switch) -> None:
+def open_picnic(sw: Session) -> None:
     """在野外开野餐。菜单的光标要事先停在「野餐」上。"""
     config = cast(SvConfig, sw.config)
     logging.info("开野餐")
@@ -36,7 +36,7 @@ def open_picnic(sw: Switch) -> None:
     capture(sw, "野餐")
 
 
-def close_picnic(sw: Switch) -> None:
+def close_picnic(sw: Session) -> None:
     """收起野餐，回到野外。"""
     config = cast(SvConfig, sw.config)
     logging.info("收起野餐")
