@@ -28,6 +28,8 @@ def move_menu_option(
     if found is None:
         raise RuntimeError(f"{what}里找不到菜单")
     _, options = found
+    # 光标的箭头有时会被单独认成一行字「>」（真机上三项的传说菜单出现过），不是选项，去掉
+    options = [(text, rect) for text, rect in options if text.strip(" >＞›》〉")]
     texts = [text for text, _ in options]
     rects = [rect for _, rect in options]
 

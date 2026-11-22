@@ -93,6 +93,111 @@ def evaluate_matchup(
     return score * hp_correction
 
 
+# 队友（电脑）出招的比例，日志实测（docs/实测-队友出招和对手出手.md）：
+# 带几个变化招式时用变化招式的总比例，以及出进攻招式时按伤害排第几的比例
+TEAMMATE_STATUS = {0: 0.0, 1: 0.312, 2: 0.552, 3: 0.812, 4: 1.0}
+TEAMMATE_ATTACK_RANK = {
+    1: (1.0,),
+    2: (0.814, 0.186),
+    3: (0.768, 0.160, 0.073),
+    4: (0.682, 0.147, 0.118, 0.053),
+}
+# 自己极巨化后血量是原来的几倍，和 GameConfig.dynamax_hp 一样（日志读数都是 1.90）
+DYNAMAX_HP = 1.9
+# 对手用极巨招式的比例，没有这只对手的实测时用的数（路上的对手合计 33.4%）
+MAX_MOVE_PROBABILITY = 0.334
+
+
+def teammate_damage(attacker: Pokemon, defender: Pokemon, field: Field) -> float:
+    """战斗里选招式时，电脑队友 attacker 平均一回合打掉 defender 血量的比例，按实测的出招比例：
+    变化招式按 TEAMMATE_STATUS 的比例出（不造成伤害），进攻招式按伤害高低排名、按 TEAMMATE_ATTACK_RANK 的比例出。
+    被特性吸收的招式按 0 算。
+    """
+    version = replace(attacker, dynamax=False)
+    values = [
+        max(damage(version, index, defender, field), 0.0) for index in range(len(version.moves))
+    ]
+    attacks = sorted(
+        (values[index] for index, move in enumerate(version.moves) if move.base_power > 0),
+        reverse=True,
+    )
+    if not attacks:
+        return 0.0
+    status = TEAMMATE_STATUS[len(version.moves) - len(attacks)]
+    shares = TEAMMATE_ATTACK_RANK[len(attacks)]
+    return (1 - status) * sum(share * value for share, value in zip(shares, attacks, strict=True))
+
+
+def evaluate_damage(attacker: Pokemon, defender: Pokemon, dynamax: bool, hp: float) -> float:
+    """attacker 自己用伤害最高的招式，一回合打掉 defender 血量的比例。
+
+    只算 attacker 这一只，不算队友，也不看受到的伤害。defender 战斗里的血量是它不极巨化时的 hp 倍。
+    dynamax 是 attacker 这一回合有没有极巨化：极巨化了从极巨招式里选，没有就从普通招式里选。
+    没 PP 的招式不算。
+    """
+    if attacker.name_id == "ditto":
+        attacker = transform_ditto(attacker, defender)
+    elif defender.name_id == "ditto":
+        defender = transform_ditto(defender, attacker)
+
+    field = Field()
+    version = replace(attacker, dynamax=dynamax)
+    moves = version.max_moves if dynamax else version.moves
+    return max(
+        (
+            damage(version, index, defender, field) / hp
+            for index in range(len(moves))
+            if version.pp[index] > 0
+        ),
+        default=0.0,
+    )
+
+
+def evaluate_average_damage(attacker: Pokemon, defender: Pokemon, hp: float) -> float:
+    """attacker 的普通招式平均一回合打掉 defender 血量的比例，每个招式用的机会一样。
+
+    选路线用的伤害表（make_lair_damage.py）估队友用这个。实测的出招比例（teammate_damage）只用在
+    战斗里选招式：选路线这边换成它之后基准图选错了，倒下相关的几个参数又是按这个算法选的，没跟着改。
+    defender 战斗里的血量是它不极巨化时的 hp 倍；被特性吸收的招式按 0 算。
+    """
+    if attacker.name_id == "ditto":
+        attacker = transform_ditto(attacker, defender)
+    elif defender.name_id == "ditto":
+        defender = transform_ditto(defender, attacker)
+
+    field = Field()
+    version = replace(attacker, dynamax=False)
+    values = [
+        max(damage(version, index, defender, field) / hp, 0.0)
+        for index in range(len(version.moves))
+    ]
+    return sum(values) / len(values)
+
+
+def evaluate_received(pokemon: Pokemon, boss: Pokemon) -> float:
+    """boss 平均一回合打掉 pokemon 自己血量的比例，只看这一只，不管队友。
+
+    和 move_score 里的估计一样：boss 用普通招式的概率是 0.7、极巨招式是 0.3，各招式平均；
+    范围招式按打到多个目标算。被特性吸收的招式（食草、储水这些）damage 算出来是负的，这里按 0 算：
+    吸收只是不掉血。上游把负数和打队友的伤害平均在一起，影响不大；这里只看这一只，照负数算会变成
+    「越打血越多」。
+    """
+    if pokemon.name_id == "ditto":
+        pokemon = transform_ditto(pokemon, boss)
+    field = Field()
+    regular = replace(boss, dynamax=False)
+    received_regular = sum(
+        max(damage(regular, index, pokemon, field, move.is_spread), 0.0)
+        for index, move in enumerate(regular.moves)
+    ) / len(regular.moves)
+    dynamaxed = replace(boss, dynamax=True)
+    count = min(4, len(dynamaxed.max_moves))
+    received_max = (
+        sum(max(damage(dynamaxed, index, pokemon, field), 0.0) for index in range(count)) / count
+    )
+    return received_regular * 0.7 + received_max * 0.3
+
+
 def evaluate_average_matchup(
     attacker: Pokemon, bosses: Iterable[Pokemon], teammates: Iterable[Pokemon] = (), lives: int = 1
 ) -> float:
@@ -104,9 +209,15 @@ def evaluate_average_matchup(
 
 
 def select_best_move(
-    attacker: Pokemon, defender: Pokemon, field: Field, teammates: Iterable[Pokemon] = ()
+    attacker: Pokemon,
+    defender: Pokemon,
+    field: Field,
+    teammates: Iterable[Pokemon] = (),
+    max_move_probability: float = MAX_MOVE_PROBABILITY,
 ) -> tuple[int, str, float]:
     """attacker 对 defender 用哪个招式最好：返回招式的序号、name_id、分数。没 PP 的招式不算。
+
+    max_move_probability 是 defender 用极巨招式的比例（每种对手实测的，见 GameData.max_move_rate）。
 
     极巨化时分数是按极巨招式算的，日志里的名字也用极巨招式的名字。
     """
@@ -115,7 +226,7 @@ def select_best_move(
     best_index, best_name_id, best_score = 0, "", -100.0
     for index, move in enumerate(moves):
         if attacker.pp[index] > 0:
-            score = move_score(attacker, index, defender, teammates, field)
+            score = move_score(attacker, index, defender, teammates, field, max_move_probability)
             # logging.debug(f"第 {index + 1} 个招式 {move.name()}（得分 {score:.2f}）")
             if score > best_score:
                 best_index, best_name_id, best_score = index, move.name_id, score
@@ -128,21 +239,23 @@ def move_score(
     defender: Pokemon,
     teammates: Iterable[Pokemon],
     field: Field,
+    max_move_probability: float = MAX_MOVE_PROBABILITY,
 ) -> float:
-    """attacker 对 defender 用第 move_index 个招式的分数：打出的伤害除以受到的伤害。"""
+    """attacker 对 defender 用第 move_index 个招式的分数：打出的伤害除以受到的伤害。
+
+    max_move_probability 是 defender 用极巨招式的比例。
+    """
     # 队友里不算 attacker 和 defender 自己
     teammates = [
         member for member in teammates if member is not attacker and member is not defender
     ]
 
-    # 打出的伤害：自己这一招，加上三个队友的平均伤害（首领极巨化了，伤害都按一半算）。
-    # 队友的伤害多半被低估了：变化类招式也有用，电脑选招也比随机好，所以乘 1.5
-    teammate_factor = 1.5
-    dealt = damage(attacker, move_index, defender, field) / 2
-    dealt += 3 * average_damage(teammates, [defender], field) / 2 * teammate_factor
+    # 打出的伤害：自己这一招，加上三个队友按实测出招比例的伤害（teammate_damage）。
+    # 都以对手不极巨化的血量为 1，只用来比较这一回合的几个招式，所以不用再除对手的血量倍数
+    dealt = damage(attacker, move_index, defender, field)
+    dealt += sum(teammate_damage(member, defender, field) for member in teammates)
 
-    # 受到的伤害：首领用普通招式和极巨招式的加权平均。首领用极巨招式的概率是估计的
-    max_move_probability = 0.3
+    # 受到的伤害：对手用普通招式和极巨招式的加权平均，用极巨招式的比例是 max_move_probability
     attacker_move = attacker.moves[move_index]
     regular = replace(defender, dynamax=False)
     received_regular = 0.0
@@ -288,9 +401,11 @@ def _received(
 ) -> float:
     """首领用第 move_index 个单体招式时我方平均受到的伤害：1/4 的概率打自己，3/4 打队友。
 
-    自己极巨化时 HP 翻倍，受到的伤害按一半算。
+    自己极巨化时血量是 DYNAMAX_HP 倍，受到的伤害除以它。
     """
-    to_self = damage(defender, move_index, attacker, field) / (2 if attacker.dynamax else 1)
+    to_self = damage(defender, move_index, attacker, field) / (
+        DYNAMAX_HP if attacker.dynamax else 1
+    )
     return 0.25 * to_self + 0.75 * average_damage([defender], teammates, field)
 
 

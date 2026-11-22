@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, replace
 
 from swsh.field import Field
 from swsh.pokemon import Pokemon
-from swsh.scoring import select_best_move, transform_ditto
+from swsh.scoring import MAX_MOVE_PROBABILITY, select_best_move, transform_ditto
 
 
 @dataclass(kw_only=True)
@@ -18,6 +18,8 @@ class War(Field):
     dynamax_turns: int = -1
     # 这一场倒下了几次（看到一次风暴算一次），打完写进 game.faints
     faints: int = 0
+    # 对手用极巨招式的比例（GameData.max_move_rate），选招式时估挨打用
+    max_move_rate: float = MAX_MOVE_PROBABILITY
 
     def __post_init__(self) -> None:
         # 极巨大冒险里的百变怪有变身者特性，一上场就变成对方
@@ -42,10 +44,12 @@ class War(Field):
         """
         pp = [0 if index in blocked else left for index, left in enumerate(self.own.pp)]
         own = replace(self.own, pp=pp)
-        best, _, score = select_best_move(own, self.opponent, self, self.teammates)
+        best, _, score = select_best_move(
+            own, self.opponent, self, self.teammates, self.max_move_rate
+        )
         if can_dynamax and self.dynamax_turns == -1:
             dynamax_best, _, dynamax_score = select_best_move(
-                replace(own, dynamax=True), self.opponent, self, self.teammates
+                replace(own, dynamax=True), self.opponent, self, self.teammates, self.max_move_rate
             )
             if dynamax_score > score:
                 return dynamax_best, dynamax_score, True

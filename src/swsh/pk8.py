@@ -30,6 +30,16 @@ return Input.GetProperty("records").EnumerateArray()
             level = pk.CurrentLevel,
             ivs = new[] { pk.IV_HP, pk.IV_ATK, pk.IV_DEF, pk.IV_SPA, pk.IV_SPD, pk.IV_SPE },
             evs = new[] { pk.EV_HP, pk.EV_ATK, pk.EV_DEF, pk.EV_SPA, pk.EV_SPD, pk.EV_SPE },
+            // 特性编号 1、2、4 分别是第一特性、第二特性、隐藏特性；名字读不出来（编号是乱的）就给空
+            abilityNumber = pk.AbilityNumber,
+            abilityName = pk.Ability < GameInfo.GetStrings("zh-Hans").abilitylist.Length
+                ? GameInfo.GetStrings("zh-Hans").abilitylist[pk.Ability] : "",
+            nature = (int)pk.Nature,
+            gender = pk.Gender,
+            item = pk.HeldItem,
+            // 内存正在改的时候读到的道具编号可能是乱的，超出范围就给空名字，交给校验和去重读
+            itemName = pk.HeldItem < GameInfo.GetStrings("zh-Hans").itemlist.Length
+                ? GameInfo.GetStrings("zh-Hans").itemlist[pk.HeldItem] : "",
             checksumValid = pk.ChecksumValid,
             encryptionConstant = pk.EncryptionConstant.ToString("X8"),
         };

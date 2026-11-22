@@ -34,7 +34,11 @@ class GameState:
                 num_caught=0,
                 caught=[],
                 faints=[],
+                fielded=[],
+                choices=[],
                 route_score=0.0,
+                stage_score=0.0,
+                boss_score=0.0,
                 balls={},
                 started=0.0,
             )
@@ -68,8 +72,15 @@ class GameState:
         self.caught: list[str] = state.get("caught", [])
         # 这一局每一关倒下了几次，每打完一关加一项，没倒下是 0
         self.faints: list[int] = state.get("faints", [])
-        # 这一局路线规划的得分
+        # 这一局每一关自己上场的是哪只，每打完一关（抓到时）加一项；换不换时算自己整局的分要用
+        self.fielded: list[str] = state.get("fielded", [])
+        # 这一局自己做过的决定，按先后：每抓到一只换没换、每个研究员换没换（upstream.Walker 按它推随机数）
+        self.choices: list[bool] = state.get("choices", [])
+        # 这张图选首发和路线时的总分，以及其中三关的分、首领分（见 plan.py），最高都是 1。
+        # 旧版本存的 route_score 是旧算法的分，那时没有 stage_score、boss_score，读出来是 0
         self.route_score: float = state.get("route_score", 0.0)
+        self.stage_score: float = state.get("stage_score", 0.0)
+        self.boss_score: float = state.get("boss_score", 0.0)
         # 各种球还剩几个：{球名: 数量}
         self.balls: dict[str, int] = state.get("balls", {})
         # 这一局开始的时间（time.time()），join 一开始记下
@@ -86,6 +97,8 @@ class GameState:
         self.num_caught = 0
         self.caught = []
         self.faints = []
+        self.fielded = []
+        self.choices = []
         self.team = []
         if self.maps is not None:
             self.maps["current_index"] = 0
@@ -112,6 +125,8 @@ class GameState:
         self.lock_pokemon_index = None
         self.maps = None
         self.route_score = 0.0
+        self.stage_score = 0.0
+        self.boss_score = 0.0
         self.save()
         return False
 
@@ -214,7 +229,11 @@ class GameState:
             num_caught=self.num_caught,
             caught=self.caught,
             faints=self.faints,
+            fielded=self.fielded,
+            choices=self.choices,
             route_score=self.route_score,
+            stage_score=self.stage_score,
+            boss_score=self.boss_score,
             balls=self.balls,
             started=self.started,
         )

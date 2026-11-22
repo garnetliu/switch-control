@@ -3,8 +3,11 @@
 import logging
 
 from libs import ImageChecker
+from swsh.lair import upstream
+from swsh.lair.lair import Lair
 from swsh.lair.next_columns import next_columns
-from swsh.lair.score import rental_boss_score
+from swsh.lair.steps.battle import Messages
+from swsh.lair.steps.catch import walker_now
 from swsh.lair.switch import LairSwitch
 from tools import (
     act_until,
@@ -33,10 +36,27 @@ def path(sw: LairSwitch) -> str:
     """
 
     states = ("battle", "backpacker", "scientist", "berry", "fork")
+    maps = sw.game.maps
+    if maps.get("layout") is None and sw.game.seed is not None:
+        # 旧的存档里没有布局编号（锁定的图沿用存档），按 seed 补上
+        maps["layout"] = Lair(sw.data, sw.game.seed).layout()
+    # 这一段从哪个节点出发；选岔路之前遇到的事件记在这个节点上，之后遇到的记在走的那段路上
+    start = maps["route"][maps["current_index"]]
+    before: list[str] = []
+    after: list[str] = []
+    forked = False
+    # 路上黑色面板上的字（谁换上了刚抓的那只、遇到了谁、谁和研究员换了）也写进日志
+    rects = sw.config.rects
+    messages = Messages((rects.black_center_line1, rects.black_center_line2), "路上的文字")
+
+    def found(screen: ImageChecker, active: tuple[str, ...]) -> bool:
+        messages.read(screen)
+        return _match_state(sw, screen, active) is not None
+
     while True:
         image = wait_for(
             sw,
-            lambda screen, active=states: _match_state(sw, screen, active) is not None,
+            lambda screen, active=states: found(screen, active),
             sw.config.timeout,
             "路线上的界面",
         )
@@ -45,6 +65,7 @@ def path(sw: LairSwitch) -> str:
 
         if state == "battle":
             # 战斗
+            _record_events(sw, start, forked, before, after)
             return state
         elif state == "backpacker":
             # 背包客
@@ -57,11 +78,44 @@ def path(sw: LairSwitch) -> str:
             _handle_berry(sw)
         elif state == "fork":
             # 分岔路
+            _save_map(sw, image)
             _handle_fork(sw)
+            forked = True
         else:
             logging.warning("未知的路线分支状态: %s", state)
+        if state in ("backpacker", "scientist", "berry"):
+            (after if forked else before).append(state)
         # 同一分支一次 path 调用只处理一次，处理完就不再认它
         states = tuple(other for other in states if other != state)
+
+
+def _save_map(sw: LairSwitch, image: ImageChecker) -> None:
+    """每种地图类型、每个布局编号，在每个岔路口存一张路线图，以后认图上的研究员、背包客、树果图标用。"""
+    maps = sw.game.maps
+    index = maps["current_index"]
+    picture = sw.config.log_dir / "maps" / f"{maps['type']}-{maps.get('layout')}-{index}.jpg"
+    if maps.get("layout") is None or picture.exists():
+        return
+    picture.parent.mkdir(parents=True, exist_ok=True)
+    image.save(str(picture))
+
+
+def _record_events(
+    sw: LairSwitch, start: list[int], forked: bool, before: list[str], after: list[str]
+) -> None:
+    """把这一段路上遇到的事件记进表里（GameData.lair_events），什么都没遇到也记，表示走过了。"""
+    maps = sw.game.maps
+    layout = maps.get("layout")
+    if maps["type"] is None or layout is None:
+        return
+    row, col = start
+    sw.data.record_lair_events(maps["type"], layout, f"{row}-{col}", before)
+    if forked:
+        next_row, next_col = maps["route"][maps["current_index"]]
+        position = f"{row}-{col}>{next_row}-{next_col}"
+        sw.data.record_lair_events(maps["type"], layout, position, after)
+    if before or after:
+        logging.info(f"路上的事件：选岔路之前 {before}，之后 {after}")
 
 
 def _match_state(sw: LairSwitch, image: ImageChecker, states: tuple[str, ...]) -> str | None:
@@ -176,31 +230,41 @@ def _handle_backpacker(sw: LairSwitch) -> None:
 
 
 def _handle_scientist(sw: LairSwitch) -> None:
-    """研究员问要不要换租借宝可梦：平均分更高就换。
+    """研究员问要不要换租借宝可梦：按 seed 算出它实际会给哪只（upstream.Walker.offer），
+    换成那只后队伍分更高就换（upstream.decide_scientist），决定记进 game.choices。
 
-    平均分排除候选池和这一局路线上的遭遇宝可梦。
+    按 A 之前核对画面上「希望交换成…」里的名字，和算的不一样（路上有没记录的事件，随机数错位了）就不换。
+    路线上没记着这个研究员的，按不换，也不记决定。
     """
-    own = sw.game.team[0][0]
+    found = walker_now(sw)
+    give = None
+    take = False
+    if found is not None:
+        scorer, walker = found
+        if walker.next_event() == "scientist":
+            give = walker.offer()
+            take = upstream.decide_scientist(scorer, walker)
+        else:
+            logging.warning("路线上没记着这个研究员，按不换（后面按 seed 推的队伍会错位）")
+            found = None
 
-    rental_scores = sw.data.rental_scores()
-    # 候选池和这一局路线上的宝可梦不会再作为新对手出现，算平均分时排除
-    excluded = set(sw.game.rental_pool)
-    for nodes in sw.game.maps["rows"].values():
-        excluded.update(node["encounter"] for node in nodes)
-    names = [name for name in rental_scores if name not in excluded]
-    floor = sw.game.maps["current_index"]
-    average = sum(rental_boss_score(sw, name, sw.game.boss, floor) for name in names) / len(names)
-    own_score = rental_boss_score(sw, own, sw.game.boss, floor)
-    take = average > own_score
-    logging.info(
-        f"研究员：平均分 {average:.2f}，{own} 的分数 {own_score:.2f}，{'换' if take else '不换'}"
-    )
-
-    wait_for(
+    image = wait_for(
         sw,
         lambda screen: screen.has_text(sw.config.rects.black_center_line1, "希望交换成"),
         sw.config.timeout,
         "研究员问换不换",
+    )
+    offered = image.read_text(sw.config.rects.black_center_line1) + image.read_text(
+        sw.config.rects.black_center_line2
+    )
+    if take and give is not None:
+        name = sw.data.pokemon_object(give).name(sw.config.language)
+        if not contains(offered, name):
+            logging.warning(f"按 seed 算研究员给的是 {name}，画面上是「{offered}」，对不上，不换")
+            take = False
+    own = sw.game.team[0][0]
+    logging.info(
+        f"研究员：给的是 {give}（画面上「{offered}」），{'换' if take else '不换'}，现在是 {own}"
     )
     sw.click("A" if take else "B", 0)
     wait_for(
@@ -209,6 +273,11 @@ def _handle_scientist(sw: LairSwitch) -> None:
         sw.config.timeout,
         "研究员问话消失",
     )
+    if found is not None:
+        sw.game.choices.append(take)
+    if take and give is not None:
+        sw.game.team[0] = (give, 1.0)
+    sw.game.save()
 
 
 def _backpacker_shown(sw: LairSwitch, image: ImageChecker) -> bool:

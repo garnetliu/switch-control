@@ -79,7 +79,7 @@ def press_until(
         lambda: sw.click(button, 0),
         done,
         what,
-        interval=sw.config.interval,
+        interval=sw.config.press_interval,
         timeout=sw.config.timeout if timeout is None else timeout,
     )
 

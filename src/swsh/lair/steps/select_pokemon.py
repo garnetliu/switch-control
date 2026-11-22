@@ -129,10 +129,11 @@ def _report(sw: LairSwitch, shinies: list[int], values: list[float], keep: bool,
     lock 是 game.finish_run 返回的锁定情况。格式：
 
     第 N 轮战报：（N 是 lock_results 里记录的局数）
-    胜/负，倒下 X 次，Y 分钟，抓到 n/4
+    胜/负，倒下 X 次，Y 分钟，抓到 n/4；输了但还有命的是超回合，写成「负（超回合）」
     路线：A → B → C
-    得分：S，首发 名字（第 k 位）
-    逐关：每一关抓到、团灭还是没抓，对手和属性；团灭之后的关卡不写。下面各另起一行，和「抓到」对齐：
+    得分：S（自己 a + 队友 b），首发 名字（第 k 位）；旧版本锁定的图没有括号里的两项
+    逐关：每一关抓到、团灭还是超回合，对手和属性；输掉的那一关之后的关卡不写。
+    下面各另起一行，和「抓到」对齐：
     抓到的写是闪光还是非闪、闪光框的占比和阈值；这一关有倒下的写倒下几次
     处理：这一局结束时怎么处理抓到的宝可梦。一只闪光带走；不止一只停下来等人选；
     没有闪光不带走，一只都没抓到另外写明；要重启游戏保留路线的在后面加一句
@@ -151,9 +152,12 @@ def _report(sw: LairSwitch, shinies: list[int], values: list[float], keep: bool,
 
     won = game.num_caught == 4
     minutes: float = (time.time() - game.started) / 60
+    # 输了但命没扣完：回合用完还没打倒对手，被风刮出巢穴
+    overtime = not won and game.lives > 0
+    verdict = "胜" if won else "负（超回合）" if overtime else "负"
     lines = [
         f"第 {len(game.lock_results)} 轮战报：",
-        f"{'胜' if won else '负'}，倒下 {4 - game.lives} 次，{minutes:.1f} 分钟，抓到 {game.num_caught}/4",
+        f"{verdict}，倒下 {4 - game.lives} 次，{minutes:.1f} 分钟，抓到 {game.num_caught}/4",
     ]
     nodes: list[str] = []
     if maps is not None and maps["route"]:
@@ -163,7 +167,10 @@ def _report(sw: LairSwitch, shinies: list[int], values: list[float], keep: bool,
         starter = f"{name(game.candidates[game.lock_pokemon_index])}（第 {game.lock_pokemon_index + 1} 位）"
     route = " → ".join(name(node) for node in nodes) or "?"
     lines.append(f"路线：{route}")
-    lines.append(f"得分：{game.route_score:.3f}，首发 {starter}")
+    score = f"{game.route_score:.3f}"
+    if game.stage_score:
+        score += f"（三关 {game.stage_score:.3f}，首领 {game.boss_score:.3f}）"
+    lines.append(f"得分：{score}，首发 {starter}")
 
     lines.append("逐关：")
     stages = []
@@ -175,12 +182,12 @@ def _report(sw: LairSwitch, shinies: list[int], values: list[float], keep: bool,
         elif game.lives == 0:
             result = "团灭"
         else:
-            result = "没抓"
+            result = "超回合"
         result += f" {name(opponent)}（{types(opponent)}）"
         faints = game.faints[index] if index < len(game.faints) else 0
         stages.append((label, result, faints))
-        # 团灭之后的关卡没有打，不写
-        if result.startswith("团灭"):
+        # 输掉的那一关之后的关卡没有打，不写
+        if index >= game.num_caught:
             break
     label_width = max(_display_width(label) for label, _, _ in stages) + 1
     for index, (label, result, faints) in enumerate(stages):

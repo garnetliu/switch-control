@@ -2,30 +2,56 @@
 
 import logging
 import re
-from dataclasses import replace
 
+from swsh.lair import upstream
+from swsh.lair.lair import Lair
 from swsh.lair.switch import LairSwitch
-from swsh.pokemon import Pokemon
-from swsh.scoring import (
-    evaluate_average_matchup,
-    evaluate_matchup,
-    weighted_score,
-)
 from tools import act_until, wait_for
 
 
 def catch(sw: LairSwitch) -> str:
-    """抓当前这只；首领抓完返回 "select_pokemon"，普通对手返回 "path"。"""
+    """抓当前这只；首领抓完返回 "select_pokemon"，普通对手先定换不换再抓，返回 "path"。"""
     boss = sw.game.num_caught == 3
-    _catch_pokemon(sw, boss)
     if boss:
+        _catch_pokemon(sw, boss)
         sw.game.caught.append(sw.game.boss)
         sw.game.save()
         logging.info("抓了首领，这一局结束")
         return "select_pokemon"
-    _swap_pokemon(sw)
+    take = _decide(sw)
+    _catch_pokemon(sw, boss)
+    _swap_pokemon(sw, take)
     sw.game.save()
     return "path"
+
+
+def _decide(sw: LairSwitch) -> bool:
+    """这一关抓到后自己换不换：按 upstream.decide_catch 定，决定记进 game.choices。
+
+    换和不换都按 seed 推出之后的队伍（不换时实际是哪个队友换上，或者没人换）比队伍分。
+    算不出来（存档里没有 seed 之类）按不换。
+    """
+    maps = sw.game.maps
+    row, col = maps["route"][maps["current_index"]]
+    name = maps["rows"][str(row)][col]["encounter"]
+    found = walker_now(sw)
+    if found is None:
+        logging.warning("队伍会怎么变没算出来，按不换")
+        take = False
+    else:
+        scorer, walker = found
+        # 路线上记着研究员、实际却没遇到就走到了这一关：那个研究员按没有出现跳过（不用随机数）
+        while walker.next_event() == "scientist":
+            logging.warning("路线上记着的研究员没遇到，按没有算")
+            walker.index += 1
+        if walker.opponents[walker.caught] != name:
+            logging.warning(
+                f"按 seed 推的这一只是 {walker.opponents[walker.caught]}，实际是 {name}"
+            )
+        take, scores = upstream.decide_catch(scorer, walker)
+        logging.info(f"{name}：抓了不换 {scores['不换']:.2f}，抓了换 {scores['换']:.2f}")
+    sw.game.choices.append(take)
+    return take
 
 
 def _catch_pokemon(sw: LairSwitch, boss: bool) -> None:
@@ -84,8 +110,8 @@ def _catch_pokemon(sw: LairSwitch, boss: bool) -> None:
     sw.game.num_caught += 1
 
 
-def _swap_pokemon(sw: LairSwitch) -> None:
-    """等换不换的界面，决定要不要换成新抓到的，等结果并按结果更新队伍。"""
+def _swap_pokemon(sw: LairSwitch, take: bool) -> None:
+    """等换不换的界面，按 take 换或不换，等结果并按结果更新队伍。"""
     image = wait_for(
         sw,
         lambda screen: screen.has_text(sw.config.rects.swap_options[0], "替换"),
@@ -97,6 +123,8 @@ def _swap_pokemon(sw: LairSwitch) -> None:
     row, col = maps["route"][maps["current_index"]]
     caught_name = maps["rows"][str(row)][col]["encounter"]
     sw.game.caught.append(caught_name)
+    # 这一关是自己现在这只打的
+    sw.game.fielded.append(sw.game.team[0][0])
 
     hp_lines = sorted(
         image.text_lines(sw.config.rects.swap_hp),
@@ -108,61 +136,39 @@ def _swap_pokemon(sw: LairSwitch) -> None:
             (name, int(found[1]) / int(found[2])) for (name, _), found in zip(sw.game.team, hps)
         ]
 
-    take = _should_swap(sw, caught_name)
     _apply_swap(sw, caught_name, take)
 
 
-def _should_swap(sw: LairSwitch, caught_name: str) -> bool:
-    """给换和不换打分，换成新抓到的分数更高返回 True。"""
-    maps = sw.game.maps
-    caught = replace(sw.data.pokemon_object(caught_name), hp=1.0)
-    own_name, own_hp = sw.game.team[0]
-    own = replace(sw.data.pokemon_object(own_name), hp=own_hp)
-    team = [replace(sw.data.pokemon_object(name), hp=hp) for name, hp in sw.game.team[1:]]
+def walker_now(sw: LairSwitch) -> tuple[upstream.Scorer, upstream.Walker] | None:
+    """按这一局已经做过的决定（game.choices）把随机数推到现在要做决定的地方，队伍换成内存里读到的实际队伍。
 
-    # 后面还可能遇到的对手：没见过、属性和剩下的路线节点对得上的租借宝可梦
-    encountered = set(sw.game.rental_pool)
-    for nodes in maps["rows"].values():
-        encountered.update(node["encounter"] for node in nodes)
-    encountered.update(sw.game.caught)
-    encountered.update(name for name, _ in sw.game.team)
-    # route 最后一项 [4, 0] 是首领，不在 rows 里
-    types_left = {
-        maps["rows"][str(row)][col]["type"]
-        for row, col in maps["route"][maps["current_index"] + 1 : -1]
-    }
-    potential = [
-        pokemon
-        for name_id, pokemon in sw.data.rental_pokemon_objects().items()
-        if name_id not in encountered and not types_left.isdisjoint(pokemon.type_ids)
-    ]
-
-    rental_weight, boss_weight = 3 - sw.game.num_caught, 2
-    boss = sw.data.pokemon_object(sw.game.boss)
-    potential_teams: tuple[tuple[Pokemon, Pokemon, Pokemon, Pokemon], ...] = (
-        (caught, team[0], team[1], team[2]),
-        (own, team[0], team[1], team[2]),
-        (own, caught, team[1], team[2]),
-        (own, team[0], caught, team[2]),
-        (own, team[0], team[1], caught),
-    )
-    scores = [
-        weighted_score(
-            evaluate_average_matchup(first, potential, rest, sw.game.lives),
-            rental_weight,
-            evaluate_matchup(first, boss, rest, sw.game.lives),
-            boss_weight,
-        )
-        for first, *rest in potential_teams
-    ]
-    take_score = scores[0]
-    leave_score = 0.125 * scores[1] + 0.875 * sum(scores[2:]) / 3
-    logging.info(f"换成 {caught_name} 的分数 {take_score:.2f}，不换 {leave_score:.2f}")
-    return take_score > leave_score
+    算不出来返回 None。
+    """
+    game = sw.game
+    maps = game.maps
+    if game.seed is None or game.lock_pokemon_index is None or maps is None:
+        return None
+    try:
+        lair = Lair(sw.data, game.seed)
+        path = tuple((row, col) for row, col in maps["route"][1:-1])
+        events = sw.data.lair_events(maps["type"], maps.get("layout"))
+        starter = game.lock_pokemon_index
+        team = [game.candidates[starter], *lair.teammates(starter)]
+        walker = upstream.Walker(lair, sw.data, game.boss, path, team, events)
+        walker.replay(game.choices)
+    except (KeyError, IndexError, ValueError) as error:
+        logging.warning(f"按 seed 推队伍出错：{error!r}")
+        return None
+    if game.team:
+        walker.team = [name for name, _ in game.team]
+    return upstream.Scorer(sw.data, game.boss), walker
 
 
 def _apply_swap(sw: LairSwitch, caught_name: str, take: bool) -> None:
-    """选换或不换，等画面变黑。队伍在 path 里重新读。"""
+    """选换或不换，等画面变黑。
+
+    换了就把自己这只记成新抓的、满血，研究员要用；队友换没换这里看不到，等下一场战斗重新读队伍。
+    """
     own_name = sw.game.team[0][0]
 
     logging.info(f"决定{'换成 ' + caught_name if take else '不换，继续用 ' + own_name}")
@@ -173,3 +179,6 @@ def _apply_swap(sw: LairSwitch, caught_name: str, take: bool) -> None:
         lambda screen: screen.is_black(),
         "换不换之后的黑屏",
     )
+    if take:
+        sw.game.team[0] = (caught_name, 1.0)
+        sw.game.save()

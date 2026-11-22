@@ -23,6 +23,8 @@ class Addresses:
     party = (0x886B67C8, 0x886BC348, 0x886B9588, 0x886BF108)
     # 当前对手，0x158 字节
     opponent = 0x886A95B8
+    # 队伍和对手的 PK8 记录往前这么多字节起是战斗用的数据：血量、能力值、能力变化、招式和 PP（见 battle._log_turn）
+    battle_data = 0x4E8
     # LairSpeciesNote 1–4，每项开头 2 字节是 species
     lair_notes = (0x50B12278, 0x50B122B0, 0x50B122E8, 0x50B12320)
     # 冒险界面状态
@@ -45,6 +47,10 @@ class Addresses:
     # 普通道具口袋在道具块的 0x2F8，550 格
     item_pouch_offset = 0x2F8
     item_pouch_slots = 550
+    # 存档数据块的表里放神兽「抓过没有」那一段的范围（见 LairSwitch.caught_legends），每项 0x20 字节
+    caught_table = (0x4504C848, 0x4504CEA8)
+    # 表里「极巨大冒险的究极异兽解锁了没有」那一项
+    ultra_beasts_entry = 0x45042208
     # 战斗状态（剑）：0 不在战斗，0x40/0x41 在战斗
     battle_state_sword = 0x3F128624
     # 战斗状态（盾）
@@ -62,6 +68,8 @@ class Rects(BaseRects):
     black_full_line2: Rect = ((0.087, 0.888), (0.586, 0.958))
     # 黑色中间面板（「要走哪条路？」、「遇到了背包客！」、换不换的结果）的第一行
     black_center_line1: Rect = ((0.277, 0.815), (0.72, 0.884))
+    # 同一个面板的第二行，位置照着占满的那个面板的第二行定的
+    black_center_line2: Rect = ((0.277, 0.888), (0.72, 0.958))
     # 白色中间面板（科学家的对话）的第一行
     white_center_line1: Rect = ((0.21, 0.815), (0.80, 0.884))
     # 找对话菜单时的搜索范围，比菜单大一圈
@@ -294,8 +302,8 @@ class Rects(BaseRects):
 class GameConfig(BaseConfig):
     """极巨大冒险的配置。"""
 
-    # 要找的传说宝可梦，数据文件里的 name_id
-    boss = "mewtwo"
+    # 要找的传说宝可梦，数据文件里的 name_id；None 是在研究员那里选「不指定」，首领从 seed 算（Lair.boss）
+    boss: str | None = "tapu-lele"
     # 数据文件和图片资源
     data_dir = ROOT / "data" / "swsh"
     # 运行状态快照：YAML 文件 run/game.yaml
@@ -373,8 +381,163 @@ class GameConfig(BaseConfig):
     dynamax_lower: Hsv = (0, 0, 200)
     dynamax_upper: Hsv = (180, 50, 255)
     dynamax_ratio = 10 / 255
-    # seed 算出的前 3 只租借和选宝可梦界面对不上时，开头最多多取几个随机数重算（真机上只见过多取 1 个）
+    # 一局开头第一次抽数是在还没抓到的神兽里挑一只：把这个存档能遇到的神兽按遭遇表的顺序排，去掉抓到的，
+    # 抽到几就是第几只（从 0 数）。在研究员那里选「不指定」时打的就是它；指定了要打哪只也照样抽，只是不用。
+    # 抽数的上限 = 还没抓到的只数 − 1，抽到比它大的游戏会重抽，多用掉随机数，后面的租借和遭遇就全变了。
+    # 验证：还剩 25 只时 85 张图、抓了超梦后 36 张图、抓了卡璞・哞哞后 14 张图的租借全部对得上；
+    # 11-19 选「不指定」打了两局，首领是艾姆利多（第 12 只）和卡璞・蝶蝶（第 22 只），都和算的一样。
+    #
+    # 另一个版本（盾）限定的 8 只，这个存档遇不到
+    lair_other_version: tuple[str, ...] = (
+        "lugia",
+        "latias",
+        "kyogre",
+        "palkia",
+        "thundurus-incarnate",
+        "zekrom",
+        "yveltal",
+        "lunala",
+    )
+    # 究极异兽 9 只和奈克洛兹玛：没解锁时遇不到，奈克洛兹玛是跟究极异兽一起解锁的
+    lair_ultra_beasts: tuple[str, ...] = (
+        "necrozma",
+        "nihilego",
+        "buzzwole",
+        "pheromosa",
+        "xurkitree",
+        "kartana",
+        "celesteela",
+        "guzzlord",
+        "blacephalon",
+        "stakataka",
+    )
+    # 下面两项每局开头从存档读出来覆盖（join._read_legends），这里写的只在读不出来时用。
+    # 究极异兽解锁了没有
+    lair_ultra_beasts_unlocked = False
+    # 已经抓到（带走）的神兽，按抓到的先后
+    lair_caught: tuple[str, ...] = (
+        "tapu-fini",
+        "xerneas",
+        "tapu-koko",
+        "solgaleo",
+        "mewtwo",
+        "tapu-bulu",
+        "tornadus-incarnate",
+        "tapu-lele",
+    )
+    # 存档里每只神兽「抓过没有」那个数据块的编号（PKHeX 的 SaveBlockAccessor8SWSH.KCaptured…）
+    lair_caught_keys: ClassVar[dict[str, int]] = {
+        "articuno": 0xF75E52CF,
+        "zapdos": 0xF75E5635,
+        "moltres": 0xF75E511C,
+        "mewtwo": 0xF75E4DB6,
+        "raikou": 0xF75E4C03,
+        "entei": 0xF75E4A50,
+        "suicune": 0xF75E4F69,
+        "lugia": 0xF75E621A,
+        "ho-oh": 0xF75E63CD,
+        "latias": 0xF760948B,
+        "latios": 0xF76092D8,
+        "kyogre": 0xF760963E,
+        "groudon": 0xF76097F1,
+        "rayquaza": 0xF7609B57,
+        "uxie": 0xF76099A4,
+        "mesprit": 0xF7609D0A,
+        "azelf": 0xF7609EBD,
+        "dialga": 0xF76086F3,
+        "palkia": 0xF7608540,
+        "heatran": 0xF7582323,
+        "giratina-altered": 0xF7582170,
+        "cresselia": 0xF75824D6,
+        "tornadus-incarnate": 0xF7582689,
+        "thundurus-incarnate": 0xF758283C,
+        "reshiram": 0xF7582BA2,
+        "zekrom": 0xF7582D55,
+        "landorus-incarnate": 0xF75829EF,
+        "kyurem": 0xF7582F08,
+        "xerneas": 0xF75830BB,
+        "yveltal": 0xF75B3AF9,
+        "zygarde-50": 0xF75B3946,
+        "tapu-koko": 0xF75B3793,
+        "tapu-lele": 0xF75B35E0,
+        "tapu-bulu": 0xF75B41C5,
+        "tapu-fini": 0xF75B4012,
+        "solgaleo": 0xF75B3E5F,
+        "lunala": 0xF75B3CAC,
+        "nihilego": 0xF75B46DE,
+        "buzzwole": 0xF769AAC6,
+        "pheromosa": 0xF769AC79,
+        "xurkitree": 0xF769A760,
+        "celesteela": 0xF769B192,
+        "kartana": 0xF769A913,
+        "guzzlord": 0xF769B345,
+        "necrozma": 0xF75B4891,
+        "stakataka": 0xF769B85E,
+        "blacephalon": 0xF769AFDF,
+    }
+    # 「极巨大冒险的究极异兽解锁了没有」那个数据块的编号（KUnlockedUBsInMaxLair）
+    lair_ultra_beasts_key = 0xB99A1E28
+    # 第一次抽数的上限。None 是按上面的名单算；分析以前的日志时可以直接填当时的值
+    lair_first_draw_top: int | None = None
+    # 按上面的上限算出的前 3 只租借和选宝可梦界面对不上时，开头最多多取几个随机数重算
     lair_extra_max = 3
+    # 极巨化的轮换：一局的第 1 个回合轮到自己，极巨化持续 dynamax_turns 个回合（这一场打完也结束），
+    # 这期间不计回合；结束后再过 dynamax_wait 个回合又轮到自己。日志里 176 局 1874 个回合，
+    # 按这个规则算的和实际一致的占 96.6%
+    dynamax_turns = 3
+    dynamax_wait = 3
+    # 自己极巨化之后血量是原来的几倍。日志里极巨化之后读到的最大血量 ÷ 这一场开头的最大血量，
+    # 60 多个读数都是 1.90（比如 323/170、427/225）
+    dynamax_hp = 1.9
+    # 对手战斗里的最大血量是它不极巨化时的几倍（内存实测，见 docs/实测-对手的真实血量.md）：
+    # 路上三关是 1.9 × 2 = 3.8，首领是 1.9 × 2.2 = 4.18。make_lair_damage.py 生成伤害表时用
+    stage_hp = 3.8
+    boss_hp = 4.18
+    # 前三关一场打几个回合，按自己这个回合的伤害（一回合打掉对手血量的比例）分三档，见 plan.fight。
+    # 伤害表 11-20 按实测血量重新生成后，用日志重新统计（docs/打分算法探索脚本/版本12-按实测血量重定门槛.py）：
+    # 不低于 stage_sure_damage 的算这个回合打完：日志里 143 场，131 场是 1 回合（92%）；同样的对局只算一份是 94%。
+    # 不低于 stage_likely_damage 的算一回合半：0.6 到 1.0 之间同样的对局只算一份，1 回合打完的约一半；
+    # 0.5 到 0.6 之间只有两成多。旧表（对手血量按 2 倍、个体值 15）时是 2.0 和 1.3
+    stage_sure_damage = 1.0
+    stage_likely_damage = 0.6
+    # 再低的：每回合对手掉的血 = stage_own_rate × 自己这回合的伤害
+    # + stage_team_rate × 三个队友普通招式的平均伤害合计 + stage_base_rate，掉完为止，最多 stage_max_turns 个回合。
+    # 日志里 1313 场打赢的前三关重新拟合，三档合起来预测的整数回合数和实际完全一样的占 64%。
+    # 旧表时是 0.4、0.6、0.1（534 场，63%）
+    stage_own_rate = 1.0
+    stage_team_rate = 1.4
+    stage_base_rate = 0.05
+    stage_max_turns = 10
+    # 伤害不到 stage_likely_damage、上面的式子却说第 1 个回合对手的血就掉完的，算这么多个回合。
+    # 日志里 107 场，1 回合 47 场、2 回合 58 场、3 回合 2 场，平均 1.58（旧表时 12 场，平均 1.75）
+    stage_weak_turns = 1.58
+    # 首领战四只的进攻合计（自己第 1 回合的 + 三个队友普通招式的）不低于这个值，算能一回合打死，首领分不看挨打。
+    # 新表：日志里赢的首领战，合计不低于 1.0 的 20 局里 13 局 1 回合（65%）；0.9 以上只有 31%。
+    # 旧表时是 2.3（9004205710319247536 那张图合计 2.35，18 局里 12 局首领战 1 回合）
+    boss_kill_attack = 1.0
+    # 首领战打几个回合 = 1 ÷（boss_turn_rate × 四只的进攻合计），最少 1 个回合，最多 boss_max_turns 个。
+    # 新表：日志里赢的 293 局（超梦、哞哞、龙卷云、蝶蝶等）拟合出来是 0.678（相关 0.63）。
+    # 旧表时是 0.36（超梦、哞哞赢的 144 局拟合 0.35，相关 0.86）
+    # 合计里自己的进攻取前 boss_turns 个回合的平均
+    boss_turn_rate = 0.68
+    boss_turns = 3
+    boss_max_turns = 10
+    # 不能一回合打死时，首领分 = 1 ÷ 回合数 ÷（1 + 预计倒下几只 ÷ boss_hurt_scale）** boss_hurt_exponent。
+    # 预计倒下几只 = 四只各自倒下的机会相加（plan.faint_chance）。一只的机会 = x ** n ÷（x ** n + boss_faint_half ** n），
+    # x 是回合数 × 这只的挨打，n 是 boss_faint_power：x 到 boss_faint_half 时是一半，再低很快到 0，再高很快到 1。
+    # 日志里 198 场首领战，用开打前就知道的数预测倒下次数，这个式子和「回合数 × 挨打合计」合起来一样准
+    # （相关 0.51 和 0.50）：超梦 125 场一样（都是 0.39），哞哞 73 场差一些（0.47 和 0.64）。
+    # 这四个数是按超梦基准图（seed 3076008315599927110）选对路线、哞哞几张图的先后、
+    # 日志里的输赢和用时一起定的，日志本身分不出哪组更好；两个指数要是整数
+    boss_faint_half = 0.8
+    boss_faint_power = 4
+    boss_hurt_scale = 3.0
+    boss_hurt_exponent = 3
+    # 总分里第 1、2、3 关的权重，首领是 1 减三关合计。越早的关权重越高：首发打得慢拖整局，
+    # 后面的关可以靠抓到的换上来。三关合计 0.6 和首领 0.4 是上游的 3:2
+    stage_weights = (0.3, 0.2, 0.1)
+    # 抓到之后自己不换时，新抓到的那只没有队友换的概率，其余平均分给三个队友。日志里实测约 15%
+    no_swap_probability = 1 / 8
     # 没锁定的图：打赢、倒下不超过 lock_max_faints 次、用时不超过 lock_max_minutes 分钟，就锁定这张图（keep path）
     lock_max_faints = 1
     lock_max_minutes = 10.0

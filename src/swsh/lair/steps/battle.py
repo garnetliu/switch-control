@@ -16,9 +16,12 @@ from type import Rect
 def battle(sw: LairSwitch) -> str:
     """打到出现要不要抓的界面返回 "catch"，命数扣到 0 或者认到战败返回 "select_pokemon"。"""
     war = _create_war(sw)
+    rects = sw.config.rects
+    messages = Messages((rects.black_full_line1, rects.black_full_line2), "战斗文字")
 
     while True:
         image = capture(sw, "战斗")
+        messages.read(image)
         state = _battle_state(sw, image)
 
         if state == "fight":
@@ -43,14 +46,38 @@ def battle(sw: LairSwitch) -> str:
             time.sleep(sw.config.interval)
 
 
+class Messages:
+    """画面下方黑色面板上的两行字，一句话显示完了打印到日志（谁用了什么招式、谁换上了哪只这些）。"""
+
+    def __init__(self, rects: tuple[Rect, Rect], label: str) -> None:
+        """rects 是面板上第一行和第二行的区域，label 是日志里这一行开头写什么。"""
+        self._rects = rects
+        self._label = label
+        # 面板上现在这句话读到的部分
+        self._text = ""
+
+    def read(self, image: ImageChecker) -> None:
+        """读这张截图上的两行字。字是一个一个出来的：新读到的接着上一次的，就还是同一句，先不打印；
+        换成了别的字或者字没了，上一句就是显示完了，打印出来。"""
+        lines = [image.read_text(rect) for rect in self._rects]
+        text = " / ".join(line for line in lines if line)
+        if text.startswith(self._text):
+            self._text = text
+            return
+        logging.info(f"{self._label}: {self._text}")
+        self._text = text
+
+
 def _create_war(sw: LairSwitch) -> War:
     """建这场对战的场上状态：自己、队友和对手。自己的 PP 用内存里读到的剩余值。"""
     own_pp = _read_team(sw)
     own_name, own_hp = sw.game.team[0]
+    opponent = _read_opponent(sw)
     return War(
         own=replace(sw.data.pokemon_object(own_name), hp=own_hp, pp=own_pp),
         teammates=[replace(sw.data.pokemon_object(name), hp=hp) for name, hp in sw.game.team[1:]],
-        opponent=_read_opponent(sw),
+        opponent=opponent,
+        max_move_rate=sw.data.max_move_rate(opponent.name_id),
     )
 
 
@@ -76,6 +103,11 @@ def _read_team(sw: LairSwitch) -> list[int]:
         hps.append(f"{pokemon.name(sw.config.language)} {record['hp']}/{max_hp}")
     sw.game.team = team
     logging.info(f"队伍血量: {'，'.join(hps)}")
+    # 每只带着什么道具：遇到背包客之后能看出四个人各拿了哪一样
+    items = [record["itemName"] if record["item"] else "无" for record in records]
+    logging.info(f"队伍道具: {'，'.join(items)}")
+    abilities = [f"{record['abilityName']}（{record['abilityNumber']}）" for record in records]
+    logging.info(f"队伍特性: {'，'.join(abilities)}")
     sw.game.save()
     own_pp = list(records[0]["pp"])
     logging.info(f"队伍: {sw.game.team}，自己的 PP: {own_pp}")
@@ -83,11 +115,22 @@ def _read_team(sw: LairSwitch) -> list[int]:
 
 
 def _read_opponent(sw: LairSwitch) -> Pokemon:
-    """第 4 场是首领，直接用这一局的首领；其他场从对手内存记录识别。"""
-    if sw.game.num_caught == 3:
-        return replace(sw.data.pokemon_object(sw.game.boss))
+    """第 4 场是首领，直接用这一局的首领；其他场从对手内存记录识别。
+
+    对手（首领也是）的内存记录都读一次记进日志，复盘和核对伤害用。
+    """
     record = sw.pkhex.read_pk8([sw.config.addresses.opponent])[0]
-    return replace(sw.data.pokemon_object(sw.data.name_id(record["species"], record["form"])))
+    boss = sw.game.num_caught == 3
+    # 首领不一定在租借宝可梦的表里，名字直接用这一局的首领，另外记下内存里的种类编号
+    name = sw.game.boss if boss else sw.data.name_id(record["species"], record["form"])
+    # 对手的特性、性格、性别、个体值：看它们是不是 seed 定死的（同一张图每局一样）
+    logging.info(
+        f"对手 {name}（种类 {record['species']}）：特性 {record['abilityName']}（编号 {record['abilityNumber']}），"
+        f"性格 {record['nature']}，性别 {record['gender']}，个体值 {record['ivs']}，"
+        f"等级 {record['level']}，记录里的血量 {record['hp']}/{record['maxHp']}，"
+        f"招式 {record['moves']}，道具 {record['itemName'] or '无'}"
+    )
+    return replace(sw.data.pokemon_object(name))
 
 
 def _choose_move(sw: LairSwitch, war: War) -> None:
@@ -102,6 +145,7 @@ def _choose_move(sw: LairSwitch, war: War) -> None:
         lambda screen: _move_cursor(sw, screen) >= 0,
         "招式列表",
     )
+    _log_turn(sw, war)
     # 这回合试过、被封住用不了的招式
     blocked: set[int] = set()
     while True:
@@ -128,6 +172,37 @@ def _choose_move(sw: LairSwitch, war: War) -> None:
             "回到招式列表",
         )
     war.use_move(best)
+
+
+def _log_turn(sw: LairSwitch, war: War) -> None:
+    """把这回合选招时对手和我方四只战斗里的实时数据记进日志，之后可以逐回合复盘。
+
+    每只的 PK8 记录往前 battle_data 字节起是它战斗用的数据（见 docs/实测-对手的真实血量.md）：
+    种类、最大血量、当前血量各 2 字节（最大血量是极巨化之后的）；0x232 起是攻击、防御、特攻、特防、速度；
+    0x244 起 7 字节是能力变化的等级（攻击、防御、特攻、特防、速度、命中、闪避，6 是没变）；
+    0x258 起是 4 个招式，每个 28 字节，开头 2 字节是招式编号，第 4、5 字节是剩余 PP 和 PP 上限。
+    特性、个体值、性格、道具每场开打时记过（「队伍特性」「队伍道具」「对手」那几行）。
+    """
+    addresses = sw.config.addresses
+    names = [war.opponent.name_id, *(name for name, _ in sw.game.team)]
+    labels = ["对手", "自己", "队友1", "队友2", "队友3"]
+    for label, name, address in zip(
+        labels, names, (addresses.opponent, *addresses.party), strict=True
+    ):
+        data = sw.peek(address - addresses.battle_data, 0x2C8)
+        numbers = [int.from_bytes(data[at : at + 2], "little") for at in range(0, 6, 2)]
+        stats = [int.from_bytes(data[at : at + 2], "little") for at in range(0x232, 0x23C, 2)]
+        stages = [value - 6 for value in data[0x244:0x24B]]
+        known = {move.id_num: move.name() for move in sw.data.pokemon_object(name).moves}
+        moves = []
+        for at in range(0x258, 0x2C8, 28):
+            number = int.from_bytes(data[at : at + 2], "little")
+            if number:
+                moves.append(f"{known.get(number, number)} {data[at + 4]}/{data[at + 5]}")
+        logging.info(
+            f"回合数据 {label} {name}（种类 {numbers[0]}）：血量 {numbers[2]}/{numbers[1]}，"
+            f"能力 {stats}，变化 {stages}，招式 {'、'.join(moves)}"
+        )
 
 
 def _move_blocked(sw: LairSwitch, image: ImageChecker) -> bool:
@@ -239,11 +314,18 @@ def _dynamax(sw: LairSwitch) -> ImageChecker:
         sw.config.timeout,
         "光标移到极巨化按钮上",
     )
-    sw.click("A", 0)
-    # 极巨化之后按钮消失，光标回到招式列表上
+    # 按键偶尔会丢：光标还停在极巨化按钮上就再按。光标一离开按钮就不能再按了，招式列表的光标要过一会儿才画出来，
+    # 这时候再按 A 会直接选中第一个招式。不看按钮本身：对手是一大块白色时，按钮那块背景也是白的，会当成按钮还在
+    act_until(
+        sw,
+        lambda: sw.click("A", 0),
+        lambda screen: not _marker_shown(sw, screen, sw.config.rects.dynamax_cursor),
+        "光标离开极巨化按钮",
+        interval=2.0,
+    )
     image = wait_for(
         sw,
-        lambda screen: not _dynamax_available(sw, screen) and _move_cursor(sw, screen) >= 0,
+        lambda screen: _move_cursor(sw, screen) >= 0,
         sw.config.timeout,
         "换成极巨招式",
     )
@@ -296,8 +378,13 @@ def _storm(sw: LairSwitch, war: War) -> bool:
 
 
 def _loss(sw: LairSwitch, war: War) -> None:
-    """认到战败（「被风刮到巢穴外了」）：这一场到此结束，倒下次数按已经记下的写进去。"""
-    logging.info(f"战败，这一场倒下 {war.faints} 次")
+    """认到战败（「被风刮到巢穴外了」）：这一场到此结束，倒下次数按已经记下的写进去。
+
+    团灭和打满回合上限还没打倒对手，游戏出的都是这句话；还有命就是超回合输的。
+    """
+    lives = sw.game.lives - war.faints
+    reason = "超回合：回合用完还没打倒对手" if lives > 0 else "团灭"
+    logging.info(f"战败（{reason}），这一场倒下 {war.faints} 次，还剩 {lives} 条命")
     _record_faints(sw, war)
 
 

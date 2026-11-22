@@ -31,6 +31,10 @@ class GameStateSnapshot(TypedDict):
     num_caught: int
     caught: list[str]
     faints: list[int]
+    fielded: list[str]
+    choices: list[bool]
     route_score: float
+    stage_score: float
+    boss_score: float
     balls: dict[str, int]
     started: float

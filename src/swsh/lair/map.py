@@ -17,6 +17,8 @@ class Maps(TypedDict):
 
     # 路线图形状，看第 2 层节点的纵向间距判断；还没读地图时是 None
     type: Literal["2x3", "3x2", "2x2"] | None
+    # 路上事件的布局编号（Lair.layout），旧的存档里没有这一项
+    layout: int
     # 按层排列的节点，key 是 "1"、"2"、"3"，每层分别有 2、4、4 个节点
     rows: dict[str, list[MapNode]]
     # 选中的路线，按顺序记录每个节点的 [层, 列]
