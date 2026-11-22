@@ -6,8 +6,8 @@
 
 import logging
 
-from libs import Switch
-from tools import capture
+from control_switch.device.botbase import Switch
+from control_switch.flow import capture
 
 
 def save_game(sw: Switch) -> None:

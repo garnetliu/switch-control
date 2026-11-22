@@ -11,7 +11,7 @@ import socket
 import struct
 import threading
 import time
-from typing import NamedTuple
+from typing import Any, NamedTuple, cast
 
 import usb.core
 import usb.util
@@ -94,9 +94,9 @@ class _UsbConnection:
         只在创建连接时复位一次，运行中断线重连（_reconnect）不走这里。
         """
         self.timeout_ms = int(timeout * 1000)
-        self.device = None
-        self.out = None
-        self.into = None
+        self.device: Any = None
+        self.out: Any = None
+        self.into: Any = None
         # 上次退出时复位过设备的话，要等它重新枚举
         self._wait_open(5)
         self.close()
@@ -115,21 +115,27 @@ class _UsbConnection:
                 time.sleep(0.5)
 
     def _open(self):
-        device = usb.core.find(idVendor=self.VENDOR_ID, idProduct=self.PRODUCT_ID)
+        device = cast(Any, usb.core.find(idVendor=self.VENDOR_ID, idProduct=self.PRODUCT_ID))
         if device is None:
             raise ConnectionError("找不到 usb-botbase：USB 线连着吗？Switch 上的插件启动了吗？")
         device.set_configuration()
         interface = device.get_active_configuration()[(0, 0)]
-        out = usb.util.find_descriptor(
-            interface,
-            custom_match=lambda e: (
-                usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT
+        out = cast(
+            Any,
+            usb.util.find_descriptor(
+                interface,
+                custom_match=lambda e: (
+                    usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT
+                ),
             ),
         )
-        into = usb.util.find_descriptor(
-            interface,
-            custom_match=lambda e: (
-                usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN
+        into = cast(
+            Any,
+            usb.util.find_descriptor(
+                interface,
+                custom_match=lambda e: (
+                    usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN
+                ),
             ),
         )
         if out is None or into is None:

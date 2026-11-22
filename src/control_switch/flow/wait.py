@@ -5,9 +5,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from control_switch.device.botbase import Frame, Switch
 from control_switch.vision import ImageChecker
-from libs import Switch
-from libs.switch import Frame
 
 
 def capture(sw: Switch, what: str) -> ImageChecker:
@@ -116,6 +115,9 @@ def act_until(
             image = capture(sw, what)
             if condition(image):
                 return image
-            if time.monotonic() >= poll_deadline:
+            now = time.monotonic()
+            if now >= deadline:
+                raise TimeoutError(f"等了 {timeout} 秒，画面一直没有出现：{what}")
+            if now >= poll_deadline:
                 break
             time.sleep(sw.config.interval)

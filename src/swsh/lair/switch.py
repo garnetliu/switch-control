@@ -1,7 +1,7 @@
 """极巨大冒险用的连接：连接之外还带着这一局的状态、游戏数据和 PK8 读取。"""
 
+from control_switch.device.botbase import Switch
 from control_switch.pkhex import Pkhex
-from libs import Switch
 from swsh.pk8 import Pk8Reader
 
 from .game_config import GameConfig

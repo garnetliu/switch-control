@@ -1,13 +1,32 @@
-"""菜单光标：找到目标选项，把光标移过去。"""
+"""菜单：认出菜单的选项，把光标移到目标选项。"""
 
 import logging
 from collections.abc import Callable
 
+from control_switch.device.botbase import Switch
+from control_switch.flow.wait import act_until
 from control_switch.types import Rect
 from control_switch.vision import ImageChecker
 from control_switch.vision.text import levenshtein
-from libs.switch import Switch
-from tools.wait import act_until
+
+
+def menu_last_item(
+    screen: ImageChecker,
+    area: Rect,
+    index: int = -1,
+    dialog: Rect | None = None,
+) -> str:
+    """读 area 里的菜单第 index 项的文本，默认最后一项；没有菜单返回空字符串。
+
+    菜单只跟着对话出现时传 dialog（对话文字的范围）：那里没有文字就当作没有菜单。
+    """
+    if dialog is not None and not screen.read_text(dialog):
+        return ""
+    found = screen.find_menu(area)
+    if found is None:
+        return ""
+    _, options = found
+    return options[index][0] if -len(options) <= index < len(options) else ""
 
 
 def move_menu_option(

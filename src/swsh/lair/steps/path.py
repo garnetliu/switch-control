@@ -2,6 +2,11 @@
 
 import logging
 
+from control_switch.flow import (
+    act_until,
+    press_until,
+    wait_for,
+)
 from control_switch.types import Rect
 from control_switch.vision import ImageChecker
 from control_switch.vision.text import contains
@@ -11,11 +16,6 @@ from swsh.lair.next_columns import next_columns
 from swsh.lair.steps.battle import Messages
 from swsh.lair.steps.catch import walker_now
 from swsh.lair.switch import LairSwitch
-from tools import (
-    act_until,
-    press_until,
-    wait_for,
-)
 
 # 每个分支在底部文字里要认的关键词
 _KEYWORDS = {

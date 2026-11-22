@@ -4,8 +4,8 @@ import logging, sys
 from dotenv import load_dotenv
 
 load_dotenv("/Users/garnet/projects/control-switch/.env")
+from control_switch.log import init_log
 from scripts import load_script
-from tools.log import init_log
 
 script = load_script("swsh/lair")
 join = sys.modules["swsh.lair.steps.join"]

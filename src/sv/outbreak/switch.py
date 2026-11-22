@@ -1,7 +1,7 @@
 """大量出现刷闪用的连接：连接之外还带着存档块的读写。"""
 
+from control_switch.device.botbase import Switch
 from control_switch.pkhex import Pkhex
-from libs import Switch
 from sv.blocks import SaveBlocks
 
 from .config import OutbreakConfig

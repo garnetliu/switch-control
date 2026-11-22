@@ -5,7 +5,7 @@ import sys
 import time
 from pathlib import Path
 
-from libs import Switch
+from control_switch.device.botbase import Switch
 
 _formatter = logging.Formatter("%(asctime)s | %(levelname)s: %(message)s", "%H:%M:%S")
 

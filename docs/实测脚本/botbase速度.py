@@ -16,7 +16,7 @@ import time
 from dotenv import load_dotenv
 from PIL import Image, ImageChops, ImageStat
 
-from libs.switch import _UsbConnection, _WifiConnection
+from control_switch.device.botbase import _UsbConnection, _WifiConnection
 
 load_dotenv()
 mode = sys.argv[1] if len(sys.argv) > 1 else "usb"

@@ -3,10 +3,10 @@
 import logging
 import re
 
+from control_switch.flow import act_until, wait_for
 from swsh.lair import upstream
 from swsh.lair.lair import Lair
 from swsh.lair.switch import LairSwitch
-from tools import act_until, wait_for
 
 
 def catch(sw: LairSwitch) -> str:

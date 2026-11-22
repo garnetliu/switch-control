@@ -3,7 +3,7 @@
 macOS 27 起，第三方程序（包括 uv 装的 Python）读到的 ARP 表是空的，只有系统自带的
 /usr/bin/python3 读得到。所以这个文件要用系统 Python 运行，只能用 Python 3.9 支持的语法和标准库，
 用到的 python-dotenv 要装在系统 Python 里（python3 -m pip install --user python-dotenv）。
-不要从 tools 包里导入别的模块，那些依赖装在 uv 的环境里。
+不要从 control_switch 包里导入模块，那些依赖装在 uv 的环境里。
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import sys
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent.parent
+ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / ".env"
 
 
@@ -108,7 +108,7 @@ def _init_log() -> None:
 
 
 def main():
-    """用系统自带的 Python 运行：/usr/bin/python3 src/tools/find_switch.py
+    """用系统自带的 Python 运行：/usr/bin/python3 scripts/find_switch.py
 
     找到后把 ip 写进 .env 的 SWITCH_IP，再 ping 一下这个 ip 并记录延迟。
     ping 不通或延迟超过 150 ms 只记一条警告，不影响已经写入的 ip。
@@ -121,7 +121,18 @@ def main():
 
     _init_log()
     load_dotenv(ENV_FILE)
-    logging.info(f"正在查找 MAC 为 {os.environ['SWITCH_MAC']} 的 Switch ...")
+    switch_mac = os.environ.get("SWITCH_MAC", "")
+    if not switch_mac:
+        logging.error(
+            "没有设置 SWITCH_MAC：在 .env 里填 Switch 的 MAC 地址，例如 SWITCH_MAC=aa:bb:cc:dd:ee:ff"
+        )
+        sys.exit(1)
+    if not re.fullmatch(r"[0-9a-fA-F]{1,2}([:-][0-9a-fA-F]{1,2}){5}", switch_mac):
+        logging.error(
+            f"SWITCH_MAC 格式不对：{switch_mac!r}，应该是 aa:bb:cc:dd:ee:ff 这样的 6 段十六进制"
+        )
+        sys.exit(1)
+    logging.info(f"正在查找 MAC 为 {switch_mac} 的 Switch ...")
     ip = find_switch()
     if ip is None:
         logging.error("找不到 Switch")

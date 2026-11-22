@@ -2,13 +2,7 @@ import logging
 import time
 import unicodedata
 
-from swsh.lair import upstream
-from swsh.lair.lair import Lair
-from swsh.lair.map import MapNode, Maps
-from swsh.lair.map_type_reader import MapTypeReader
-from swsh.lair.plan import Plan, positions
-from swsh.lair.switch import LairSwitch
-from tools import (
+from control_switch.flow import (
     act_until,
     capture,
     menu_last_item,
@@ -16,6 +10,12 @@ from tools import (
     press_until,
     wait_for,
 )
+from swsh.lair import upstream
+from swsh.lair.lair import Lair
+from swsh.lair.map import MapNode, Maps
+from swsh.lair.map_type_reader import MapTypeReader
+from swsh.lair.plan import Plan, positions
+from swsh.lair.switch import LairSwitch
 
 
 def join(sw: LairSwitch) -> str:

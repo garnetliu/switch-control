@@ -7,10 +7,10 @@
 import logging
 import time
 
+from control_switch.flow import capture, enter_game, restart_to_title
+from control_switch.log import new_log
 from sv.actions import close_picnic, open_picnic, save_game
 from sv.blocks import OUTBREAK_ACTIVE, OUTBREAK_KO, OUTBREAK_TOTAL
-from tools import capture, enter_game, restart_to_title
-from tools.log import new_log
 
 from .switch import OutbreakSwitch
 

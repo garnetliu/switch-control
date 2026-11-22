@@ -1,9 +1,9 @@
 import logging
 import shutil
 
+from control_switch.flow import menu_last_item, press_until
+from control_switch.log import new_log
 from swsh.lair.switch import LairSwitch
-from tools import menu_last_item, press_until
-from tools.log import new_log
 
 
 def initialize(sw: LairSwitch) -> str:

@@ -1,10 +1,11 @@
 """重启游戏。"""
 
 import logging
+import time
 
+from control_switch.device.botbase import Switch
+from control_switch.flow.wait import capture, press_until, wait_for
 from control_switch.vision import ImageChecker
-from libs import Switch
-from tools.wait import capture, press_until, wait_for
 
 
 def restart(sw: Switch) -> None:
@@ -50,10 +51,13 @@ def restart_to_title(sw: Switch) -> None:
 
 
 def enter_game(sw: Switch) -> None:
-    """开场彩色画面出现之后用：持续按 A，每次截图检查，画面变黑就停止。"""
+    """开场彩色画面出现之后用：持续按 A，每次截图检查，画面变黑就停止。超过 timeout 秒还没变黑抛 TimeoutError。"""
     screen = capture(sw, "进游戏")
     presses = 0
+    deadline = time.monotonic() + sw.config.timeout
     while not screen.is_black():
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"等了 {sw.config.timeout} 秒，画面一直没有变黑：进游戏")
         sw.click("A", 0)
         presses += 1
         screen = capture(sw, "进游戏")

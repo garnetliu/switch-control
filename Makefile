@@ -2,7 +2,7 @@
 
 # 查找 Switch 的 ip 并写入 .env，再 ping 一下检查延迟。要用系统自带的 Python，uv 装的 Python 在 macOS 27 上读不到 ARP 表
 find:
-	/usr/bin/python3 src/tools/find_switch.py
+	/usr/bin/python3 scripts/find_switch.py
 
 # 要跑的脚本，写成「游戏/脚本」：swsh/lair 是剑盾的极巨大冒险，sv/outbreak 是朱紫的大量出现。
 # 例如 make start script=sv/outbreak

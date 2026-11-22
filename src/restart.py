@@ -7,9 +7,9 @@ import sys
 
 from dotenv import load_dotenv
 
+from control_switch.flow import restart
+from control_switch.log import init_log
 from scripts import load_script
-from tools import restart
-from tools.log import init_log
 
 
 def main(name: str) -> None:
