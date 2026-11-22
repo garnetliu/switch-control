@@ -2,12 +2,16 @@
 
 用法：PYTHONPATH=src uv run python 这个脚本 日志文件...（程序输出的日志，里面要有「战斗文字:」）
 """
-import ast, collections, re, sys
+import ast
+import collections
+import re
+import sys
 from dataclasses import replace
+
+from control_switch.vision.text import levenshtein
 from swsh.lair.game_config import GameConfig
 from swsh.lair.game_data import GameData
-from swsh.scoring import damage, Field
-from tools.text import levenshtein
+from swsh.scoring import Field, damage
 
 d = GameData(GameConfig()); F = Field()
 names = list(d.rental_damages())

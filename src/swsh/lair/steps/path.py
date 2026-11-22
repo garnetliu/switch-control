@@ -2,7 +2,9 @@
 
 import logging
 
-from libs import ImageChecker
+from control_switch.types import Rect
+from control_switch.vision import ImageChecker
+from control_switch.vision.text import contains
 from swsh.lair import upstream
 from swsh.lair.lair import Lair
 from swsh.lair.next_columns import next_columns
@@ -14,8 +16,6 @@ from tools import (
     press_until,
     wait_for,
 )
-from tools.text import contains
-from type import Rect
 
 # 每个分支在底部文字里要认的关键词
 _KEYWORDS = {

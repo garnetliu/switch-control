@@ -3,7 +3,7 @@
 指针和等待时间照 Eppin/Sysbot.NET（朱紫 4.0.0）的 PokeDataOffsetsSV、SaveGame、DoPicnicResetting。
 """
 
-from libs import BaseConfig
+from control_switch.config import BaseConfig
 from sv import TITLE_IDS
 
 

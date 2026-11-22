@@ -3,11 +3,11 @@
 import logging
 from collections.abc import Callable
 
-from libs import ImageChecker
+from control_switch.types import Rect
+from control_switch.vision import ImageChecker
+from control_switch.vision.text import levenshtein
 from libs.switch import Switch
-from tools.text import levenshtein
 from tools.wait import act_until
-from type import Rect
 
 
 def move_menu_option(

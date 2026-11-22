@@ -11,10 +11,10 @@ import re
 import statistics as st
 from dataclasses import replace
 
+from control_switch.vision.text import levenshtein
 from swsh.lair.game_config import GameConfig
 from swsh.lair.game_data import GameData
 from swsh.scoring import Field, damage
-from tools.text import levenshtein
 
 d = GameData(GameConfig())
 F = Field()

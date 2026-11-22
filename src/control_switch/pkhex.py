@@ -15,7 +15,7 @@ class Pkhex:
     RETRY_DELAYS = (1, 2, 4, 8)
 
     def __init__(self, api_url: str | None = None):
-        self._api_url = api_url or os.environ.get("PKHEX_API_URL", self.DEFAULT_API_URL)
+        self._api_url = api_url or os.environ.get("PKHEX_API_URL") or self.DEFAULT_API_URL
 
     def execute(self, code: str, data: dict[str, Any]) -> Any:
         """执行一段 C# 脚本，data 在脚本里是 Input，返回脚本 return 的值。
@@ -29,6 +29,7 @@ class Pkhex:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
+        payload: dict[str, Any] = {}
         try:
             for attempt in range(len(self.RETRY_DELAYS) + 1):
                 try:

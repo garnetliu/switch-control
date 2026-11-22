@@ -4,7 +4,7 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from libs import Pkhex
+from control_switch.pkhex import Pkhex
 
 
 class Pk8Reader:

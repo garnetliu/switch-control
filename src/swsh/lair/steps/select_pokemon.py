@@ -5,7 +5,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-from libs import ImageChecker
+from control_switch.vision import ImageChecker
 from swsh.lair.switch import LairSwitch
 from tools import act_until, capture, move_menu_option, press_until, restart, wait_for
 

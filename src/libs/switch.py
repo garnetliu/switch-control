@@ -16,8 +16,8 @@ from typing import NamedTuple
 import usb.core
 import usb.util
 
-from .config import BaseConfig
-from .notifier import Notifier
+from control_switch.config import BaseConfig
+from control_switch.notifier import Notifier
 
 # 摇杆坐标的最大值
 STICK_MAX = 0x7FFF

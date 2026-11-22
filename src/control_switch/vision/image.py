@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 from rapidocr_onnxruntime import RapidOCR
 
-from type import Hsv, Rect
+from control_switch.types import Hsv, Rect
 
 
 def _clean(text: str) -> str:
@@ -42,7 +42,8 @@ class ImageChecker:
         self._ocr = _shared_ocr()
         # Switch 的截图本身没有黑边，不去黑边：整屏很暗的画面（比如战败时黑屏上只有一条对话框）
         # 去黑边会把画面内容裁掉，按比例找的范围就全错位了
-        img = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        # 空字节 cv2.imdecode 会抛 cv2.error，不是 None
+        img = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR) if image else None
         if img is None:
             raise ValueError("无法解码图片")
         # Switch 给的原始字节留着，存图时直接写进文件，不再压缩第二次
@@ -67,7 +68,8 @@ class ImageChecker:
             with open(path, "wb") as file:
                 file.write(self._raw)
             return
-        cv2.imwrite(path, self.bgr)
+        if not cv2.imwrite(path, self.bgr):
+            raise OSError(f"无法写入图片：{path}")
 
     def crop(self, rect: Rect, channel: str = "bgr") -> np.ndarray:
         """按比例裁剪截图。channel: bgr（彩色）、gray（灰度）或 hsv。"""

@@ -2,9 +2,9 @@
 
 from typing import ClassVar
 
-from libs.config import ROOT, BaseConfig, BaseRects
+from control_switch.config import ROOT, BaseConfig, BaseRects
+from control_switch.types import Hsv, Rect
 from swsh import TITLE_IDS
-from type import Hsv, Rect
 
 # 岔路口的光标区域：{(出发层号, 出发列号): (能走到的每一列的光标区域, ...)}
 PathCursors = dict[tuple[int, int], tuple[Rect, ...]]

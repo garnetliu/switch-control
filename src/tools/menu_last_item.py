@@ -1,7 +1,7 @@
 """和游戏里的人对话：认出菜单。"""
 
-from libs import ImageChecker
-from type import Rect
+from control_switch.types import Rect
+from control_switch.vision import ImageChecker
 
 
 def menu_last_item(

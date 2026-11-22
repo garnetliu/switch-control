@@ -2,7 +2,8 @@
 
 import logging
 
-from libs import ImageChecker, Switch
+from control_switch.vision import ImageChecker
+from libs import Switch
 from tools.wait import capture, press_until, wait_for
 
 

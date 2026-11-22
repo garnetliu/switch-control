@@ -5,7 +5,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from libs import ImageChecker, Switch
+from control_switch.vision import ImageChecker
+from libs import Switch
 from libs.switch import Frame
 
 

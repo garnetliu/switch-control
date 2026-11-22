@@ -8,7 +8,8 @@ key 的值来自 PKHeX.Core 的 SaveBlockAccessor9SV。
 
 from typing import Any
 
-from libs import Pkhex, Switch
+from control_switch.pkhex import Pkhex
+from libs import Switch
 
 # 身边已经生成的宝可梦，存档时写入。一共 OVERWORLD_SLOTS 格，每格 OVERWORLD_SLOT_SIZE 字节，开头是 PK9
 OVERWORLD = 0x173304D8

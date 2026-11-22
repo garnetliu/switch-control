@@ -1,6 +1,6 @@
 """大量出现刷闪的配置。"""
 
-from libs.config import ROOT
+from control_switch.config import ROOT
 from sv.config import SvConfig
 
 

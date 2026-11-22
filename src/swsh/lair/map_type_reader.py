@@ -2,8 +2,8 @@
 
 import cv2
 
-from libs import ImageChecker
-from type import Rect
+from control_switch.types import Rect
+from control_switch.vision import ImageChecker
 
 from .switch import LairSwitch
 

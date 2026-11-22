@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from type import Hsv, Rect
+from control_switch.types import Hsv, Rect
 
 ROOT = Path(__file__).resolve().parents[2]
 
