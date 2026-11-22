@@ -1,7 +1,7 @@
 """control_switch.games.swsh.lair.game_state：一局冒险的状态和 keep path 的锁定、解锁。
 
 GameConfig 用子类把 game_state_file 指到 pytest 的临时目录，不读写仓库里真实的状态文件；
-boss 也由子类指定，不依赖 GameConfig.boss 的默认值。KEEP_PATH 用 monkeypatch 设。
+boss 也由子类指定，不依赖 GameConfig.boss 的默认值。keep_path 在创建 GameState 时传进去。
 """
 
 import time
@@ -32,15 +32,14 @@ def config(tmp_path: Path) -> GameConfig:
     return make_config(tmp_path)
 
 
-@pytest.fixture
-def keep_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """KEEP_PATH 设成 1，开启 keep path。"""
-    monkeypatch.setenv("KEEP_PATH", "1")
+def finished_run(
+    config: GameConfig, minutes: float = 5.0, faints: int = 0, keep_path: bool = False
+) -> GameState:
+    """抓满 4 只（打赢）、极矿石足够、开始了 minutes 分钟、倒下 faints 次的一局，还没锁定。
 
-
-def finished_run(config: GameConfig, minutes: float = 5.0, faints: int = 0) -> GameState:
-    """抓满 4 只（打赢）、极矿石足够、开始了 minutes 分钟、倒下 faints 次的一局，还没锁定。"""
-    state = GameState(config)
+    keep_path 是创建 GameState 时传的值。
+    """
+    state = GameState(config, keep_path=keep_path)
     state.num_caught = 4
     state.caught = ["a", "b", "c", "d"]
     state.faints = [faints, 0, 0]
@@ -316,9 +315,9 @@ def test_check_keep_not_locked_clears_even_if_boss_and_seed_match(config: GameCo
     assert state.lock_results == [True, False]
 
 
-def test_finish_run_with_shiny_does_not_lock(config: GameConfig, keep_path: None) -> None:
+def test_finish_run_with_shiny_does_not_lock(config: GameConfig) -> None:
     """finish_run：带走了闪光，不锁定（已经锁定的也解开），记下闪光所在的关。"""
-    state = finished_run(config)
+    state = finished_run(config, keep_path=True)
     state.lock_path = True
     state.lock_results = [True]
     locked, text = state.finish_run([1])
@@ -332,29 +331,24 @@ def test_finish_run_with_shiny_does_not_lock(config: GameConfig, keep_path: None
     assert state.shinies[0]["pokemon"] == "b"
 
 
-def test_finish_run_without_keep_path_env_does_not_lock(
-    config: GameConfig, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """finish_run：环境变量 KEEP_PATH 没开时不锁定。"""
-    monkeypatch.delenv("KEEP_PATH", raising=False)
-    state = finished_run(config)
+def test_finish_run_with_keep_path_false_does_not_lock(config: GameConfig) -> None:
+    """finish_run：keep_path=False 时不锁定。"""
+    state = finished_run(config, keep_path=False)
     assert state.finish_run([]) == (False, "没有开启 KEEP_PATH，不锁定")
 
 
-def test_finish_run_with_keep_path_other_than_one_does_not_lock(
-    config: GameConfig, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """finish_run：KEEP_PATH 设成 0（不是 1）也不锁定。"""
-    monkeypatch.setenv("KEEP_PATH", "0")
-    state = finished_run(config)
+def test_finish_run_without_keep_path_argument_does_not_lock(config: GameConfig) -> None:
+    """finish_run：创建 GameState 时不传 keep_path（默认 False）也不锁定。"""
+    state = GameState(config)
+    state.num_caught = 4
+    state.dynite_ore = 50
+    state.started = time.time() - 300
     assert state.finish_run([]) == (False, "没有开启 KEEP_PATH，不锁定")
 
 
-def test_finish_run_with_ore_at_minimum_does_not_lock_and_unlocks(
-    config: GameConfig, keep_path: None
-) -> None:
+def test_finish_run_with_ore_at_minimum_does_not_lock_and_unlocks(config: GameConfig) -> None:
     """finish_run：极矿石不多于 lock_min_ore（10）个时不锁定，已经锁定的也解锁。"""
-    state = finished_run(config)
+    state = finished_run(config, keep_path=True)
     state.dynite_ore = config.lock_min_ore
     state.lock_path = True
     locked, text = state.finish_run([])
@@ -363,11 +357,9 @@ def test_finish_run_with_ore_at_minimum_does_not_lock_and_unlocks(
     assert state.lock_path is False
 
 
-def test_finish_run_locked_run_keeps_locking_when_winning(
-    config: GameConfig, keep_path: None
-) -> None:
+def test_finish_run_locked_run_keeps_locking_when_winning(config: GameConfig) -> None:
     """finish_run：已经锁定、这一局赢了、胜率够，继续锁定，path_results 加一项。"""
-    state = finished_run(config)
+    state = finished_run(config, keep_path=True)
     state.lock_path = True
     state.path_results = [True]
     locked, text = state.finish_run([])
@@ -376,11 +368,9 @@ def test_finish_run_locked_run_keeps_locking_when_winning(
     assert state.path_results == [True, True]
 
 
-def test_finish_run_locked_run_unlocks_after_early_losses(
-    config: GameConfig, keep_path: None
-) -> None:
+def test_finish_run_locked_run_unlocks_after_early_losses(config: GameConfig) -> None:
     """finish_run：已经锁定、这一局输了，锁定以来输满 lock_early_fails（2）局，解锁。"""
-    state = finished_run(config)
+    state = finished_run(config, keep_path=True)
     state.num_caught = 3
     state.lock_path = True
     state.path_results = [False]
@@ -391,50 +381,42 @@ def test_finish_run_locked_run_unlocks_after_early_losses(
     assert state.lock_results == [False]
 
 
-def test_finish_run_unlocked_run_locks_when_won_fast_and_few_faints(
-    config: GameConfig, keep_path: None
-) -> None:
+def test_finish_run_unlocked_run_locks_when_won_fast_and_few_faints(config: GameConfig) -> None:
     """finish_run：没锁定时打赢、倒下 1 次（不超过 lock_max_faints）、用时 5 分钟（不超过 10），锁定这张图。"""
-    state = finished_run(config, minutes=5.0, faints=1)
+    state = finished_run(config, keep_path=True, minutes=5.0, faints=1)
     locked, text = state.finish_run([])
     assert (locked, text) == (True, "锁定这张图")
     assert state.lock_path is True
     assert state.path_results == [True]
 
 
-def test_finish_run_unlocked_run_does_not_lock_with_too_many_faints(
-    config: GameConfig, keep_path: None
-) -> None:
+def test_finish_run_unlocked_run_does_not_lock_with_too_many_faints(config: GameConfig) -> None:
     """finish_run：没锁定时倒下 2 次（超过 lock_max_faints）不锁定。"""
-    state = finished_run(config, minutes=5.0, faints=2)
+    state = finished_run(config, keep_path=True, minutes=5.0, faints=2)
     state.path_results = [False]
     locked, text = state.finish_run([])
     assert (locked, text) == (False, "不锁定")
     assert state.path_results == []
 
 
-def test_finish_run_unlocked_run_does_not_lock_when_too_slow(
-    config: GameConfig, keep_path: None
-) -> None:
+def test_finish_run_unlocked_run_does_not_lock_when_too_slow(config: GameConfig) -> None:
     """finish_run：没锁定时用时 11 分钟（超过 lock_max_minutes）不锁定。"""
-    state = finished_run(config, minutes=11.0, faints=0)
+    state = finished_run(config, keep_path=True, minutes=11.0, faints=0)
     assert state.finish_run([]) == (False, "不锁定")
 
 
-def test_finish_run_unlocked_run_does_not_lock_when_lost(
-    config: GameConfig, keep_path: None
-) -> None:
+def test_finish_run_unlocked_run_does_not_lock_when_lost(config: GameConfig) -> None:
     """finish_run：没锁定时没抓满 4 只（输了）不锁定，lock_results 记下输。"""
-    state = finished_run(config)
+    state = finished_run(config, keep_path=True)
     state.num_caught = 2
     assert state.finish_run([]) == (False, "不锁定")
     assert state.lock_results == [False]
     assert state.caught_total == 2
 
 
-def test_finish_run_saves_state_to_file(config: GameConfig, keep_path: None) -> None:
+def test_finish_run_saves_state_to_file(config: GameConfig) -> None:
     """finish_run：结束时把状态写进文件，重新读出来锁定状态和胜负记录一致。"""
-    state = finished_run(config)
+    state = finished_run(config, keep_path=True)
     state.finish_run([])
     again = GameState(config)
     assert again.lock_path is True

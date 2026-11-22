@@ -6,12 +6,15 @@ GameConfig.game_state_file 等路径指到临时目录。假 Memory 按地址返
 """
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from control_switch.device import Devices
 from control_switch.games.swsh.lair.game_config import GameConfig
 from control_switch.games.swsh.lair.session import LairSession, _scramble
+from control_switch.settings import load_settings
 
 ADDRESSES = GameConfig.addresses
 ITEM_POUCH = ADDRESSES.items + ADDRESSES.item_pouch_offset
@@ -230,3 +233,39 @@ def test_caught_legends_raises_when_ultra_beasts_flag_is_neither_1_nor_2(
     sw = make_lair_session(data=caught_memory(set(), ultra_plain=plain))
     with pytest.raises(RuntimeError, match="究极异兽解锁了没有"):
         sw.caught_legends()
+
+
+# ---------------------------------------------------------------- Pkhex
+
+
+def test_pkhex_is_created_with_api_url_from_settings(
+    make_lair_session: SessionFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pkhex 换成记下参数的假类：用 PKHEX_API_URL=http://x 的 Settings 建 LairSession，假类收到的 api_url 是 http://x。"""
+    received: list[str | None] = []
+
+    class RecordingPkhex:
+        def __init__(self, api_url: str | None = None) -> None:
+            received.append(api_url)
+
+    monkeypatch.setattr("control_switch.games.swsh.lair.session.Pkhex", RecordingPkhex)
+    make_lair_session(settings=load_settings({"PKHEX_API_URL": "http://x"}))
+    assert received == ["http://x"]
+
+
+# ---------------------------------------------------------------- MEMORY=none
+
+
+def test_memory_none_error_names_memory_setting(
+    lair_root: Path, make_screen: Callable[..., Any], controller: Any
+) -> None:
+    """MEMORY=none 时建 LairSession：报错里要写出 MEMORY，使用者才知道是哪一项配置让它跑不了。
+
+    防的是：MEMORY 的 none 是这次新开放、.env.example 里列为可以写的值，但极巨大冒险要读内存，
+    写了 none 后 create_devices 照常连上 Switch，建 LairSession 时抛
+    RuntimeError("这个脚本要读写内存，但没有配置内存设备")，报错里没有 MEMORY，
+    而且使用者明明写了 MEMORY=none，报错却说「没有配置」。这次任务带进来的。
+    """
+    devices = Devices(make_screen([b"img"]), controller, None)
+    with pytest.raises(RuntimeError, match="MEMORY"):
+        LairSession(load_settings({"MEMORY": "none"}), devices)

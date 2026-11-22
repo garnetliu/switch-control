@@ -1,6 +1,6 @@
 """所有测试共用的假设备、Session 和日志清理。
 
-三个假设备各自照 Screen、Controller、Memory 的方法签名写，直接传给 Session，不用 cast。
+三个假设备各自照 Screen、Controller、Memory 的方法签名写，放进 Devices 传给 Session，不用 cast。
 假设备和 Session 都通过 fixture 给测试用；要传参数的，fixture 返回一个创建它的函数。
 测试文件里不能写 from conftest import ...（importlib 导入方式下找不到 conftest），
 所以测试文件里这些对象的类型标成 Any 或者 Callable[..., Any]。
@@ -13,7 +13,9 @@ from pathlib import Path
 import pytest
 
 from control_switch.config import BaseConfig
+from control_switch.device import Devices
 from control_switch.session import Session
+from control_switch.settings import load_settings
 
 DEFAULT_TITLE_ID = "0100ABF008968000"
 
@@ -173,12 +175,8 @@ def make_session(
     """
 
     def factory(images: Sequence[bytes], title_id: str = DEFAULT_TITLE_ID) -> Session:
-        return Session(
-            FakeConfig(tmp_path),
-            make_screen(images),
-            controller,
-            make_memory(title_id),
-        )
+        devices = Devices(make_screen(images), controller, make_memory(title_id))
+        return Session(FakeConfig(tmp_path), load_settings({}), devices)
 
     return factory
 

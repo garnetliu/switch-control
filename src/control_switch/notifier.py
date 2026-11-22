@@ -29,9 +29,9 @@ class Notifier:
     TEXT_TIMEOUT = 5
     FILE_TIMEOUT = 20
 
-    def __init__(self):
+    def __init__(self, webhook_url: str | None = None):
         # Discord 频道的 Webhook 地址，没配置是 None
-        self._url = os.environ.get("DISCORD_WEBHOOK_URL")
+        self._url = webhook_url
         # 没配置 Webhook 时只提醒一次，免得每局都记一条
         self._warned_missing = False
 

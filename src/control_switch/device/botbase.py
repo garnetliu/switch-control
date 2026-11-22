@@ -1,11 +1,10 @@
 """和 Switch 上的 botbase 通信：Wi-Fi 用 sys-botbase（TCP），USB 用 usb-botbase。
 
-用哪种由 .env 的 SWITCH_CONNECTION 决定：usb，或者 wifi（默认，要配 SWITCH_IP、SWITCH_PORT）。
-两种连接对外的方法完全一样。connect_botbase() 按这个变量建连接，返回 Botbase。
+用哪种由配置的 SWITCH_CONNECTION 决定：usb，或者 wifi（默认，要配 SWITCH_IP、SWITCH_PORT）。
+两种连接对外的方法完全一样。connect_botbase(settings) 按配置建连接，返回 Botbase。
 """
 
 import atexit
-import os
 import signal
 import socket
 import struct
@@ -15,6 +14,8 @@ from typing import Any, Protocol, cast
 
 import usb.core
 import usb.util
+
+from control_switch.settings import Settings
 
 # 摇杆坐标的最大值
 STICK_MAX = 0x7FFF
@@ -336,18 +337,17 @@ class Botbase:
         self._connection.close()
 
 
-def connect_botbase() -> Botbase:
-    """按 .env 的配置连接：usb 走 USB，否则走 Wi-Fi。退出时自动关闭。"""
+def connect_botbase(settings: Settings) -> Botbase:
+    """按配置连接：usb 走 USB，否则走 Wi-Fi（要 ip 和端口，缺了抛 ValueError）。退出时自动关闭。"""
     connection: Connection
-    if os.environ.get("SWITCH_CONNECTION", "wifi").lower() == "usb":
+    if settings.switch_connection == "usb":
         connection = _UsbConnection()
     else:
-        port = os.environ["SWITCH_PORT"]
-        try:
-            port_number = int(port)
-        except ValueError:
-            raise ValueError(f"SWITCH_PORT 要写整数，现在是 {port}") from None
-        connection = _WifiConnection(os.environ["SWITCH_IP"], port_number)
+        if settings.switch_ip is None:
+            raise ValueError("Wi-Fi 连接要写 SWITCH_IP，现在没写")
+        if settings.switch_port is None:
+            raise ValueError("Wi-Fi 连接要写 SWITCH_PORT，现在没写")
+        connection = _WifiConnection(settings.switch_ip, settings.switch_port)
     botbase = Botbase(connection)
     atexit.register(botbase.close)
     if threading.current_thread() is threading.main_thread():

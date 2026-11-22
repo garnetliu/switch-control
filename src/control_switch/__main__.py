@@ -8,12 +8,11 @@ restart 重启游戏，回到游戏里可以操作为止，极巨大冒险途中
 import logging
 import sys
 
-from dotenv import load_dotenv
-
-from control_switch.device.botbase import connect_botbase
+from control_switch.device import create_devices
 from control_switch.flow import restart, save_frames
 from control_switch.games.registry import load_script
 from control_switch.log import init_log
+from control_switch.settings import load_settings
 
 DEFAULT_SCRIPT = "swsh/lair"
 USAGE = "用法：control-switch run|restart [游戏/脚本]，脚本不写时是 swsh/lair"
@@ -22,8 +21,9 @@ USAGE = "用法：control-switch run|restart [游戏/脚本]，脚本不写时�
 def run(name: str) -> None:
     """跑脚本：从脚本的起点开始一步一步跑，每一步返回下一步的名字。"""
     script = load_script(name)
-    botbase = connect_botbase()
-    sw = script.SESSION(botbase, botbase, botbase)
+    settings = load_settings()
+    devices = create_devices(settings)
+    sw = script.SESSION(settings, devices)
     init_log(sw, "start")
     step = script.START
     try:
@@ -44,8 +44,9 @@ def run(name: str) -> None:
 def restart_game(name: str) -> None:
     """重启游戏，回到游戏里可以操作为止。"""
     script = load_script(name)
-    botbase = connect_botbase()
-    sw = script.SESSION(botbase, botbase, botbase)
+    settings = load_settings()
+    devices = create_devices(settings)
+    sw = script.SESSION(settings, devices)
     init_log(sw, "restart")
     try:
         restart(sw)
@@ -54,7 +55,6 @@ def restart_game(name: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    load_dotenv()
     args = sys.argv[1:] if argv is None else argv
     commands = {"run": run, "restart": restart_game}
     if not args or args[0] not in commands:

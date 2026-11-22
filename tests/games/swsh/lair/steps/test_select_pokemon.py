@@ -2,7 +2,7 @@
 
 没有带走宝可梦界面的截图（logs/keep 里没有），画面判断用假截图（conftest 的 fake_images）。
 战报里的极矿石和球的数量读假 Memory 的道具口袋（极矿石 37 个、究极球 25 个）。
-战果截图存进临时目录的 result_dir、catch_dir。KEEP_PATH 不设（不锁定）；要锁定的用例自己设。
+战果截图存进临时目录的 result_dir、catch_dir。KEEP_PATH 不开（不锁定）；要锁定的用例创建 LairSession 时自己传 settings。
 选好首发和路线之后的状态用 prepare_run 按 seed 算出来（基准 seed，路线 斧牙龙 → 龟足巨铠 → 狃拉，
 首领卡璞・蝶蝶，首发流氓熊猫）。期望值是改动前的代码跑出来的。
 """
@@ -20,6 +20,7 @@ import pytest
 
 from control_switch.games.swsh.lair.game_config import GameConfig
 from control_switch.games.swsh.lair.session import LairSession
+from control_switch.settings import load_settings
 
 module: ModuleType = importlib.import_module("control_switch.games.swsh.lair.steps.select_pokemon")
 select_pokemon = module.select_pokemon
@@ -160,12 +161,10 @@ def test_select_pokemon_without_catch_reports_and_returns_initialize(
 def test_select_pokemon_without_catch_restarts_game_when_path_stays_locked(
     make_lair_session: SessionFactory,
     prepare_run: PrepareRun,
-    monkeypatch: pytest.MonkeyPatch,
     restarts: list[object],
 ) -> None:
     """一只都没抓到、这张图已经锁定、KEEP_PATH=1、极矿石够：继续锁定，调了一次 restart，战报里有「重启游戏保留路线」。"""
-    monkeypatch.setenv("KEEP_PATH", "1")
-    sw = make_lair_session(data=MEMORY)
+    sw = make_lair_session(data=MEMORY, settings=load_settings({"KEEP_PATH": "1"}))
     finished_run(sw, prepare_run, [])
     sw.game.lock_path = True
     sw.game.path_results = [True]
@@ -524,15 +523,13 @@ def test_select_pokemon_raises_timeout_error_when_transition_black_never_comes(
 def test_decide_next_run_restarts_game_when_no_shiny_and_path_is_locked(
     make_lair_session: SessionFactory,
     prepare_run: PrepareRun,
-    monkeypatch: pytest.MonkeyPatch,
     controller: Any,
     restarts: list[object],
 ) -> None:
     """没有闪光、打赢、倒下次数和用时都在范围内、KEEP_PATH=1、极矿石够：锁定这张图，调一次 restart，不按键；
     战报里有「锁定这张图」和「重启游戏保留路线」。
     """
-    monkeypatch.setenv("KEEP_PATH", "1")
-    sw = make_lair_session(data=MEMORY)
+    sw = make_lair_session(data=MEMORY, settings=load_settings({"KEEP_PATH": "1"}))
     finished_run(sw, prepare_run, ["fraxure", "barbaracle", "sneasel", "tapu-lele"])
     sw.game.faints = [0, 0, 0, 0]
     sw.game.dynite_ore = 50

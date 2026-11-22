@@ -3,8 +3,9 @@
 from typing import NamedTuple
 
 from control_switch.config import BaseConfig
-from control_switch.device import Controller, Memory, Screen
+from control_switch.device import Controller, Devices, Memory, Screen
 from control_switch.notifier import Notifier
+from control_switch.settings import Settings
 
 
 class Frame(NamedTuple):
@@ -25,9 +26,8 @@ class Session:
     def __init__(
         self,
         config: BaseConfig,
-        screen: Screen,
-        controller: Controller,
-        memory: Memory | None,
+        settings: Settings,
+        devices: Devices,
     ):
         self.config = config
         # 现在是哪一步，入口的循环每一步之前写进来
@@ -35,16 +35,16 @@ class Session:
         # 这一局截过的图，只放在内存里；出错时入口才把它们写进日志目录，新的一局开始时清空
         self.frames: list[Frame] = []
         # 往 Discord 推送消息，步骤里用 sw.notifier 取
-        self.notifier = Notifier()
-        self.screen = screen
-        self.controller = controller
-        self._memory = memory
+        self.notifier = Notifier(webhook_url=settings.discord_webhook_url)
+        self.screen = devices.screen
+        self.controller = devices.controller
+        self._memory = devices.memory
 
     @property
     def memory(self) -> Memory:
         """读写内存的设备。这个脚本没有配置时抛 RuntimeError。"""
         if self._memory is None:
-            raise RuntimeError("这个脚本要读写内存，但没有配置内存设备")
+            raise RuntimeError("这个脚本要读写内存，.env 的 MEMORY 不能是 none")
         return self._memory
 
     def click(self, button: str, delay: float = 0.15) -> None:

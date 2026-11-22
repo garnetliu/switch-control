@@ -1,8 +1,9 @@
 """control_switch.__main__：命令行入口 run、restart。
 
 不连 Switch：load_script 换成返回假脚本的函数，init_log 换成什么都不做的函数，
-load_dotenv 换掉，不读仓库里真实的 .env。connect_botbase 换成不连接、直接返回一个假设备的函数，
-这个假设备只是传给假脚本的 SESSION，不会放进 Session。假脚本的 SESSION 不管传进来什么，
+load_dotenv 换掉，不读仓库里真实的 .env，Settings 读的环境变量清掉。create_devices 换成不连接、
+直接返回一个假 Devices 的函数，这个假 Devices 只是传给假脚本的 SESSION，不会放进 Session。
+假脚本的 SESSION 接收 (settings, devices)，不管传进来什么，
 都返回用 tests/conftest.py 的假设备建的 Session，Session 的 notifier 换成记下 send 调用的假对象；
 close() 有没有被调，看建 Session 用的三个假设备各自的 close_calls。
 """
@@ -18,6 +19,7 @@ from typing import Any
 import pytest
 
 from control_switch.__main__ import main
+from control_switch.device import Devices
 from control_switch.flow import capture
 
 IMAGE = Path(__file__).resolve().parent / "images" / "路线上的界面-要走哪条路.jpg"
@@ -44,14 +46,31 @@ class Calls:
         self.load_script: list[str] = []
         self.init_log: list[str | None] = []
         self.restart: list[Any] = []
-        # connect_botbase 被调了几次
-        self.connect_botbase = 0
+        # create_devices 被调了几次
+        self.create_devices = 0
+
+
+SETTINGS_ENV_NAMES = (
+    "SCREEN",
+    "CONTROLLER",
+    "MEMORY",
+    "SWITCH_CONNECTION",
+    "SWITCH_IP",
+    "SWITCH_PORT",
+    "PKHEX_API_URL",
+    "DISCORD_WEBHOOK_URL",
+    "KEEP_PATH",
+)
 
 
 @pytest.fixture(autouse=True)
-def no_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
-    """load_dotenv 换成什么都不读，这个文件里的测试都不读仓库里真实的 .env。"""
-    monkeypatch.setattr("control_switch.__main__.load_dotenv", lambda *args, **kwargs: False)
+def clean_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """load_dotenv 换成什么都不读，Settings 读的 9 个环境变量都清掉：
+    这个文件里的测试不读仓库里真实的 .env，也不受终端里设过的环境变量影响。
+    """
+    monkeypatch.setattr("control_switch.settings.load_dotenv", lambda *args, **kwargs: False)
+    for name in SETTINGS_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture
@@ -61,19 +80,25 @@ def calls() -> Calls:
 
 
 @pytest.fixture(autouse=True)
-def fake_botbase(monkeypatch: pytest.MonkeyPatch, calls: Calls, make_memory: MemoryFactory) -> Any:
-    """connect_botbase 换成不连接、直接返回一个假设备的函数，并记下调用次数。
+def fake_devices(
+    monkeypatch: pytest.MonkeyPatch,
+    calls: Calls,
+    make_screen: Callable[..., Any],
+    controller: Any,
+    make_memory: MemoryFactory,
+) -> Devices:
+    """create_devices 换成不连接、直接返回一个假 Devices 的函数，并记下调用次数。
 
-    这个假设备只是传给 SESSION，不会放进 Session。
+    这个假 Devices 只是传给 SESSION，不会放进 Session。
     """
-    botbase = make_memory()
+    devices = Devices(make_screen([b"img"]), controller, make_memory())
 
-    def connect_botbase() -> Any:
-        calls.connect_botbase += 1
-        return botbase
+    def create_devices(settings: Any) -> Devices:
+        calls.create_devices += 1
+        return devices
 
-    monkeypatch.setattr("control_switch.__main__.connect_botbase", connect_botbase)
-    return botbase
+    monkeypatch.setattr("control_switch.__main__.create_devices", create_devices)
+    return devices
 
 
 @pytest.fixture
@@ -88,13 +113,14 @@ def connection(make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch) ->
 def install(monkeypatch: pytest.MonkeyPatch, calls: Calls, connection: Any) -> Callable[..., None]:
     """返回一个函数：传入 STEPS 和 START，把 load_script 换成返回这个假脚本的函数，init_log 换成不做事。
 
-    假脚本的 SESSION 不管传进来什么，都返回 connection 这个 Session。
+    假脚本的 SESSION 接收 (settings, devices)，返回 connection 这个 Session。
     """
 
+    def session(settings: Any, devices: Any) -> Any:
+        return connection
+
     def setup(steps: dict[str, Callable[[Any], str]], start: str) -> None:
-        script = SimpleNamespace(
-            STEPS=steps, START=start, SESSION=lambda *args, **kwargs: connection
-        )
+        script = SimpleNamespace(STEPS=steps, START=start, SESSION=session)
 
         def fake_load_script(name: str) -> SimpleNamespace:
             calls.load_script.append(name)
@@ -120,7 +146,7 @@ def forbid_connect(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def assert_each_device_closed_once(connection: Any) -> None:
-    """建 Session 用的三个假设备：每个各被关了一次（connect_botbase 返回的那个不看）。"""
+    """建 Session 用的三个假设备：每个各被关了一次（create_devices 返回的那个不看）。"""
     assert connection.screen.close_calls == 1
     assert connection.controller.close_calls == 1
     assert connection.memory.close_calls == 1
@@ -138,18 +164,18 @@ def test_run_with_unknown_script_exits() -> None:
     assert "swsh/lair" in str(error.value)
 
 
-def test_run_with_unknown_script_does_not_call_connect_botbase(calls: Calls) -> None:
-    """main(["run", "没有/这个"])：抛 SystemExit，connect_botbase 一次都没被调用。"""
+def test_run_with_unknown_script_does_not_call_create_devices(calls: Calls) -> None:
+    """main(["run", "没有/这个"])：抛 SystemExit，create_devices 一次都没被调用。"""
     with pytest.raises(SystemExit):
         main(["run", "没有/这个"])
-    assert calls.connect_botbase == 0
+    assert calls.create_devices == 0
 
 
-def test_restart_with_unknown_script_does_not_call_connect_botbase(calls: Calls) -> None:
-    """main(["restart", "没有/这个"])：抛 SystemExit，connect_botbase 一次都没被调用。"""
+def test_restart_with_unknown_script_does_not_call_create_devices(calls: Calls) -> None:
+    """main(["restart", "没有/这个"])：抛 SystemExit，create_devices 一次都没被调用。"""
     with pytest.raises(SystemExit):
         main(["restart", "没有/这个"])
-    assert calls.connect_botbase == 0
+    assert calls.create_devices == 0
 
 
 def test_unknown_command_exits(forbid_connect: None) -> None:
@@ -383,9 +409,8 @@ def test_python_m_control_switch_runs_main(
 
     防止 __main__.py 末尾的 `if __name__ == "__main__": main()` 被删掉或写错，
     python -m control_switch 什么都不做就正常退出。runpy 重新执行模块，
-    所以在 dotenv 模块上换掉 load_dotenv，不读仓库里真实的 .env。
+    __main__ 不再引用 load_dotenv，.env 和环境变量的处理由这个文件的 autouse fixture 负责。
     """
-    monkeypatch.setattr("dotenv.load_dotenv", lambda *args, **kwargs: False)
     monkeypatch.setattr(sys, "argv", ["python -m control_switch"])
     with warnings.catch_warnings():
         # control_switch.__main__ 已经被这个文件引用过，runpy 再执行一次时会提醒

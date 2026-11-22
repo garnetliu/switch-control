@@ -50,7 +50,11 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 ## 环境变量
 
-全部变量和说明都在 `.env.example` 里，复制成 `.env` 再改。连接和通知之外，还有一个开关，只有极巨大冒险用，不写就是关：
+全部变量和说明都在 `.env.example` 里，复制成 `.env` 再改。所有环境变量都在 `src/control_switch/settings.py` 里读，其他地方用传进来的 `Settings`。
+
+`SCREEN`（`botbase`、`capture`）、`CONTROLLER`（`botbase`、`serial`）、`MEMORY`（`botbase`、`none`）决定画面、按键、读写内存各用哪种设备，不写都是 `botbase`，由 `device/factory.py` 创建；选了 `botbase` 的共用同一个连接。`capture`、`serial` 还没有实现，写了会报错退出。写错值也会报错退出，并说明可以写什么。
+
+连接和通知之外，还有一个开关，只有极巨大冒险用，不写就是关：
 
 | 变量 | 作用 |
 |---|---|
@@ -94,6 +98,8 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 |---|---|
 | `src/control_switch/__main__.py` | 命令行入口：`control-switch run`、`control-switch restart` |
 | `src/control_switch/session.py` | `Session`：配置、当前步骤、这一局的截图、通知，以及取图、按键、读写内存的设备 |
+| `src/control_switch/settings.py` | `Settings`：集中读环境变量和 `.env`，其他地方不再读 |
+| `src/control_switch/device/factory.py` | `create_devices`：按 `SCREEN`、`CONTROLLER`、`MEMORY` 创建设备 |
 | `src/control_switch/device/base.py` | 设备的三个接口：`Screen`（取图）、`Controller`（按键）、`Memory`（读写内存）；`botbase.py` 是它们的实现 |
 | `src/control_switch` | 所有游戏共用：连接 Switch（`device`）、看图（`vision`）、等画面、菜单、重启（`flow`）、日志、推送、PKHeX 请求、通用配置、类型 |
 | `src/control_switch/games/registry.py` | 脚本表。加脚本时要在脚本的 `__init__.py` 里写 `STEPS`、`START`、`SESSION`，再在脚本表里加一行 |

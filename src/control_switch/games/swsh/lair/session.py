@@ -1,9 +1,10 @@
 """极巨大冒险用的 Session：还带着这一局的状态、游戏数据和 PK8 读取。"""
 
-from control_switch.device import Controller, Memory, Screen
+from control_switch.device import Devices
 from control_switch.games.swsh.pk8 import Pk8Reader
 from control_switch.pkhex import Pkhex
 from control_switch.session import Session
+from control_switch.settings import Settings
 
 from .game_config import GameConfig
 from .game_data import GameData
@@ -15,11 +16,11 @@ class LairSession(Session):
 
     config: GameConfig
 
-    def __init__(self, screen: Screen, controller: Controller, memory: Memory | None):
-        super().__init__(GameConfig(), screen, controller, memory)
-        self.game = GameState(self.config)
+    def __init__(self, settings: Settings, devices: Devices):
+        super().__init__(GameConfig(), settings, devices)
+        self.game = GameState(self.config, keep_path=settings.keep_path)
         self.data = GameData(self.config)
-        self.pkhex = Pk8Reader(Pkhex(), self.memory.peek)
+        self.pkhex = Pk8Reader(Pkhex(settings.pkhex_api_url), self.memory.peek)
 
     def ore_count(self) -> int:
         """从内存读极矿石的数量。"""

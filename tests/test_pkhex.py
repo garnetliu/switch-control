@@ -138,34 +138,11 @@ def test_execute_succeeds_after_two_url_errors(monkeypatch: pytest.MonkeyPatch) 
     assert network.sleeps == [1, 2]
 
 
-def test_api_url_from_env_when_not_passed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """不传 api_url 且设置了 PKHEX_API_URL：用环境变量里的地址。"""
+def test_api_url_defaults_when_not_passed_even_if_env_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """不传 api_url：用 DEFAULT_API_URL；设置了 PKHEX_API_URL 也不用它。"""
     monkeypatch.setenv("PKHEX_API_URL", "http://env.invalid/x")
-    network = install(monkeypatch, [{"result": 1}])
-
-    Pkhex().execute("code", {})
-
-    assert network.requests[0].full_url == "http://env.invalid/x"
-
-
-def test_api_url_defaults_when_env_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """不传 api_url、也没有 PKHEX_API_URL：用 DEFAULT_API_URL。"""
-    monkeypatch.delenv("PKHEX_API_URL", raising=False)
-    network = install(monkeypatch, [{"result": 1}])
-
-    Pkhex().execute("code", {})
-
-    assert network.requests[0].full_url == Pkhex.DEFAULT_API_URL
-
-
-def test_api_url_empty_env_falls_back_to_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    """PKHEX_API_URL 设成空值（.env 里写 `PKHEX_API_URL=`）时当作没配置，用 DEFAULT_API_URL。
-
-    防的是：空值被当成地址，构造请求时抛 `ValueError: unknown url type: ''`，报错里不提
-    PKHEX_API_URL。同一个 .env.example 里 `DISCORD_WEBHOOK_URL=` 就是用空值表示不配置，
-    Notifier 也把空值当成没配。原来就有的问题。
-    """
-    monkeypatch.setenv("PKHEX_API_URL", "")
     network = install(monkeypatch, [{"result": 1}])
 
     Pkhex().execute("code", {})

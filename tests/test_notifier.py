@@ -61,12 +61,10 @@ def install(monkeypatch: pytest.MonkeyPatch, outcomes: list[Outcome] | None = No
     return network
 
 
-def make_notifier(monkeypatch: pytest.MonkeyPatch, url: str | None = WEBHOOK) -> Notifier:
+def make_notifier(url: str | None = WEBHOOK) -> Notifier:
     if url is None:
-        monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
-    else:
-        monkeypatch.setenv("DISCORD_WEBHOOK_URL", url)
-    return Notifier()
+        return Notifier()
+    return Notifier(webhook_url=url)
 
 
 def body_of(request: urllib.request.Request) -> bytes:
@@ -85,7 +83,7 @@ def test_send_without_webhook_sends_no_request(monkeypatch: pytest.MonkeyPatch) 
     """没有配置地址：不发请求。"""
     network = install(monkeypatch)
 
-    make_notifier(monkeypatch, None)._send("hi", None)
+    make_notifier(None)._send("hi", None)
 
     assert network.requests == []
 
@@ -95,7 +93,7 @@ def test_send_without_webhook_warns_only_once(
 ) -> None:
     """没有配置地址：连着调两次，只记一条警告。"""
     install(monkeypatch)
-    notifier = make_notifier(monkeypatch, None)
+    notifier = make_notifier(None)
 
     with caplog.at_level(logging.WARNING):
         notifier._send("a", None)
@@ -110,7 +108,7 @@ def test_send_truncates_text_over_2000_chars(monkeypatch: pytest.MonkeyPatch) ->
     """正文超过 2000 字：发出去的正文正好 2000 字，结尾是「…（已截断）」。"""
     network = install(monkeypatch)
 
-    make_notifier(monkeypatch)._send("a" * 2500, None)
+    make_notifier()._send("a" * 2500, None)
 
     content = json.loads(body_of(network.requests[0]))["content"]
     assert len(content) == 2000
@@ -121,7 +119,7 @@ def test_send_text_of_exactly_2000_chars_is_not_truncated(monkeypatch: pytest.Mo
     """正文正好 2000 字：原样发出，不截断。"""
     network = install(monkeypatch)
 
-    make_notifier(monkeypatch)._send("a" * 2000, None)
+    make_notifier()._send("a" * 2000, None)
 
     assert json.loads(body_of(network.requests[0]))["content"] == "a" * 2000
 
@@ -130,7 +128,7 @@ def test_send_without_files_posts_json_content(monkeypatch: pytest.MonkeyPatch) 
     """没有附件：Content-Type 是 application/json，内容是 {"content": 正文}，发往配置的地址。"""
     network = install(monkeypatch)
 
-    make_notifier(monkeypatch)._send("你好", None)
+    make_notifier()._send("你好", None)
 
     request = network.requests[0]
     assert request.full_url == WEBHOOK
@@ -143,7 +141,7 @@ def test_send_with_files_posts_multipart(monkeypatch: pytest.MonkeyPatch, tmp_pa
     network = install(monkeypatch)
     files = make_files(tmp_path, 2)
 
-    make_notifier(monkeypatch)._send("pic", files)
+    make_notifier()._send("pic", files)
 
     request = network.requests[0]
     content_type = request.get_header("Content-type")
@@ -167,7 +165,7 @@ def test_send_with_files_drops_nonexistent_file(
     network = install(monkeypatch)
     existing = make_files(tmp_path, 1)[0]
 
-    make_notifier(monkeypatch)._send("pic", [tmp_path / "missing.png", existing])
+    make_notifier()._send("pic", [tmp_path / "missing.png", existing])
 
     body = body_of(network.requests[0])
     assert b'name="files[0]"; filename="img0.png"' in body
@@ -181,7 +179,7 @@ def test_send_with_only_nonexistent_files_posts_json(
     """附件全都不存在：改发只有文字的请求。"""
     network = install(monkeypatch)
 
-    make_notifier(monkeypatch)._send("pic", [tmp_path / "missing.png"])
+    make_notifier()._send("pic", [tmp_path / "missing.png"])
 
     assert network.requests[0].get_header("Content-type") == "application/json"
 
@@ -193,7 +191,7 @@ def test_send_with_more_than_10_files_keeps_first_10(
     network = install(monkeypatch)
     files = make_files(tmp_path, 12)
 
-    make_notifier(monkeypatch)._send("pic", files)
+    make_notifier()._send("pic", files)
 
     body = body_of(network.requests[0])
     assert b'name="files[9]"; filename="img9.png"' in body
@@ -213,7 +211,7 @@ def test_send_falls_back_to_text_only_when_reading_file_fails(
 
     monkeypatch.setattr(Path, "read_bytes", broken_read_bytes)
 
-    make_notifier(monkeypatch)._send("pic", files)
+    make_notifier()._send("pic", files)
 
     request = network.requests[0]
     assert request.get_header("Content-type") == "application/json"
@@ -224,7 +222,7 @@ def test_send_retries_10_times_when_always_failing(monkeypatch: pytest.MonkeyPat
     """urlopen 一直抛异常：一共调 10 次，sleep 调 9 次、每次 30 秒，不往外抛异常。"""
     network = install(monkeypatch, [OSError("down") for _ in range(10)])
 
-    make_notifier(monkeypatch)._send("hi", None)
+    make_notifier()._send("hi", None)
 
     assert len(network.requests) == 10
     assert network.sleeps == [30] * 9
@@ -236,7 +234,7 @@ def test_send_stops_retrying_after_success_on_third_attempt(
     """第 3 次成功：只调 3 次 urlopen，sleep 2 次。"""
     network = install(monkeypatch, [OSError("a"), OSError("b"), None])
 
-    make_notifier(monkeypatch)._send("hi", None)
+    make_notifier()._send("hi", None)
 
     assert len(network.requests) == 3
     assert network.sleeps == [30, 30]
@@ -246,7 +244,7 @@ def test_send_everyone_prefixes_text_with_at_everyone(monkeypatch: pytest.Monkey
     """send_everyone("x")：等 notifier 线程结束后，发出去的正文是 "@everyone x"。"""
     network = install(monkeypatch)
 
-    make_notifier(monkeypatch).send_everyone("x")
+    make_notifier().send_everyone("x")
     for thread in threading.enumerate():
         if thread.name == "notifier":
             thread.join(timeout=5)
@@ -259,7 +257,7 @@ def test_send_runs_in_background_thread_named_notifier(monkeypatch: pytest.Monke
     """send 在名字是 notifier 的后台线程里发消息。"""
     network = install(monkeypatch)
 
-    make_notifier(monkeypatch).send("x")
+    make_notifier().send("x")
     for thread in threading.enumerate():
         if thread.name == "notifier":
             thread.join(timeout=5)

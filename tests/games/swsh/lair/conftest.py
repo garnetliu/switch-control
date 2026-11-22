@@ -12,10 +12,12 @@ from typing import Any
 
 import pytest
 
+from control_switch.device import Devices
 from control_switch.games.swsh.lair.game_config import GameConfig
 from control_switch.games.swsh.lair.game_data import GameData
 from control_switch.games.swsh.lair.lair import Lair
 from control_switch.games.swsh.lair.session import LairSession
+from control_switch.settings import Settings, load_settings
 from control_switch.types import Hsv, Rect
 from control_switch.vision import ImageChecker
 from control_switch.vision.text import contains
@@ -192,7 +194,7 @@ def lair_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]
     """GameConfig 的数据目录、运行状态、日志、战果和闪光截图目录都指到临时目录，计时设成最短。
 
     data_dir 是把仓库里的 data/swsh 复制过去的，path 步骤会写 lair_event_LUT.json，不能写仓库里的。
-    名单、打分参数固定成 FixedConfig 里的值，首领是 tapu-lele。KEEP_PATH 不设。
+    名单、打分参数固定成 FixedConfig 里的值，首领是 tapu-lele。
     要在创建 LairSession 之前用，所以要用 LairSession 的测试都要用到它。
     """
     root = tmp_path / "lair"
@@ -212,7 +214,6 @@ def lair_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]
     monkeypatch.setattr(GameConfig, "timeout", 1.0)
     monkeypatch.setattr(GameConfig, "interval", 0.0)
     monkeypatch.setattr(GameConfig, "press_interval", 0.0)
-    monkeypatch.delenv("KEEP_PATH", raising=False)
     yield root
 
 
@@ -227,7 +228,7 @@ def make_lair_session(
     """返回一个函数：用假设备建 LairSession，notifier 换成 RecordingNotifier。
 
     参数：images 是假 Screen 依次给的图片字节（不给就是一张空白）；title_id、data（地址对应的字节）、
-    pointers 给假 Memory。假 Controller 就是 controller 这个 fixture；假 Screen 和假 Memory
+    pointers 给假 Memory；settings 不给就是 load_settings({})（KEEP_PATH 不开）。假 Controller 就是 controller 这个 fixture；假 Screen 和假 Memory
     可以通过 session.screen、session.memory 取到。
     """
 
@@ -237,13 +238,15 @@ def make_lair_session(
         title_id: str | None = None,
         data: Mapping[int, bytes] | None = None,
         pointers: Mapping[tuple[int, ...], int] | None = None,
+        settings: Settings | None = None,
     ) -> LairSession:
         memory = (
             make_memory(data=data, pointers=pointers)
             if title_id is None
             else make_memory(title_id, data, pointers)
         )
-        session = LairSession(make_screen(images), controller, memory)
+        devices = Devices(make_screen(images), controller, memory)
+        session = LairSession(settings or load_settings({}), devices)
         monkeypatch.setattr(session, "notifier", RecordingNotifier())
         return session
 
