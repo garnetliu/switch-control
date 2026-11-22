@@ -7,6 +7,7 @@
 """
 
 import re
+from collections.abc import Sequence
 from difflib import SequenceMatcher
 from functools import lru_cache
 
@@ -165,7 +166,7 @@ class ImageChecker:
 
     # ---- 选中项 ----
 
-    def selected(self, rects: list[Rect]) -> int:
+    def selected(self, rects: Sequence[Rect]) -> int:
         """多个选项里，当前选中的是第几个（从 0 开始）。
 
         选中项是深色底，其他是白底，所以取平均亮度最低的那个区域。

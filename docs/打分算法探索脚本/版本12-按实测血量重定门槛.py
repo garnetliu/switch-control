@@ -12,9 +12,9 @@ from collections import Counter
 
 import numpy as np
 
-from swsh.lair.game_config import GameConfig
-from swsh.lair.game_data import GameData
-from swsh.lair.plan import rotate
+from control_switch.games.swsh.lair.game_config import GameConfig
+from control_switch.games.swsh.lair.game_data import GameData
+from control_switch.games.swsh.lair.plan import rotate
 
 c = GameConfig()
 d = GameData(c)
@@ -158,7 +158,7 @@ for low in np.arange(0.6, 1.31, 0.1):
 # 和版本 10 一样，看推出来的整数回合数和实际完全一样的比例
 from dataclasses import replace as _replace  # noqa: E402
 
-from swsh.lair.plan import fight  # noqa: E402
+from control_switch.games.swsh.lair.plan import fight  # noqa: E402
 
 base_config = GameConfig()
 base_config.stage_sure_damage, base_config.stage_likely_damage = 1.0, 0.6

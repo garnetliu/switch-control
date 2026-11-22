@@ -8,10 +8,10 @@ import re
 import sys
 from dataclasses import replace
 
+from control_switch.games.swsh.lair.game_config import GameConfig
+from control_switch.games.swsh.lair.game_data import GameData
+from control_switch.games.swsh.scoring import Field, damage
 from control_switch.vision.text import levenshtein
-from swsh.lair.game_config import GameConfig
-from swsh.lair.game_data import GameData
-from swsh.scoring import Field, damage
 
 d = GameData(GameConfig()); F = Field()
 names = list(d.rental_damages())

@@ -58,26 +58,26 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 ## 流程
 
-`src/main.py` 按名字找到脚本，从脚本的起点开始一步一步跑，每一步返回下一步的名字。
+`control-switch run` 按名字找到脚本，从脚本的起点开始一步一步跑，每一步返回下一步的名字。
 
 ### 极巨大冒险 `swsh/lair`
 
-游戏停在科学家面前开始。配置在 `src/swsh/lair/game_config.py`。
+游戏停在科学家面前开始。配置在 `src/control_switch/games/swsh/lair/game_config.py`。
 
 | 步骤 | 文件 | 做什么 |
 |---|---|---|
-| initialize | `src/swsh/lair/steps/initialize.py` | 确认前台是剑/盾，把游戏带到科学家面前 |
-| join | `src/swsh/lair/steps/join.py` | 选神兽，选初始租借宝可梦，读路线图并规划路线 |
-| path | `src/swsh/lair/steps/path.py` | 处理路线上的岔路口、背包客、研究员、树果，直到进入战斗 |
-| battle | `src/swsh/lair/steps/battle.py` | 选招式、决定要不要极巨化、记录天气场地和倒下次数 |
-| catch | `src/swsh/lair/steps/catch.py` | 抓宝可梦，普通关决定换不换 |
-| select_pokemon | `src/swsh/lair/steps/select_pokemon.py` | 查闪光，有闪光就带走，没有就不带走或重启保留路线 |
+| initialize | `src/control_switch/games/swsh/lair/steps/initialize.py` | 确认前台是剑/盾，把游戏带到科学家面前 |
+| join | `src/control_switch/games/swsh/lair/steps/join.py` | 选神兽，选初始租借宝可梦，读路线图并规划路线 |
+| path | `src/control_switch/games/swsh/lair/steps/path.py` | 处理路线上的岔路口、背包客、研究员、树果，直到进入战斗 |
+| battle | `src/control_switch/games/swsh/lair/steps/battle.py` | 选招式、决定要不要极巨化、记录天气场地和倒下次数 |
+| catch | `src/control_switch/games/swsh/lair/steps/catch.py` | 抓宝可梦，普通关决定换不换 |
+| select_pokemon | `src/control_switch/games/swsh/lair/steps/select_pokemon.py` | 查闪光，有闪光就带走，没有就不带走或重启保留路线 |
 
 ### 大量出现 `sv/outbreak`
 
-开始前：游戏版本 4.0.0；人站在大量出现的范围里；打开过一次菜单，把光标停在「野餐」上。配置在 `src/sv/outbreak/config.py`（要找的宝可梦、要不要改击败数）和 `src/sv/config.py`（每个键按完等几秒）。
+开始前：游戏版本 4.0.0；人站在大量出现的范围里；打开过一次菜单，把光标停在「野餐」上。配置在 `src/control_switch/games/sv/outbreak/config.py`（要找的宝可梦、要不要改击败数）和 `src/control_switch/games/sv/config.py`（每个键按完等几秒）。
 
-步骤都在 `src/sv/outbreak/steps.py`：
+步骤都在 `src/control_switch/games/sv/outbreak/steps.py`：
 
 | 步骤 | 做什么 |
 |---|---|
@@ -92,14 +92,14 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 | 目录 | 内容 |
 |---|---|
-| `src/main.py`、`src/scripts.py` | 入口和脚本表。加脚本时在脚本表里加一行 |
-| `src/libs` | 所有游戏共用：连接 Switch、读写内存、看图、推送、PKHeX 请求、通用配置（`config.py`） |
-| `src/tools` | 所有游戏共用：等画面、菜单、日志、存截图、重启、找 Switch |
-| `src/type` | 所有游戏共用的类型 |
-| `src/swsh` | 剑盾的脚本共用的东西：对战打分、宝可梦类型、PK8 读取 |
-| `src/swsh/lair` | 极巨大冒险：步骤、配置、状态、数据加载和路线图 |
-| `src/sv` | 朱紫的脚本共用的东西：指针、读写存档块（`blocks.py`）、存档和野餐的操作（`actions.py`） |
-| `src/sv/outbreak` | 大量出现刷闪：步骤和配置 |
+| `src/control_switch/__main__.py` | 命令行入口：`control-switch run`、`control-switch restart` |
+| `src/control_switch` | 所有游戏共用：连接 Switch（`device`）、看图（`vision`）、等画面、菜单、重启（`flow`）、日志、推送、PKHeX 请求、通用配置、类型 |
+| `src/control_switch/games/registry.py` | 脚本表。加脚本时在脚本表里加一行 |
+| `src/control_switch/games/swsh` | 剑盾的脚本共用的东西：对战打分、宝可梦类型、PK8 读取 |
+| `src/control_switch/games/swsh/lair` | 极巨大冒险：步骤、配置、状态、数据加载和路线图 |
+| `src/control_switch/games/sv` | 朱紫的脚本共用的东西：指针、读写存档块（`blocks.py`）、存档和野餐的操作（`actions.py`） |
+| `src/control_switch/games/sv/outbreak` | 大量出现刷闪：步骤和配置 |
+| `scripts` | 不属于包的脚本：找 Switch、离线算 seed 和伤害表 |
 | `data/swsh` | 剑盾的宝可梦、招式、路线和图片数据 |
 | `run` | 极巨大冒险这一局的状态 `game.yaml`，用来断线恢复和 keep path |
 | `catches` | 闪光宝可梦的截图 |

@@ -28,11 +28,11 @@ import sys
 from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 
+from control_switch.games.swsh.lair.game_config import GameConfig
+from control_switch.games.swsh.lair.game_data import GameData
+from control_switch.games.swsh.pokemon import Pokemon
+from control_switch.games.swsh.scoring import Field, damage, type_multiplier
 from control_switch.vision.text import levenshtein
-from swsh.lair.game_config import GameConfig
-from swsh.lair.game_data import GameData
-from swsh.pokemon import Pokemon
-from swsh.scoring import Field, damage, type_multiplier
 
 ME = "夜暮林夕"
 SCREEN = 2732 / 4096  # 多打里光墙、反射壁的倍率

@@ -9,11 +9,11 @@ find:
 script ?= swsh/lair
 
 start:
-	uv run python src/main.py $(script)
+	uv run control-switch run $(script)
 
 # 重启游戏，回到游戏里可以操作为止。极巨大冒险途中重启下次要付极矿石罚款
 restart:
-	uv run python src/restart.py $(script)
+	uv run control-switch restart $(script)
 
 format:
 	uv run ruff format .

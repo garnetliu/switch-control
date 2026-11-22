@@ -16,10 +16,10 @@ from collections import defaultdict
 
 import numpy as np
 
-from swsh.lair import upstream
-from swsh.lair.game_config import GameConfig
-from swsh.lair.game_data import GameData
-from swsh.lair.lair import Lair
+from control_switch.games.swsh.lair import upstream
+from control_switch.games.swsh.lair.game_config import GameConfig
+from control_switch.games.swsh.lair.game_data import GameData
+from control_switch.games.swsh.lair.lair import Lair
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
