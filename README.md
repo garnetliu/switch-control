@@ -44,6 +44,9 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 | `make restart` | 重启游戏，回到游戏里可以操作为止，同样用 `script=` 指定脚本。极巨大冒险途中重启，下次和科学家说话要付极矿石罚款 |
 | `make format` | 格式化代码 |
 | `make lint` | 检查代码 |
+| `make test` | 跑测试 |
+| `make typecheck` | 类型检查 |
+| `make coverage` | 跑测试并打印覆盖率 |
 
 ## 环境变量
 

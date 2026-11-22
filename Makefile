@@ -1,4 +1,4 @@
-.PHONY: find start restart format lint
+.PHONY: find start restart format lint test typecheck coverage
 
 # 查找 Switch 的 ip 并写入 .env，再 ping 一下检查延迟。要用系统自带的 Python，uv 装的 Python 在 macOS 27 上读不到 ARP 表
 find:
@@ -20,3 +20,12 @@ format:
 
 lint:
 	uv run ruff check .
+
+test:
+	uv run pytest
+
+typecheck:
+	uv run pyright
+
+coverage:
+	uv run pytest --cov=control_switch --cov-report=term-missing

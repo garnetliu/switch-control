@@ -10,3 +10,4 @@ state/
 .codex/
 run/
 catches/
+.coverage
