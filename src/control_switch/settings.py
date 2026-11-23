@@ -29,6 +29,9 @@ class Settings:
     switch_connection: str
     switch_ip: str | None
     switch_port: int | None
+    # 单片机的串口路径和波特率，CONTROLLER=serial 时用
+    serial_port: str | None
+    serial_baud: int
     pkhex_api_url: str | None
     discord_webhook_url: str | None
     keep_path: bool
@@ -53,6 +56,16 @@ def _port(env: Mapping[str, str]) -> int | None:
         raise ValueError(f"SWITCH_PORT 要写整数，现在是 {text}") from None
 
 
+def _baud(env: Mapping[str, str]) -> int:
+    text = env.get("SERIAL_BAUD")
+    if not text:
+        return 9600
+    try:
+        return int(text)
+    except ValueError:
+        raise ValueError(f"SERIAL_BAUD 要写整数，现在是 {text}") from None
+
+
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     """读配置。env 不传时读 .env 和 os.environ；传了只读传进来的字典。空字符串当作没写。"""
     if env is None:
@@ -65,6 +78,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         switch_connection=_choice(env, "SWITCH_CONNECTION", CONNECTIONS),
         switch_ip=env.get("SWITCH_IP") or None,
         switch_port=_port(env),
+        serial_port=env.get("SERIAL_PORT") or None,
+        serial_baud=_baud(env),
         pkhex_api_url=env.get("PKHEX_API_URL") or None,
         discord_webhook_url=env.get("DISCORD_WEBHOOK_URL") or None,
         keep_path=env.get("KEEP_PATH") == "1",

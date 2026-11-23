@@ -52,7 +52,7 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 全部变量和说明都在 `.env.example` 里，复制成 `.env` 再改。所有环境变量都在 `src/control_switch/settings.py` 里读，其他地方用传进来的 `Settings`。
 
-`SCREEN`（`botbase`、`capture`）、`CONTROLLER`（`botbase`、`serial`）、`MEMORY`（`botbase`、`none`）决定画面、按键、读写内存各用哪种设备，不写都是 `botbase`，由 `device/factory.py` 创建；选了 `botbase` 的共用同一个连接。`capture`、`serial` 还没有实现，写了会报错退出。写错值也会报错退出，并说明可以写什么。
+`SCREEN`（`botbase`、`capture`）、`CONTROLLER`（`botbase`、`serial`）、`MEMORY`（`botbase`、`none`）决定画面、按键、读写内存各用哪种设备，不写都是 `botbase`，由 `device/factory.py` 创建；选了 `botbase` 的共用同一个连接。`capture` 还没有实现，写了会报错退出。写错值也会报错退出，并说明可以写什么。
 
 连接和通知之外，还有一个开关，只有极巨大冒险用，不写就是关：
 
@@ -106,6 +106,21 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 刷到闪光时已经存过档，那只宝可梦在存档里，没抓到重启游戏它还在。还没有做三明治这一步。
 
+### 用单片机按键
+
+`CONTROLLER=serial` 时，按键由单片机（伊机控固件）发出，没破解的 Switch 也能按。取图、内存不变。
+
+- 单片机的 USB 插 Switch 底座，系统会把它认成手柄。
+- TTL 的 TXD 接单片机 1 号口，RXD 接 0 号口，GND 接 GND，TTL 的 USB 插电脑。
+- `.env` 里写 `CONTROLLER=serial` 和 `SERIAL_PORT=/dev/cu.usbserial-xxxx`（`ls /dev/cu.usbserial-*` 查）。波特率不写是 9600，只有换了固件才要写 `SERIAL_BAUD`。
+
+| 报错 | 意思 |
+|---|---|
+| `CONTROLLER=serial 时要在 .env 里写 SERIAL_PORT` | 没写串口路径 |
+| `按键：串口 … 打不开` | 路径写错、TTL 没插好，或者串口被别的程序占着 |
+| `按键：单片机没有回应` | 串口打开了但单片机不回话：检查 TTL 的接线（TXD、RXD 有没有接反）、单片机有没有通电、波特率对不对 |
+| `单片机回 FE` | 单片机还在跑里面存的脚本。启动时会先发停止命令，运行中出现说明单片机重启过 |
+
 ## 目录
 
 | 目录 | 内容 |
@@ -114,6 +129,7 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 | `src/control_switch/session.py` | `Session`：配置、当前步骤、这一局的截图、通知，以及取图、按键、读写内存的设备 |
 | `src/control_switch/settings.py` | `Settings`：集中读环境变量和 `.env`，其他地方不再读 |
 | `src/control_switch/device/factory.py` | `create_devices`：按 `SCREEN`、`CONTROLLER`、`MEMORY` 创建设备 |
+| `src/control_switch/device/serial_pad.py` | `SerialPad`、`open_serial_pad`：用单片机按键，`CONTROLLER=serial` 时用 |
 | `src/control_switch/device/check.py` | `check_requires`、`check_devices`：启动时检查设备 |
 | `src/control_switch/flow/check.py` | `check_controller_reaches_screen`：启动时按两次 HOME，确认按键送到了画面上的这台 Switch |
 | `src/control_switch/device/base.py` | 设备的三个接口：`Screen`（取图）、`Controller`（按键）、`Memory`（读写内存）；`botbase.py` 是它们的实现 |

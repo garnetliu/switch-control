@@ -22,6 +22,7 @@ import pytest
 
 from control_switch.__main__ import main
 from control_switch.device import DeviceCheckError, Devices
+from control_switch.device import create_devices as real_create_devices
 from control_switch.flow import capture
 
 IMAGE = Path(__file__).resolve().parent / "images" / "路线上的界面-要走哪条路.jpg"
@@ -68,12 +69,14 @@ SETTINGS_ENV_NAMES = (
     "PKHEX_API_URL",
     "DISCORD_WEBHOOK_URL",
     "KEEP_PATH",
+    "SERIAL_PORT",
+    "SERIAL_BAUD",
 )
 
 
 @pytest.fixture(autouse=True)
 def clean_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """load_dotenv 换成什么都不读，Settings 读的 9 个环境变量都清掉：
+    """load_dotenv 换成什么都不读，Settings 读的 11 个环境变量都清掉：
     这个文件里的测试不读仓库里真实的 .env，也不受终端里设过的环境变量影响。
     """
     monkeypatch.setattr("control_switch.settings.load_dotenv", lambda *args, **kwargs: False)
@@ -573,3 +576,25 @@ def test_python_m_control_switch_runs_main(
             runpy.run_module("control_switch", run_name="__main__")
     assert error.value.code not in (0, None)
     assert "用法" in capsys.readouterr().out
+
+
+def test_run_with_controller_serial_and_no_serial_port_exits_without_connecting_botbase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CONTROLLER=serial、SERIAL_PORT 没写，用真的 create_devices：
+    main(["run", "swsh/lair"]) 抛 SystemExit，退出码不是 0，报错里有 SERIAL_PORT，没有连 botbase。
+    """
+    botbase_connects: list[object] = []
+
+    def connect_botbase(settings: object) -> None:
+        botbase_connects.append(settings)
+        raise AssertionError("不该连 botbase")
+
+    monkeypatch.setattr("control_switch.__main__.create_devices", real_create_devices)
+    monkeypatch.setattr("control_switch.device.factory.connect_botbase", connect_botbase)
+    monkeypatch.setenv("CONTROLLER", "serial")
+    with pytest.raises(SystemExit) as error:
+        main(["run", "swsh/lair"])
+    assert error.value.code not in (0, None)
+    assert "SERIAL_PORT" in str(error.value.code)
+    assert botbase_connects == []

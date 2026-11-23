@@ -100,8 +100,37 @@ def test_optional_string_values_are_passed_through() -> None:
         "PKHEX_API_URL",
         "DISCORD_WEBHOOK_URL",
         "KEEP_PATH",
+        "SERIAL_PORT",
+        "SERIAL_BAUD",
     ],
 )
 def test_empty_string_is_same_as_not_set(name: str) -> None:
     """值是空字符串：和没写一样，得到的设置和空字典相同。"""
     assert load_settings({name: ""}) == load_settings({})
+
+
+def test_serial_port_is_passed_through_unchanged() -> None:
+    """SERIAL_PORT 写了路径：原样得到；不写是 None。"""
+    assert load_settings({"SERIAL_PORT": "/dev/cu.usbserial-2021230"}).serial_port == (
+        "/dev/cu.usbserial-2021230"
+    )
+    assert load_settings({}).serial_port is None
+
+
+def test_serial_baud_defaults_to_9600() -> None:
+    """SERIAL_BAUD 不写：得到整数 9600。"""
+    assert load_settings({}).serial_baud == 9600
+
+
+def test_serial_baud_is_converted_to_int() -> None:
+    """SERIAL_BAUD=115200：得到整数 115200。"""
+    baud = load_settings({"SERIAL_BAUD": "115200"}).serial_baud
+    assert baud == 115200
+    assert isinstance(baud, int)
+
+
+def test_non_numeric_serial_baud_raises_value_error_naming_serial_baud() -> None:
+    """SERIAL_BAUD=abc：抛 ValueError，报错里有 SERIAL_BAUD。"""
+    with pytest.raises(ValueError) as error:
+        load_settings({"SERIAL_BAUD": "abc"})
+    assert "SERIAL_BAUD" in str(error.value)
