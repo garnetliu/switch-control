@@ -7,11 +7,11 @@ from control_switch.log import new_log
 
 
 def initialize(sw: LairSession) -> str:
-    """确认前台是剑/盾，把游戏带到科学家面前、没有对话框的状态，返回下一步 "join"。
+    """把游戏带到科学家面前、没有对话框的状态，返回下一步 "join"。
 
     游戏要停在科学家面前。一直按 A，把中途退出的罚款提醒（「是 / 否」光标默认在「是」上，
     按 A 就是付）和其它提示都过掉，直到开场白的菜单「现在就出发 / 我想听讲解 / 还是先算了」出现；
-    再一直按 B，直到对话框消失。前台不是剑/盾抛 RuntimeError；按键超时抛 TimeoutError。
+    再一直按 B，直到对话框消失。按键超时抛 TimeoutError。
     """
     # 每一局一个日志文件：新的一局从这里开始，换一个新文件
     new_log(sw, "start")
@@ -19,9 +19,6 @@ def initialize(sw: LairSession) -> str:
     sw.frames.clear()
 
     rects = sw.config.rects
-    title_id = sw.memory.title_id().upper()
-    if title_id not in sw.config.game_title_ids:
-        raise RuntimeError(f"前台不是剑/盾（Title ID {title_id}）")
     press_until(
         sw,
         lambda screen: (

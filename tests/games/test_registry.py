@@ -24,6 +24,20 @@ def test_load_script_has_session_subclass_and_no_connect(name: str) -> None:
     assert not hasattr(script, "connect")
 
 
+@pytest.mark.parametrize("name", ["swsh/lair", "sv/outbreak"])
+def test_load_script_requires_is_frozenset_of_known_devices(name: str) -> None:
+    """load_script：返回的模块有 REQUIRES，是 frozenset，是 {"screen", "controller", "memory"} 的子集。"""
+    requires = load_script(name).REQUIRES
+    assert isinstance(requires, frozenset)
+    assert requires <= {"screen", "controller", "memory"}
+
+
+@pytest.mark.parametrize("name", ["swsh/lair", "sv/outbreak"])
+def test_load_script_has_non_empty_title_ids(name: str) -> None:
+    """load_script：返回的模块有 TITLE_IDS，不为空。"""
+    assert len(load_script(name).TITLE_IDS) > 0
+
+
 def test_scripts_table_has_both_game_scripts() -> None:
     """SCRIPTS 里有 swsh/lair 和 sv/outbreak 两个名字。"""
     assert set(SCRIPTS) == {"swsh/lair", "sv/outbreak"}

@@ -6,6 +6,7 @@ from control_switch.settings import Settings
 
 from .base import Controller, Memory, Screen
 from .botbase import connect_botbase
+from .check import DeviceCheckError
 
 
 class Devices(NamedTuple):
@@ -30,5 +31,18 @@ def create_devices(settings: Settings) -> Devices:
         raise NotImplementedError(
             f"{'、'.join(unimplemented)} 选的设备还没有实现，现在只能写 botbase"
         )
-    botbase = connect_botbase(settings)
+    try:
+        botbase = connect_botbase(settings)
+    except OSError as error:
+        used = [
+            label
+            for label, value in (
+                ("取图", settings.screen),
+                ("按键", settings.controller),
+                ("内存", settings.memory),
+            )
+            if value == "botbase"
+        ]
+        way = "USB" if settings.switch_connection == "usb" else "WiFi"
+        raise DeviceCheckError(f"{'、'.join(used)}：botbase（{way}）连接失败：{error}") from error
     return Devices(botbase, botbase, None if settings.memory == "none" else botbase)

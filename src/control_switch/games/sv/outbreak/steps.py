@@ -16,11 +16,8 @@ from .session import OutbreakSession
 
 
 def initialize(sw: OutbreakSession) -> str:
-    """确认前台是朱/紫，找到存档块表。前台不是朱/紫抛 RuntimeError。"""
+    """找到存档块表。"""
     new_log(sw, "start")
-    title_id = sw.memory.title_id().upper()
-    if title_id not in sw.config.game_title_ids:
-        raise RuntimeError(f"前台不是朱/紫（Title ID {title_id}）")
     sw.blocks.locate()
     return "knockout" if sw.config.knockout else "refresh"
 

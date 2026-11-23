@@ -1,4 +1,4 @@
-"""steps.initialize：确认前台是剑/盾，把游戏带到科学家面前、没有对话框的状态，返回 "join"。
+"""steps.initialize：把游戏带到科学家面前、没有对话框的状态，返回 "join"。
 
 没有开场白菜单（现在就出发 / 我想听讲解 / 还是先算了）的截图，画面判断用假截图（conftest 的 fake_images）：
 白色中间面板有字加上菜单，就是开场白的菜单；白色中间面板没有字，就是对话框消失。
@@ -115,27 +115,6 @@ def test_initialize_warns_when_ball_has_no_item_number(
     sw = make_lair_session([screens["menu"], screens["gone"]], data=pouches())
     assert initialize(sw) == "join"
     assert "不知道没有这种球的道具编号" in log_text(sw)
-
-
-@pytest.mark.parametrize("title_id", ["0100ABF008968000", "01008DB008C2C000", "0100abf008968000"])
-def test_initialize_accepts_sword_shield_title_ids_in_any_case(
-    make_lair_session: SessionFactory,
-    screens: dict[str, bytes],
-    title_id: str,
-) -> None:
-    """前台的 Title ID 是剑、盾的，或者是剑的小写写法：不抛错，返回 "join"。"""
-    sw = make_lair_session([screens["menu"], screens["gone"]], title_id=title_id, data=pouches())
-    assert initialize(sw) == "join"
-
-
-def test_initialize_raises_runtime_error_when_foreground_is_not_sword_or_shield(
-    make_lair_session: SessionFactory, controller: Any, screens: dict[str, bytes]
-) -> None:
-    """前台不是剑/盾：抛 RuntimeError，报错里有「前台不是剑/盾」和这个 Title ID，一个键都没按。"""
-    sw = make_lair_session([screens["menu"]], title_id="0100000000000000", data=pouches())
-    with pytest.raises(RuntimeError, match="前台不是剑/盾.*0100000000000000"):
-        initialize(sw)
-    assert controller.pressed == []
 
 
 def test_initialize_raises_timeout_error_when_menu_never_appears(

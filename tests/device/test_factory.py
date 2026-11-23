@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from control_switch.device import DeviceCheckError
 from control_switch.device.factory import Devices, create_devices
 from control_switch.settings import load_settings
 
@@ -67,3 +68,22 @@ def test_controller_serial_raises_not_implemented_without_connecting(connects: C
         create_devices(load_settings({"CONTROLLER": "serial"}))
     assert "CONTROLLER" in str(error.value)
     assert connects.calls == 0
+
+
+@pytest.mark.parametrize(("connection", "label"), [("usb", "USB"), ("wifi", "WiFi")])
+def test_connect_failure_raises_device_check_error_naming_botbase_and_connection(
+    monkeypatch: pytest.MonkeyPatch, connection: str, label: str
+) -> None:
+    """connect_botbase 抛 ConnectionError：create_devices 抛 DeviceCheckError，
+    报错里有 botbase 和连接方式（USB 或 WiFi）。
+    """
+
+    def refuse(settings: Any) -> Any:
+        raise ConnectionError("连不上")
+
+    monkeypatch.setattr("control_switch.device.factory.connect_botbase", refuse)
+    with pytest.raises(DeviceCheckError) as error:
+        create_devices(load_settings({"SWITCH_CONNECTION": connection}))
+    message = str(error.value)
+    assert "botbase" in message
+    assert label in message

@@ -3,7 +3,8 @@
 import importlib
 from types import ModuleType
 
-# 名字对应的模块。每个模块给出 STEPS（步骤表）、START（起点）、SESSION（这个脚本的 Session 子类）
+# 名字对应的模块。每个模块给出 STEPS（步骤表）、START（起点）、SESSION（这个脚本的 Session 子类）、
+# REQUIRES（需要的设备）、TITLE_IDS（能跑的游戏的 Title ID）
 SCRIPTS = {
     "swsh/lair": "control_switch.games.swsh.lair",
     "sv/outbreak": "control_switch.games.sv.outbreak",

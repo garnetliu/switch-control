@@ -17,7 +17,7 @@ class _RootOnly(logging.Filter):
         return record.name == "root"
 
 
-def _get_logger() -> logging.Logger:
+def init_console() -> logging.Logger:
     """取根 logger，第一次调用时加上终端输出。"""
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
@@ -34,14 +34,14 @@ def _get_logger() -> logging.Logger:
 
 def init_log(sw: Session, name: str | None = None) -> None:
     """初始化日志：终端输出，并创建第一个日志文件。已经初始化过就不做。"""
-    logger = _get_logger()
+    logger = init_console()
     if not any(isinstance(handler, logging.FileHandler) for handler in logger.handlers):
         new_log(sw, name)
 
 
 def new_log(sw: Session, name: str | None = None) -> None:
     """换一个新的日志文件，之后的日志写进去。"""
-    logger = _get_logger()
+    logger = init_console()
     for handler in list(logger.handlers):
         if isinstance(handler, logging.FileHandler):
             logger.removeHandler(handler)

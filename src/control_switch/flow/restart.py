@@ -23,9 +23,9 @@ def restart_to_title(sw: Session) -> None:
     """
     rects = sw.config.rects
     # 已经在 HOME 上就不能再按 HOME：HOME 上按 HOME 是回到游戏（真机上因此重启失败过）
-    if not _home_shown(sw, capture(sw, "是不是在 HOME 菜单")):
+    if not home_shown(sw, capture(sw, "是不是在 HOME 菜单")):
         sw.click("HOME", 0)
-        wait_for(sw, lambda screen: _home_shown(sw, screen), sw.config.timeout, "HOME 菜单")
+        wait_for(sw, lambda screen: home_shown(sw, screen), sw.config.timeout, "HOME 菜单")
     # HOME 菜单刚出来时按的 Y 会被吞掉（真机上出现过，画面停在 HOME），所以一直按到确认框出来
     press_until(
         sw,
@@ -64,7 +64,7 @@ def enter_game(sw: Session) -> None:
     logging.info(f"画面变黑，停止按 A（共按 {presses} 次）")
 
 
-def _home_shown(sw: Session, screen: ImageChecker) -> bool:
+def home_shown(sw: Session, screen: ImageChecker) -> bool:
     """HOME 菜单：游戏图标下面有「切换用户」的提示。"""
     return screen.has_text(sw.config.rects.home_hint, "切换用户")
 

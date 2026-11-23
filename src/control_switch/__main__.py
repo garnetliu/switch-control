@@ -7,24 +7,60 @@ restart 重启游戏，回到游戏里可以操作为止，极巨大冒险途中
 
 import logging
 import sys
+from collections.abc import Callable
 
-from control_switch.device import create_devices
+from control_switch.device import (
+    DeviceCheckError,
+    Devices,
+    check_devices,
+    check_requires,
+    create_devices,
+)
 from control_switch.flow import restart, save_frames
+from control_switch.flow.check import check_controller_reaches_screen
 from control_switch.games.registry import load_script
-from control_switch.log import init_log
-from control_switch.settings import load_settings
+from control_switch.log import init_console, init_log
+from control_switch.settings import Settings, load_settings
 
 DEFAULT_SCRIPT = "swsh/lair"
 USAGE = "用法：control-switch run|restart [游戏/脚本]，脚本不写时是 swsh/lair"
 
 
+def _load_settings() -> Settings:
+    """读配置，配置写错时打印报错退出。"""
+    try:
+        return load_settings()
+    except ValueError as error:
+        sys.exit(str(error))
+
+
+def _create_devices(settings: Settings) -> Devices:
+    """创建设备，连不上或配置不对时打印报错退出，不打印 traceback。"""
+    try:
+        return create_devices(settings)
+    except (DeviceCheckError, ValueError, NotImplementedError) as error:
+        sys.exit(str(error))
+
+
+def _check(action: Callable[[], None]) -> None:
+    """跑一项启动检查，没通过时打印报错退出。"""
+    try:
+        action()
+    except DeviceCheckError as error:
+        sys.exit(str(error))
+
+
 def run(name: str) -> None:
     """跑脚本：从脚本的起点开始一步一步跑，每一步返回下一步的名字。"""
+    init_console()
     script = load_script(name)
-    settings = load_settings()
-    devices = create_devices(settings)
+    settings = _load_settings()
+    _check(lambda: check_requires(settings, script.REQUIRES))
+    devices = _create_devices(settings)
+    _check(lambda: check_devices(devices, script.REQUIRES, script.TITLE_IDS))
     sw = script.SESSION(settings, devices)
     init_log(sw, "start")
+    _check(lambda: check_controller_reaches_screen(sw))
     step = script.START
     try:
         while step in script.STEPS:
@@ -43,9 +79,13 @@ def run(name: str) -> None:
 
 def restart_game(name: str) -> None:
     """重启游戏，回到游戏里可以操作为止。"""
+    init_console()
     script = load_script(name)
-    settings = load_settings()
-    devices = create_devices(settings)
+    settings = _load_settings()
+    _check(lambda: check_requires(settings, script.REQUIRES))
+    devices = _create_devices(settings)
+    # 重启时游戏可能已经崩了，不检查游戏
+    _check(lambda: check_devices(devices, script.REQUIRES, None))
     sw = script.SESSION(settings, devices)
     init_log(sw, "restart")
     try:

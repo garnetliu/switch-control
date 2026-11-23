@@ -32,6 +32,8 @@ class BaseConfig:
     stick_tick = 0.08
     # 等画面变化和操作超时
     timeout = 60.0
+    # 启动时检查按键：按一下 HOME 后最多等几秒画面变化
+    check_timeout = 10.0
     # 重启游戏：等选用户界面、等开场彩色画面最多几秒
     load_timeout = 30.0
     boot_timeout = 60.0

@@ -60,6 +60,20 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 |---|---|
 | `KEEP_PATH` | 设成 `1` 才开启。一局没刷到闪光、打赢并且倒下次数和用时都在范围内时，重启游戏保留这张图（keep path）。重启要付极矿石，矿石不够时不要开 |
 
+## 启动时的检查
+
+每个脚本在 `__init__.py` 的 `REQUIRES` 里写明要用取图、按键、内存里的哪几样，`TITLE_IDS` 写明能跑的游戏。`control-switch run` 和 `restart` 开始时先检查，没通过就打印报错、以非 0 退出，不发通知。报错开头是哪一类，就是哪一类设备没通过：
+
+| 报错开头 | 意思 |
+|---|---|
+| `取图、按键、内存：botbase（USB）连接失败` | 连不上 Switch，前面写的是用 botbase 的那几类，括号里是 USB 或 WiFi，后面是原来的报错 |
+| `内存：这个脚本要读内存` | 脚本要读内存，`.env` 的 `MEMORY` 不能是 `none`。连接之前就会报 |
+| `取图：` | 取不到画面、画面是空的、不是图片，或者宽高比不是 16:9（报错里有实际的宽高）。画面全黑不报错，只在终端打一条警告，可能是没有画面输出 |
+| `内存：` | 读不到前台游戏的 Title ID，或者没有游戏在运行，或者前台不是这个脚本的游戏（报错里有读到的 Title ID） |
+| `按键：` | 只有 `run` 检查：按一下 HOME，画面没有变化，按键可能没有送到，或者取图和按键接的不是同一台 Switch。检查会按两次 HOME，第一次让画面切到 HOME 或回到游戏，第二次切回来 |
+
+`restart` 不检查游戏，也不按 HOME：重启时游戏可能已经崩了。
+
 ## 流程
 
 `control-switch run` 按名字找到脚本，从脚本的起点开始一步一步跑，每一步返回下一步的名字。
@@ -70,7 +84,7 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 | 步骤 | 文件 | 做什么 |
 |---|---|---|
-| initialize | `src/control_switch/games/swsh/lair/steps/initialize.py` | 确认前台是剑/盾，把游戏带到科学家面前 |
+| initialize | `src/control_switch/games/swsh/lair/steps/initialize.py` | 把游戏带到科学家面前 |
 | join | `src/control_switch/games/swsh/lair/steps/join.py` | 选神兽，选初始租借宝可梦，读路线图并规划路线 |
 | path | `src/control_switch/games/swsh/lair/steps/path.py` | 处理路线上的岔路口、背包客、研究员、树果，直到进入战斗 |
 | battle | `src/control_switch/games/swsh/lair/steps/battle.py` | 选招式、决定要不要极巨化、记录天气场地和倒下次数 |
@@ -85,7 +99,7 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 | 步骤 | 做什么 |
 |---|---|
-| initialize | 确认前台是朱/紫，找到内存里的存档块表 |
+| initialize | 找到内存里的存档块表 |
 | knockout | 存档，重启游戏，停在标题画面时把所有大量出现的击败数改满，再进游戏。配置里可以关掉 |
 | refresh | 开野餐再收起，身边的宝可梦重新生成 |
 | scan | 存档，读内存里身边的宝可梦。有要找的闪光就截图、推送并结束，没有就回到 refresh |
@@ -100,9 +114,11 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 | `src/control_switch/session.py` | `Session`：配置、当前步骤、这一局的截图、通知，以及取图、按键、读写内存的设备 |
 | `src/control_switch/settings.py` | `Settings`：集中读环境变量和 `.env`，其他地方不再读 |
 | `src/control_switch/device/factory.py` | `create_devices`：按 `SCREEN`、`CONTROLLER`、`MEMORY` 创建设备 |
+| `src/control_switch/device/check.py` | `check_requires`、`check_devices`：启动时检查设备 |
+| `src/control_switch/flow/check.py` | `check_controller_reaches_screen`：启动时按两次 HOME，确认按键送到了画面上的这台 Switch |
 | `src/control_switch/device/base.py` | 设备的三个接口：`Screen`（取图）、`Controller`（按键）、`Memory`（读写内存）；`botbase.py` 是它们的实现 |
 | `src/control_switch` | 所有游戏共用：连接 Switch（`device`）、看图（`vision`）、等画面、菜单、重启（`flow`）、日志、推送、PKHeX 请求、通用配置、类型 |
-| `src/control_switch/games/registry.py` | 脚本表。加脚本时要在脚本的 `__init__.py` 里写 `STEPS`、`START`、`SESSION`，再在脚本表里加一行 |
+| `src/control_switch/games/registry.py` | 脚本表。加脚本时要在脚本的 `__init__.py` 里写 `STEPS`、`START`、`SESSION`、`REQUIRES`、`TITLE_IDS`，再在脚本表里加一行 |
 | `src/control_switch/games/swsh` | 剑盾的脚本共用的东西：对战打分、宝可梦类型、PK8 读取 |
 | `src/control_switch/games/swsh/lair` | 极巨大冒险：步骤、配置、状态、数据加载和路线图 |
 | `src/control_switch/games/sv` | 朱紫的脚本共用的东西：指针、读写存档块（`blocks.py`）、存档和野餐的操作（`actions.py`） |
