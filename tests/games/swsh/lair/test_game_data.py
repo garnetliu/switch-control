@@ -33,8 +33,11 @@ CAUGHT = (
 
 
 def make_data(**attributes: object) -> GameData:
-    """用子类改了几项配置的 GameData：已抓名单固定，其余按传进来的值改。"""
-    values: dict[str, object] = {"lair_caught": CAUGHT}
+    """用子类改了几项配置的 GameData：已抓名单固定、按剑的存档算，其余按传进来的值改。"""
+    values: dict[str, object] = {
+        "lair_caught": CAUGHT,
+        "lair_other_version": GameConfig.lair_version_exclusives["0100ABF008968000"],
+    }
     values.update(attributes)
     config_class = type("TmpConfig", (GameConfig,), values)
     return GameData(config_class())

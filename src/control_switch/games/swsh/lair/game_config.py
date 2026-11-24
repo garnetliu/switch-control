@@ -387,17 +387,33 @@ class GameConfig(BaseConfig):
     # 验证：还剩 25 只时 85 张图、抓了超梦后 36 张图、抓了卡璞・哞哞后 14 张图的租借全部对得上；
     # 11-19 选「不指定」打了两局，首领是艾姆利多（第 12 只）和卡璞・蝶蝶（第 22 只），都和算的一样。
     #
-    # 另一个版本（盾）限定的 8 只，这个存档遇不到
-    lair_other_version: tuple[str, ...] = (
-        "lugia",
-        "latias",
-        "kyogre",
-        "palkia",
-        "thundurus-incarnate",
-        "zekrom",
-        "yveltal",
-        "lunala",
-    )
+    # 剑、盾各自遇不到的神兽：另一个版本限定的 8 只，按 Title ID 取
+    lair_version_exclusives: ClassVar[dict[str, tuple[str, ...]]] = {
+        # 剑遇不到盾限定的
+        "0100ABF008968000": (
+            "lugia",
+            "latias",
+            "kyogre",
+            "palkia",
+            "thundurus-incarnate",
+            "zekrom",
+            "yveltal",
+            "lunala",
+        ),
+        # 盾遇不到剑限定的
+        "01008DB008C2C000": (
+            "ho-oh",
+            "latios",
+            "groudon",
+            "dialga",
+            "tornadus-incarnate",
+            "reshiram",
+            "xerneas",
+            "solgaleo",
+        ),
+    }
+    # 这个存档遇不到的那 8 只：LairSession 启动时读游戏的 Title ID，从 lair_version_exclusives 取
+    lair_other_version: tuple[str, ...] = ()
     # 究极异兽 9 只和奈克洛兹玛：没解锁时遇不到，奈克洛兹玛是跟究极异兽一起解锁的
     lair_ultra_beasts: tuple[str, ...] = (
         "necrozma",

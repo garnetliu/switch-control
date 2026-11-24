@@ -18,6 +18,10 @@ class LairSession(Session):
 
     def __init__(self, settings: Settings, devices: Devices):
         super().__init__(GameConfig(), settings, devices)
+        title_id = self.memory.title_id().strip().upper()
+        if title_id not in self.config.lair_version_exclusives:
+            raise RuntimeError(f"不是剑或盾，Title ID 是 {title_id!r}")
+        self.config.lair_other_version = self.config.lair_version_exclusives[title_id]
         self.game = GameState(self.config, keep_path=settings.keep_path)
         self.data = GameData(self.config)
         self.pkhex = Pk8Reader(Pkhex(settings.pkhex_api_url), self.memory.peek)

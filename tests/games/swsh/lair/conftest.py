@@ -39,6 +39,8 @@ class FixedConfig(GameConfig):
         "tornadus-incarnate",
         "tapu-lele",
     )
+    # 剑的存档：遇不到盾限定的 8 只
+    lair_other_version = GameConfig.lair_version_exclusives["0100ABF008968000"]
     lair_first_draw_top = 20
     dynamax_turns = 3
     dynamax_wait = 3
