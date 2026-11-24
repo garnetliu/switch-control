@@ -1,11 +1,12 @@
 # control-switch
 
-用电脑控制已装大气层的 Switch，自动刷闪光宝可梦。现在有两个脚本：
+用电脑控制已装大气层的 Switch，自动刷闪光宝可梦。现在有三个脚本：
 
 | 脚本 | 游戏 | 刷什么 |
 |---|---|---|
 | `swsh/lair` | 《宝可梦 剑/盾》 | 极巨大冒险里的闪光神兽 |
 | `sv/outbreak` | 《宝可梦 朱/紫》 | 大量出现里的闪光宝可梦 |
+| `sv/egg` | 《宝可梦 朱/紫》 | 孵蛋刷闪光 |
 
 Switch 上要装 usb-botbase（USB 连接）或 sys-botbase（WiFi 连接，TCP 6000）。
 
@@ -52,13 +53,33 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 全部变量和说明都在 `.env.example` 里，复制成 `.env` 再改。所有环境变量都在 `src/control_switch/settings.py` 里读，其他地方用传进来的 `Settings`。
 
-`SCREEN`（`botbase`、`capture`）、`CONTROLLER`（`botbase`、`serial`）、`MEMORY`（`botbase`、`none`）决定画面、按键、读写内存各用哪种设备，不写都是 `botbase`，由 `device/factory.py` 创建；选了 `botbase` 的共用同一个连接。`capture` 还没有实现，写了会报错退出。写错值也会报错退出，并说明可以写什么。
+`SCREEN`（`botbase`、`capture`）、`CONTROLLER`（`botbase`、`serial`）、`MEMORY`（`botbase`、`none`）决定画面、按键、读写内存各用哪种设备，不写都是 `botbase`，由 `device/factory.py` 创建；选了 `botbase` 的共用同一个连接。`capture` 是用采集卡取图，见下面「采集卡」。写错值也会报错退出，并说明可以写什么。
 
 连接和通知之外，还有一个开关，只有极巨大冒险用，不写就是关：
 
 | 变量 | 作用 |
 |---|---|
 | `KEEP_PATH` | 设成 `1` 才开启。一局没刷到闪光、打赢并且倒下次数和用时都在范围内时，重启游戏保留这张图（keep path）。重启要付极矿石，矿石不够时不要开 |
+
+## 采集卡
+
+没破解的 Switch 也能用采集卡取图，画面原样 1920×1080，不缩小。接法：Switch 插在底座上，底座的 HDMI 接采集卡，采集卡的 USB 插电脑。`.env` 里写：
+
+```
+SCREEN=capture
+# 采集卡的序号，不写是 0
+CAPTURE_DEVICE=0
+```
+
+序号由系统排，插着采集卡时一般是 0，有 OBS 虚拟摄像头之类的设备时可能会变，插拔设备后也可能变。要给终端摄像头权限（系统设置 → 隐私与安全性 → 摄像头）。按键、内存这一项不变，没破解的 Switch 连不了 botbase，要同时写 `CONTROLLER=serial`、`MEMORY=none`，这时不会去连 botbase。
+
+常见报错：
+
+| 报错 | 意思 |
+|---|---|
+| `取图：采集卡打不开` | 采集卡没插好，或者 `CAPTURE_DEVICE` 的序号不对 |
+| `取图：采集卡打开了但读不到画面` | 终端没有摄像头权限 |
+| 日志警告 `采集卡的画面是 … 不是 1920×1080` | 序号可能指到了别的摄像头，换个 `CAPTURE_DEVICE` |
 
 ## 启动时的检查
 
@@ -106,6 +127,40 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 刷到闪光时已经存过档，那只宝可梦在存档里，没抓到重启游戏它还在。还没有做三明治这一步。
 
+### 朱紫孵蛋 `sv/egg`
+
+自动开野餐、做三明治、从篮子收蛋、孵蛋、看孵出来的宝可梦，直到孵出闪光；闪光会推送到 Discord 并存档停下。不是闪光的放生，个体比队伍里亲代好的换掉亲代。只用取图和按键，不读内存，没破解的 Switch 也能跑。
+
+`.env` 这样写：
+
+```
+SCREEN=capture
+CONTROLLER=serial
+MEMORY=none
+SERIAL_PORT=/dev/cu.usbserial-xxxx
+```
+
+游戏里要先准备好：
+
+- 人站在野外空地，没有骑坐骑，前面没有障碍。
+- 队伍第 1 格是有「火焰之躯」的宝可梦，第 2 格百变怪，第 3 格爱吃豚（亲代），第 4–6 格空着。
+- 放蛋的盒子（默认 21、22、23，配置里的 `egg_boxes`）有足够的空格，打开盒子时停在第一个上。
+- 设置：语速快、自动记录关、跳过学习招式开、镜头辅助开。
+- 包里有超级花生酱三明治（食谱 17）的材料：香蕉、花生酱、黄油。
+
+开始：`make start script=sv/egg`。配置在 `src/control_switch/games/sv/egg/config.py`，按键路线和等待时间不对的在这里调。
+
+| 步骤 | 做什么 |
+|---|---|
+| initialize | 读亲代的「最棒」项数，检查队伍第 4–6 格 |
+| picnic | 开野餐 |
+| sandwich | 做超级花生酱三明治 |
+| to_basket | 走到篮子前 |
+| collect | 隔一会儿查一次篮子领蛋，收够了或三明治快失效就收野餐 |
+| hatch_load | 在盒子里找蛋，三个一组放进队伍 |
+| hatch_walk | 骑坐骑绕圈孵蛋，遇到野生宝可梦就逃走 |
+| check | 看孵出来的：闪光推送并存档停下，个体好的换亲代，其余放生 |
+
 ### 用单片机按键
 
 `CONTROLLER=serial` 时，按键由单片机（伊机控固件）发出，没破解的 Switch 也能按。取图、内存不变。
@@ -129,6 +184,7 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 | `src/control_switch/session.py` | `Session`：配置、当前步骤、这一局的截图、通知，以及取图、按键、读写内存的设备 |
 | `src/control_switch/settings.py` | `Settings`：集中读环境变量和 `.env`，其他地方不再读 |
 | `src/control_switch/device/factory.py` | `create_devices`：按 `SCREEN`、`CONTROLLER`、`MEMORY` 创建设备 |
+| `src/control_switch/device/capture_card.py` | `CaptureCard`、`open_capture_card`：用采集卡取图，`SCREEN=capture` 时用 |
 | `src/control_switch/device/serial_pad.py` | `SerialPad`、`open_serial_pad`：用单片机按键，`CONTROLLER=serial` 时用 |
 | `src/control_switch/device/check.py` | `check_requires`、`check_devices`：启动时检查设备 |
 | `src/control_switch/flow/check.py` | `check_controller_reaches_screen`：启动时按两次 HOME，确认按键送到了画面上的这台 Switch |
@@ -139,10 +195,11 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 | `src/control_switch/games/swsh/lair` | 极巨大冒险：步骤、配置、状态、数据加载和路线图 |
 | `src/control_switch/games/sv` | 朱紫的脚本共用的东西：指针、读写存档块（`blocks.py`）、存档和野餐的操作（`actions.py`） |
 | `src/control_switch/games/sv/outbreak` | 大量出现刷闪：步骤和配置 |
+| `src/control_switch/games/sv/egg` | 孵蛋刷闪：步骤、配置、画面判断（`screens.py`）、盒子里的操作（`box.py`） |
 | `scripts` | 不属于包的脚本：找 Switch、离线算 seed 和伤害表 |
 | `data/swsh` | 剑盾的宝可梦、招式、路线和图片数据 |
 | `run` | 极巨大冒险这一局的状态 `game.yaml`，用来断线恢复和 keep path |
 | `catches` | 闪光宝可梦的截图 |
-| `logs` | 日志和截图，每个脚本一个目录：`logs/swsh-lair/`、`logs/sv-outbreak/`。截图平时只放在内存里，程序出错时才把这一局的截图写进这个目录下的 `failed/`。极巨大冒险不是闪光的战果截图在 `logs/swsh-lair/results/` |
+| `logs` | 日志和截图，每个脚本一个目录：`logs/swsh-lair/`、`logs/sv-outbreak/`、`logs/sv-egg/`。截图平时只放在内存里，程序出错时才把这一局的截图写进这个目录下的 `failed/`。极巨大冒险不是闪光的战果截图在 `logs/swsh-lair/results/` |
 | `docs` | 实测记录和待测试的事项 |
 | `docker` | PKHeX 服务的容器 |

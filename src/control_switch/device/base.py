@@ -26,6 +26,22 @@ class Controller(Protocol):
         """把摇杆推到 (x, y)，保持 hold 秒，再回中。"""
         ...
 
+    def press(self, button: str) -> None:
+        """按住按键，直到 release。"""
+        ...
+
+    def release(self, button: str) -> None:
+        """松开按键。"""
+        ...
+
+    def press_stick(self, side: str, x: int, y: int) -> None:
+        """把摇杆推到 (x, y) 并一直保持，直到 release_stick。"""
+        ...
+
+    def release_stick(self, side: str) -> None:
+        """摇杆回中。"""
+        ...
+
     def close(self) -> None: ...
 
 

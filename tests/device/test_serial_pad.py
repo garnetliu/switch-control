@@ -278,6 +278,126 @@ def test_second_click_waits_when_previous_neutral_was_just_sent(clock: Clock) ->
     assert port.write_times[2] - port.write_times[1] >= MIN_GAP - 1e-9
 
 
+# ---------- press / release / press_stick / release_stick ----------
+
+A_ONLY = [0x00, 0x04, 8, 128, 128, 128, 128]
+
+
+def test_press_a_writes_packet_with_a_button(clock: Clock) -> None:
+    """press("A")：写出的报文按钮是 A（0x04），十字键居中、摇杆居中；只写了这一个报文。"""
+    pad, port = make_pad(clock)
+    pad.press("A")
+    assert [unpack(packet) for packet in port.writes] == [A_ONLY]
+
+
+def test_click_while_a_held_presses_a_and_b_then_releases_back_to_a(clock: Clock) -> None:
+    """press("A") 之后 click("B", 0)：按下的报文按钮是 A|B（0x06），松开的报文按钮是 A，不是中立。"""
+    pad, port = make_pad(clock)
+    pad.press("A")
+    pad.click("B", 0)
+    assert [unpack(packet) for packet in port.writes[1:]] == [
+        [0x00, 0x06, 8, 128, 128, 128, 128],
+        A_ONLY,
+    ]
+
+
+def test_click_hat_while_a_held_keeps_a_in_both_packets(clock: Clock) -> None:
+    """press("A") 之后 click("DDOWN", 0)：按下的报文是 A 加十字键下（HAT 4），松开的报文是 A、十字键居中。"""
+    pad, port = make_pad(clock)
+    pad.press("A")
+    pad.click("DDOWN", 0)
+    assert [unpack(packet) for packet in port.writes[1:]] == [
+        [0x00, 0x04, 4, 128, 128, 128, 128],
+        A_ONLY,
+    ]
+
+
+def test_press_two_buttons_combines_them(clock: Clock) -> None:
+    """press("A")、press("LSTICK")：第二个报文的按钮是 A|LSTICK（0x0404）。"""
+    pad, port = make_pad(clock)
+    pad.press("A")
+    pad.press("LSTICK")
+    assert unpack(port.writes[-1]) == [0x04, 0x04, 8, 128, 128, 128, 128]
+
+
+def test_press_stick_left_up_then_click_carries_ly_1(clock: Clock) -> None:
+    """press_stick("LEFT", 0, 0x7FFF) 之后 click("A", 0)：按下和松开的两个报文 LY 都是 1，
+    按下的报文按钮是 A，松开的报文按钮是 0。
+    """
+    pad, port = make_pad(clock)
+    pad.press_stick("LEFT", 0, 0x7FFF)
+    pad.click("A", 0)
+    assert [unpack(packet) for packet in port.writes[1:]] == [
+        [0x00, 0x04, 8, 128, 1, 128, 128],
+        [0x00, 0x00, 8, 128, 1, 128, 128],
+    ]
+
+
+def test_press_stick_writes_packet_with_stick_position(clock: Clock) -> None:
+    """press_stick("RIGHT", 0x7FFF, 0)：写出的报文 RX=255、RY=128，LX、LY 保持 128。"""
+    pad, port = make_pad(clock)
+    pad.press_stick("RIGHT", 0x7FFF, 0)
+    assert unpack(port.writes[-1]) == [0, 0, 8, 128, 128, 255, 128]
+
+
+def test_stick_while_other_stick_held_keeps_the_held_one(clock: Clock) -> None:
+    """press_stick("RIGHT", 0x7FFF, 0) 之后 stick("LEFT", 0, 0x7FFF, 0)：
+    推的报文 LY=1 且 RX 仍是 255；回中的报文回到「按住的状态」，LY=128、RX 仍是 255，不是全中立。
+    """
+    pad, port = make_pad(clock)
+    pad.press_stick("RIGHT", 0x7FFF, 0)
+    pad.stick("LEFT", 0, 0x7FFF, 0)
+    assert [unpack(packet) for packet in port.writes[1:]] == [
+        [0, 0, 8, 128, 1, 255, 128],
+        [0, 0, 8, 128, 128, 255, 128],
+    ]
+
+
+def test_release_button_and_stick_return_to_neutral(clock: Clock) -> None:
+    """press("A")、press_stick("LEFT", 0, 0x7FFF) 之后 release("A")、release_stick("LEFT")：
+    最后写出的报文是中立报文；再 click("B", 0)，松开的报文也是中立。
+    """
+    pad, port = make_pad(clock)
+    pad.press("A")
+    pad.press_stick("LEFT", 0, 0x7FFF)
+    pad.release("A")
+    pad.release_stick("LEFT")
+    assert port.writes[-1] == NEUTRAL
+    pad.click("B", 0)
+    assert [unpack(packet) for packet in port.writes[-2:]] == [
+        [0x00, 0x02, 8, 128, 128, 128, 128],
+        [0x00, 0x00, 8, 128, 128, 128, 128],
+    ]
+
+
+def test_release_a_keeps_held_stick(clock: Clock) -> None:
+    """press("A")、press_stick("LEFT", 0, 0x7FFF) 之后只 release("A")：最后的报文按钮是 0，LY 仍是 1。"""
+    pad, port = make_pad(clock)
+    pad.press("A")
+    pad.press_stick("LEFT", 0, 0x7FFF)
+    pad.release("A")
+    assert unpack(port.writes[-1]) == [0, 0, 8, 128, 1, 128, 128]
+
+
+def test_release_stick_keeps_held_button(clock: Clock) -> None:
+    """press("A")、press_stick("LEFT", 0, 0x7FFF) 之后只 release_stick("LEFT")：最后的报文按钮仍是 A，LY 回到 128。"""
+    pad, port = make_pad(clock)
+    pad.press("A")
+    pad.press_stick("LEFT", 0, 0x7FFF)
+    pad.release_stick("LEFT")
+    assert unpack(port.writes[-1]) == A_ONLY
+
+
+def test_close_while_holding_sends_neutral_not_held_state(clock: Clock) -> None:
+    """press("A")、press_stick("LEFT", 0, 0x7FFF) 之后 close()：最后一个报文是全中立，串口关了一次。"""
+    pad, port = make_pad(clock)
+    pad.press("A")
+    pad.press_stick("LEFT", 0, 0x7FFF)
+    pad.close()
+    assert port.writes[-1] == NEUTRAL
+    assert port.close_calls == 1
+
+
 # ---------- close ----------
 
 
@@ -565,3 +685,22 @@ def test_open_serial_pad_does_not_register_atexit_when_port_cannot_open(
     with pytest.raises(DeviceCheckError):
         open_serial_pad(load_settings({"SERIAL_PORT": "/dev/cu.usbserial-1"}))
     assert registered == []
+
+
+@pytest.mark.parametrize("call", ["press", "release"])
+def test_press_and_release_unknown_button_raise_value_error_naming_it(
+    call: str, clock: Clock
+) -> None:
+    """press、release 传了不认识的按键名：抛 ValueError，报错里有这个名字，不发报文。"""
+    pad, port = make_pad(clock)
+    sent = len(port.writes)
+    with pytest.raises(ValueError, match="ZZ"):
+        getattr(pad, call)("ZZ")
+    assert len(port.writes) == sent
+
+
+def test_release_stick_wrong_side_raises_value_error(clock: Clock) -> None:
+    """release_stick 传了 LEFT、RIGHT 以外的：抛 ValueError。"""
+    pad, _ = make_pad(clock)
+    with pytest.raises(ValueError, match="LEFT 或 RIGHT"):
+        pad.release_stick("UP")

@@ -53,6 +53,18 @@ class Session:
     def stick(self, side: str, x: int, y: int, hold: float) -> None:
         self.controller.stick(side, x, y, hold)
 
+    def press(self, button: str) -> None:
+        self.controller.press(button)
+
+    def release(self, button: str) -> None:
+        self.controller.release(button)
+
+    def press_stick(self, side: str, x: int, y: int) -> None:
+        self.controller.press_stick(side, x, y)
+
+    def release_stick(self, side: str) -> None:
+        self.controller.release_stick(side)
+
     def pixel_peek(self) -> bytes:
         return self.screen.pixel_peek()
 

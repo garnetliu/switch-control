@@ -8,6 +8,7 @@ from types import ModuleType
 SCRIPTS = {
     "swsh/lair": "control_switch.games.swsh.lair",
     "sv/outbreak": "control_switch.games.sv.outbreak",
+    "sv/egg": "control_switch.games.sv.egg",
 }
 
 

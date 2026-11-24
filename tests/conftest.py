@@ -9,6 +9,7 @@
 import logging
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -64,16 +65,37 @@ class FakeController:
         self.delays: list[float] = []
         # 每次摇杆操作：(side, x, y, hold)
         self.sticks: list[tuple[str, int, int, float]] = []
+        # 所有操作按调用顺序：("click", 键)、("stick", side, x, y, hold)、("press", 键)、
+        # ("release", 键)、("press_stick", side, x, y)、("release_stick", side)
+        self.events: list[tuple[Any, ...]] = []
         self.close_calls = 0
 
     def click(self, button: str, delay: float = 0.15) -> None:
         """记下按过的键，不等待。"""
         self.pressed.append(button)
         self.delays.append(delay)
+        self.events.append(("click", button))
 
     def stick(self, side: str, x: int, y: int, hold: float) -> None:
         """记下摇杆操作，不等待。"""
         self.sticks.append((side, x, y, hold))
+        self.events.append(("stick", side, x, y, hold))
+
+    def press(self, button: str) -> None:
+        """记下按住，不等待。"""
+        self.events.append(("press", button))
+
+    def release(self, button: str) -> None:
+        """记下松开，不等待。"""
+        self.events.append(("release", button))
+
+    def press_stick(self, side: str, x: int, y: int) -> None:
+        """记下摇杆推到 (x, y) 并保持，不等待。"""
+        self.events.append(("press_stick", side, x, y))
+
+    def release_stick(self, side: str) -> None:
+        """记下摇杆回中，不等待。"""
+        self.events.append(("release_stick", side))
 
     def close(self) -> None:
         """记下调用次数。"""

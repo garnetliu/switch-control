@@ -37,6 +37,22 @@ def test_stick_sends_push_then_center(make_connection: ConnectionFactory) -> Non
     assert connection.sent == ["setStick LEFT 0x7fff -0x7fff", "setStick LEFT 0x0 0x0"]
 
 
+def test_press_sends_press_command(make_connection: ConnectionFactory) -> None:
+    """press("A")：只发 "press A"，不发 release，没有别的命令。"""
+    connection = make_connection()
+    Botbase(connection).press("A")
+    assert connection.sent == ["press A"]
+    assert connection.requested == []
+
+
+def test_release_sends_release_command(make_connection: ConnectionFactory) -> None:
+    """release("A")：只发 "release A"，没有别的命令。"""
+    connection = make_connection()
+    Botbase(connection).release("A")
+    assert connection.sent == ["release A"]
+    assert connection.requested == []
+
+
 def test_press_stick_sends_only_the_push_command(make_connection: ConnectionFactory) -> None:
     """press_stick("RIGHT", 0x10, 0)：只发推摇杆的命令，不回中。"""
     connection = make_connection()

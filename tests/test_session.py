@@ -30,6 +30,18 @@ class AllInOne:
     def stick(self, side: str, x: int, y: int, hold: float) -> None:
         pass
 
+    def press(self, button: str) -> None:
+        pass
+
+    def release(self, button: str) -> None:
+        pass
+
+    def press_stick(self, side: str, x: int, y: int) -> None:
+        pass
+
+    def release_stick(self, side: str) -> None:
+        pass
+
     def title_id(self) -> str:
         return ""
 
@@ -74,6 +86,50 @@ def test_stick_is_forwarded_to_controller(
     )
     session.stick("LEFT", 100, -200, 0.08)
     assert controller.sticks == [("LEFT", 100, -200, 0.08)]
+
+
+def test_press_is_forwarded_to_controller(
+    make_screen: ScreenFactory, make_memory: MemoryFactory, controller: Any
+) -> None:
+    """press("A")：转给 controller，按键原样传过去。"""
+    session = Session(
+        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
+    )
+    session.press("A")
+    assert controller.events == [("press", "A")]
+
+
+def test_release_is_forwarded_to_controller(
+    make_screen: ScreenFactory, make_memory: MemoryFactory, controller: Any
+) -> None:
+    """release("A")：转给 controller，按键原样传过去。"""
+    session = Session(
+        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
+    )
+    session.release("A")
+    assert controller.events == [("release", "A")]
+
+
+def test_press_stick_is_forwarded_to_controller(
+    make_screen: ScreenFactory, make_memory: MemoryFactory, controller: Any
+) -> None:
+    """press_stick("RIGHT", 100, -200)：转给 controller，三个参数原样传过去。"""
+    session = Session(
+        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
+    )
+    session.press_stick("RIGHT", 100, -200)
+    assert controller.events == [("press_stick", "RIGHT", 100, -200)]
+
+
+def test_release_stick_is_forwarded_to_controller(
+    make_screen: ScreenFactory, make_memory: MemoryFactory, controller: Any
+) -> None:
+    """release_stick("RIGHT")：转给 controller，side 原样传过去。"""
+    session = Session(
+        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
+    )
+    session.release_stick("RIGHT")
+    assert controller.events == [("release_stick", "RIGHT")]
 
 
 def test_pixel_peek_returns_image_of_screen(

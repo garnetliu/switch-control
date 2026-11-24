@@ -268,6 +268,14 @@ class Botbase:
         time.sleep(hold)
         self._send(f"setStick {side} 0x0 0x0")
 
+    def press(self, button: str):
+        """按住按键，直到 release。"""
+        self._send(f"press {button}")
+
+    def release(self, button: str):
+        """松开按键。"""
+        self._send(f"release {button}")
+
     def press_stick(self, side: str, x: int, y: int):
         """把摇杆推到 (x, y) 并一直保持，直到 release_stick。参数同 stick。"""
         self._send(f"setStick {side} {_hex(x)} {_hex(y)}")

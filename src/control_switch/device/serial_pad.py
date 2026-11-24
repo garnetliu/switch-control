@@ -92,6 +92,13 @@ def _axis(value: int, *, up_is_positive: bool = False) -> int:
     return min(255, max(0, round(_AXIS_CENTER + value * 127 / 0x7FFF)))
 
 
+def _stick_position(side: str, x: int, y: int) -> tuple[int, int]:
+    """摇杆坐标换成报文里的 (x, y)，side 不对抛 ValueError。"""
+    if side not in ("LEFT", "RIGHT"):
+        raise ValueError(f"side 只能是 LEFT 或 RIGHT，现在是 {side}")
+    return _axis(x), _axis(y, up_is_positive=True)
+
+
 def _describe(reply: bytes) -> str:
     return reply.hex().upper() if reply else "空"
 
@@ -103,32 +110,73 @@ class SerialPad:
         self._port = port
         self._last_sent: float | None = None
         self._closed = False
+        # press、press_stick 按住的按键和摇杆，之后每个报文都带上
+        self._held_buttons = 0
+        self._held_sticks: dict[str, tuple[int, int]] = {}
+
+    def _packet(
+        self,
+        extra_buttons: int = 0,
+        hat: int = _HAT_CENTER,
+        extra_stick: tuple[str, tuple[int, int]] | None = None,
+    ) -> bytes:
+        """按住的状态加上这一次的按键、十字键、摇杆，做成一个报文。"""
+        sticks = dict(self._held_sticks)
+        if extra_stick is not None:
+            sticks[extra_stick[0]] = extra_stick[1]
+        center = (_AXIS_CENTER, _AXIS_CENTER)
+        return _report(
+            buttons=self._held_buttons | extra_buttons,
+            hat=hat,
+            left=sticks.get("LEFT", center),
+            right=sticks.get("RIGHT", center),
+        )
 
     def click(self, button: str, delay: float = 0.15) -> None:
-        """发按下的报文，等 PRESS_TIME，发中立报文，再等 delay 秒。"""
+        """发按下的报文，等 PRESS_TIME，发松开的报文（回到按住的状态），再等 delay 秒。"""
         if button in _BUTTONS:
-            packet = _report(buttons=_BUTTONS[button])
+            packet = self._packet(extra_buttons=_BUTTONS[button])
         elif button in _HATS:
-            packet = _report(hat=_HATS[button])
+            packet = self._packet(hat=_HATS[button])
         else:
             raise ValueError(f"不认识的按键名：{button}")
         self._send(packet)
         time.sleep(PRESS_TIME)
-        self._send(_NEUTRAL)
+        self._send(self._packet())
         time.sleep(delay)
 
     def stick(self, side: str, x: int, y: int, hold: float) -> None:
         """把摇杆推到 (x, y)，保持 hold 秒，再回中。y 正数向上。"""
+        position = _stick_position(side, x, y)
+        self._send(self._packet(extra_stick=(side, position)))
+        time.sleep(hold)
+        self._send(self._packet())
+
+    def press(self, button: str) -> None:
+        """按住按键，直到 release。"""
+        if button not in _BUTTONS:
+            raise ValueError(f"不认识的按键名：{button}")
+        self._held_buttons |= _BUTTONS[button]
+        self._send(self._packet())
+
+    def release(self, button: str) -> None:
+        """松开按键。"""
+        if button not in _BUTTONS:
+            raise ValueError(f"不认识的按键名：{button}")
+        self._held_buttons &= ~_BUTTONS[button]
+        self._send(self._packet())
+
+    def press_stick(self, side: str, x: int, y: int) -> None:
+        """把摇杆推到 (x, y) 并一直保持，直到 release_stick。y 正数向上。"""
+        self._held_sticks[side] = _stick_position(side, x, y)
+        self._send(self._packet())
+
+    def release_stick(self, side: str) -> None:
+        """摇杆回中。"""
         if side not in ("LEFT", "RIGHT"):
             raise ValueError(f"side 只能是 LEFT 或 RIGHT，现在是 {side}")
-        position = (_axis(x), _axis(y, up_is_positive=True))
-        if side == "LEFT":
-            packet = _report(left=position)
-        else:
-            packet = _report(right=position)
-        self._send(packet)
-        time.sleep(hold)
-        self._send(_NEUTRAL)
+        self._held_sticks.pop(side, None)
+        self._send(self._packet())
 
     def close(self) -> None:
         """发一次中立报文（出错不管），再关串口，可以调多次。"""
