@@ -303,7 +303,7 @@ class GameConfig(BaseConfig):
     """极巨大冒险的配置。"""
 
     # 要找的传说宝可梦，数据文件里的 name_id；None 是在研究员那里选「不指定」，首领从 seed 算（Lair.boss）
-    boss: str | None = "tapu-lele"
+    boss: str | None = "articuno"
     # 数据文件和图片资源
     data_dir = ROOT / "data" / "swsh"
     # 运行状态快照：YAML 文件 run/game.yaml
