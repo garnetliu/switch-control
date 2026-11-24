@@ -71,12 +71,13 @@ SETTINGS_ENV_NAMES = (
     "KEEP_PATH",
     "SERIAL_PORT",
     "SERIAL_BAUD",
+    "CAPTURE_DEVICE",
 )
 
 
 @pytest.fixture(autouse=True)
 def clean_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """load_dotenv 换成什么都不读，Settings 读的 11 个环境变量都清掉：
+    """load_dotenv 换成什么都不读，Settings 读的环境变量都清掉：
     这个文件里的测试不读仓库里真实的 .env，也不受终端里设过的环境变量影响。
     """
     monkeypatch.setattr("control_switch.settings.load_dotenv", lambda *args, **kwargs: False)
@@ -597,4 +598,32 @@ def test_run_with_controller_serial_and_no_serial_port_exits_without_connecting_
         main(["run", "swsh/lair"])
     assert error.value.code not in (0, None)
     assert "SERIAL_PORT" in str(error.value.code)
+    assert botbase_connects == []
+
+
+def test_run_with_screen_capture_exits_with_message_when_card_cannot_open_without_connecting_botbase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SCREEN=capture，用真的 create_devices，open_capture_card 抛 DeviceCheckError：
+    main(["run", "swsh/lair"]) 抛 SystemExit，退出码不是 0，报错里有「取图」，没有连 botbase。
+    """
+    botbase_connects: list[object] = []
+
+    def connect_botbase(settings: object) -> None:
+        botbase_connects.append(settings)
+        raise AssertionError("不该连 botbase")
+
+    def open_capture_card(settings: object) -> None:
+        raise DeviceCheckError(
+            "取图：采集卡打不开（CAPTURE_DEVICE=0），检查采集卡有没有插好、序号对不对"
+        )
+
+    monkeypatch.setattr("control_switch.__main__.create_devices", real_create_devices)
+    monkeypatch.setattr("control_switch.device.factory.connect_botbase", connect_botbase)
+    monkeypatch.setattr("control_switch.device.factory.open_capture_card", open_capture_card)
+    monkeypatch.setenv("SCREEN", "capture")
+    with pytest.raises(SystemExit) as error:
+        main(["run", "swsh/lair"])
+    assert error.value.code not in (0, None)
+    assert "取图" in str(error.value.code)
     assert botbase_connects == []

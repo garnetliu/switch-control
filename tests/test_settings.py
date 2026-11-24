@@ -102,6 +102,7 @@ def test_optional_string_values_are_passed_through() -> None:
         "KEEP_PATH",
         "SERIAL_PORT",
         "SERIAL_BAUD",
+        "CAPTURE_DEVICE",
     ],
 )
 def test_empty_string_is_same_as_not_set(name: str) -> None:
@@ -134,3 +135,23 @@ def test_non_numeric_serial_baud_raises_value_error_naming_serial_baud() -> None
     with pytest.raises(ValueError) as error:
         load_settings({"SERIAL_BAUD": "abc"})
     assert "SERIAL_BAUD" in str(error.value)
+
+
+def test_capture_device_defaults_to_0() -> None:
+    """CAPTURE_DEVICE 不写：得到整数 0。"""
+    assert load_settings({}).capture_device == 0
+
+
+def test_capture_device_is_converted_to_int() -> None:
+    """CAPTURE_DEVICE=2：得到整数 2。"""
+    device = load_settings({"CAPTURE_DEVICE": "2"}).capture_device
+    assert device == 2
+    assert isinstance(device, int)
+
+
+@pytest.mark.parametrize("text", ["abc", "-1"])
+def test_invalid_capture_device_raises_value_error_naming_capture_device(text: str) -> None:
+    """CAPTURE_DEVICE=abc（不是整数）或 -1（负数）：抛 ValueError，报错里有 CAPTURE_DEVICE。"""
+    with pytest.raises(ValueError) as error:
+        load_settings({"CAPTURE_DEVICE": text})
+    assert "CAPTURE_DEVICE" in str(error.value)

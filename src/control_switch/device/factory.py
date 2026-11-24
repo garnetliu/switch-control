@@ -5,7 +5,8 @@ from typing import NamedTuple
 from control_switch.settings import Settings
 
 from .base import Controller, Memory, Screen
-from .botbase import connect_botbase
+from .botbase import Botbase, connect_botbase
+from .capture_card import open_capture_card
 from .check import DeviceCheckError
 from .serial_pad import open_serial_pad
 
@@ -19,30 +20,50 @@ class Devices(NamedTuple):
 
 
 def create_devices(settings: Settings) -> Devices:
-    """按 settings 创建设备。还没有实现的先全部检查完再抛 NotImplementedError，不去连接。
+    """按 settings 创建设备。
 
-    先打开单片机再连 botbase；连 botbase 失败时先把单片机关掉。
-    现在 SCREEN 只能是 botbase，所以一定会连 botbase。
+    打开顺序：采集卡、单片机、botbase；后面的失败时先把前面已经打开的关掉再抛错。
+    取图、按键、内存都不用 botbase 时不连 botbase。
     """
-    if settings.screen != "botbase":
-        raise NotImplementedError("SCREEN 选的设备还没有实现，现在只能写 botbase")
-    controller = open_serial_pad(settings) if settings.controller == "serial" else None
-    used = [
-        label
-        for label, value in (
-            ("取图", settings.screen),
-            ("按键", settings.controller),
-            ("内存", settings.memory),
-        )
-        if value == "botbase"
-    ]
+    opened: list[Screen | Controller] = []
     try:
-        botbase = connect_botbase(settings)
-    except Exception as error:
+        screen = open_capture_card(settings) if settings.screen == "capture" else None
+        if screen is not None:
+            opened.append(screen)
+        controller = open_serial_pad(settings) if settings.controller == "serial" else None
         if controller is not None:
-            controller.close()
-        if not isinstance(error, OSError):
-            raise
+            opened.append(controller)
+        used = [
+            label
+            for label, value in (
+                ("取图", settings.screen),
+                ("按键", settings.controller),
+                ("内存", settings.memory),
+            )
+            if value == "botbase"
+        ]
+        botbase = _connect_if_used(settings, used)
+    except BaseException:
+        for device in opened:
+            device.close()
+        raise
+    return Devices(
+        screen or _required(botbase),
+        controller or _required(botbase),
+        None if settings.memory == "none" else _required(botbase),
+    )
+
+
+def _required(botbase: Botbase | None) -> Botbase:
+    assert botbase is not None
+    return botbase
+
+
+def _connect_if_used(settings: Settings, used: list[str]) -> Botbase | None:
+    if not used:
+        return None
+    try:
+        return connect_botbase(settings)
+    except OSError as error:
         way = "USB" if settings.switch_connection == "usb" else "WiFi"
         raise DeviceCheckError(f"{'、'.join(used)}：botbase（{way}）连接失败：{error}") from error
-    return Devices(botbase, controller or botbase, None if settings.memory == "none" else botbase)
