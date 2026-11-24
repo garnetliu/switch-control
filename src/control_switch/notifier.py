@@ -27,7 +27,7 @@ class Notifier:
     RETRY_WAIT = 30
     # 发文字、发图片的网络请求最多等几秒
     TEXT_TIMEOUT = 5
-    FILE_TIMEOUT = 20
+    FILE_TIMEOUT = 120
 
     def __init__(self, webhook_url: str | None = None):
         # Discord 频道的 Webhook 地址，没配置是 None
