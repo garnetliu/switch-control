@@ -61,33 +61,44 @@ def _select_target(sw: LairSession):
     返回选的是哪只神兽（name_id）。
 
     BOSS 不在菜单里（刷到闪光带走之后那只就不在列表里了，或者存档改过）时，改成选菜单的第一项，
-    这一局就刷它；菜单里全是「不指定」时抛 RuntimeError。
+    这一局就刷它。Lair note 里一只神兽都没记下时，研究员不问找哪只、没有传说菜单，
+    这一局就是不指定，返回 None。
     """
     rects = sw.config.rects
-    image = press_until(
-        sw,
-        lambda screen: (
-            menu_last_item(screen, rects.menu_search, dialog=rects.white_center_line1) == "不指定"
-        ),
-        "传说菜单",
-    )
     bosses = sw.data.boss_pokemon()
     boss, index = _select_boss(sw, sw.config.boss)
-    wanted = "不指定" if boss is None else bosses[boss].name()
-    if boss != sw.config.boss:
-        logging.warning(
-            f"Lair note 里没有「{bosses[cast(str, sw.config.boss)].name()}」，这一局改成刷「{wanted}」"
+    if index is None:
+        if sw.config.boss is not None:
+            logging.warning(
+                f"Lair note 里一只神兽都没有，没有传说菜单，"
+                f"这一局不刷「{bosses[sw.config.boss].name()}」，改成不指定"
+            )
+        else:
+            logging.info("Lair note 里一只神兽都没有，没有传说菜单，这一局不指定")
+    else:
+        image = press_until(
+            sw,
+            lambda screen: (
+                menu_last_item(screen, rects.menu_search, dialog=rects.white_center_line1)
+                == "不指定"
+            ),
+            "传说菜单",
         )
-    # 菜单顺序和 Lair note 一样，按位置选；菜单文字 OCR 会认错（「哞哞」读成「哗眸」）
-    move_menu_option(
-        sw,
-        image,
-        index,
-        lambda: sw.click("DDOWN", 0),
-        "选择传说Boss",
-        rects.menu_search,
-    )
-    logging.info(f"选择传说Boss选中了第 {index + 1} 项「{wanted}」")
+        wanted = "不指定" if boss is None else bosses[boss].name()
+        if boss != sw.config.boss:
+            logging.warning(
+                f"Lair note 里没有「{bosses[cast(str, sw.config.boss)].name()}」，这一局改成刷「{wanted}」"
+            )
+        # 菜单顺序和 Lair note 一样，按位置选；菜单文字 OCR 会认错（「哞哞」读成「哗眸」）
+        move_menu_option(
+            sw,
+            image,
+            index,
+            lambda: sw.click("DDOWN", 0),
+            "选择传说Boss",
+            rects.menu_search,
+        )
+        logging.info(f"选择传说Boss选中了第 {index + 1} 项「{wanted}」")
     # 选好传说之后：「要保存目前为止的冒险记录吗？」→「是 / 否」→ 选「是」保存。
     # 一直按 A 到画面变黑（保存中）就停，参考 lib/game.py 的 _enter_game
     press_until(sw, lambda screen: screen.is_black(), "保存时画面变黑")
@@ -348,10 +359,11 @@ def _move_starter_cursor(sw: LairSession) -> None:
     )
 
 
-def _select_boss(sw: LairSession, target: str | None) -> tuple[str | None, int]:
+def _select_boss(sw: LairSession, target: str | None) -> tuple[str | None, int | None]:
     """读四个 Lair note，返回 (要刷的 boss 的 name_id, 它在传说菜单里的下标)。
 
     菜单按 Lair note 的顺序列出里面的 boss（不是 boss 的 note 不出现），最后一项是「不指定」。
+    Lair note 里一只 boss 都没有时没有传说菜单，返回 (None, None)；
     target 是 None 就选「不指定」，返回的 name_id 也是 None，首领等读到 seed 再算；
     目标 target 还在就选它，不在就选菜单第一项。
     """
@@ -362,10 +374,10 @@ def _select_boss(sw: LairSession, target: str | None) -> tuple[str | None, int]:
     logging.debug(f"Lair notes: {species}")
     by_id = {boss.id_num: name_id for name_id, boss in sw.data.boss_pokemon().items()}
     menu = [by_id[number] for number in species if number in by_id]
+    if not menu:
+        return None, None
     if target is None:
         return None, len(menu)
-    if not menu:
-        raise RuntimeError(f"Lair note 里没有 boss：{species}")
     if target in menu:
         return target, menu.index(target)
     return menu[0], 0

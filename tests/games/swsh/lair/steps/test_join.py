@@ -215,6 +215,47 @@ def test_join_with_unspecified_boss_uses_boss_computed_from_seed(
     assert any("选的是不指定，按 seed 算这一局的首领是" in message for message in logged(caplog))
 
 
+def test_join_without_lair_notes_skips_legend_menu_and_uses_boss_computed_from_seed(
+    make_lair_session: SessionFactory,
+    starters: Starters,
+    fake_images: ImageFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    controller: Any,
+) -> None:
+    """四个 Lair note 都是 0（没有记下神兽的位置）：研究员不问找哪只，没有传说菜单。
+    配置里的首领是 tapu-lele 也改成不指定，日志里有警告；一直按 A 到保存时黑屏，进大厅选单人挑战，
+    首领按 seed 算（moltres），选的首发是第 2 位，按过的键是 A（对话）、A（大厅里确认）、DDOWN、A。
+    """
+    caplog.set_level(logging.DEBUG)
+    monkeypatch.setattr(module, "MapTypeReader", FakeReader)
+    sw = make_lair_session(
+        [
+            plain(fake_images),
+            black(fake_images),
+            lobby_menu(fake_images),
+            starter_screen(fake_images),
+            cursor(fake_images, 0),
+            cursor(fake_images, 0),
+            cursor(fake_images, 1),
+            plain(fake_images),
+            plain(fake_images),
+            fork_text(fake_images),
+        ],
+        data=notes_memory([0, 0, 0, 0]),
+    )
+    starters(sw)
+    legends_from_config(sw, monkeypatch)
+    assert join(sw) == "path"
+    assert controller.pressed == ["A", "A", "DDOWN", "A"]
+    assert sw.game.boss == "moltres"
+    messages = logged(caplog)
+    assert any(
+        "Lair note 里一只神兽都没有" in message and "改成不指定" in message for message in messages
+    )
+    assert not any("选择传说Boss选中了" in message for message in messages)
+
+
 def test_select_target_picks_first_menu_item_and_warns_when_configured_boss_is_not_in_menu(
     make_lair_session: SessionFactory,
     fake_images: ImageFactory,
@@ -379,21 +420,20 @@ def test_select_boss_returns_first_menu_item_when_target_is_not_in_menu(
     assert module._select_boss(sw, "mewtwo") == ("tapu-koko", 0)
 
 
-def test_select_boss_raises_runtime_error_when_menu_is_empty(
+def test_select_boss_returns_none_and_none_when_menu_is_empty(
     make_lair_session: SessionFactory,
 ) -> None:
-    """四个 Lair note 里没有 boss：抛 RuntimeError，报错里有「Lair note 里没有 boss」。"""
+    """四个 Lair note 里没有 boss（没有传说菜单）：target 是 tapu-lele 也返回 (None, None)，不抛错。"""
     sw = make_lair_session(data=notes_memory([0, 0, 0, 0]))
-    with pytest.raises(RuntimeError, match="Lair note 里没有 boss"):
-        module._select_boss(sw, "tapu-lele")
+    assert module._select_boss(sw, "tapu-lele") == (None, None)
 
 
-def test_select_boss_with_none_target_and_empty_menu_returns_index_zero(
+def test_select_boss_with_none_target_and_empty_menu_returns_none_and_none(
     make_lair_session: SessionFactory,
 ) -> None:
-    """target 是 None、菜单是空的：返回 (None, 0)，不抛错。"""
+    """target 是 None、菜单是空的：返回 (None, None)。"""
     sw = make_lair_session(data=notes_memory([0, 0, 0, 0]))
-    assert module._select_boss(sw, None) == (None, 0)
+    assert module._select_boss(sw, None) == (None, None)
 
 
 # ---------------------------------------------------------------- _read_seed
