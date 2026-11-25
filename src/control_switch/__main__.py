@@ -1,6 +1,6 @@
-"""命令行入口：control-switch run <游戏/脚本>、restart <机器>、find <机器>。
+"""命令行入口：control-switch run <游戏/脚本> [机器]、restart <机器>、find <机器>。
 
-run 按名字找到脚本，按 runs/switches.toml 找到它用的机器，创建连接，一步一步跑。
+run 按名字找到脚本，写了机器就用这台，没写按 runs/switches.toml 的 [scripts] 找，创建连接，一步一步跑。
 restart 重启这台机器上的游戏，回到游戏里可以操作为止，极巨大冒险途中重启下次要付极矿石罚款。
 find 按这台机器的 mac 在局域网里找 ip，写回 runs/switches.toml。
 """
@@ -60,11 +60,17 @@ def _check(action: Callable[[], None]) -> None:
         sys.exit(str(error))
 
 
-def run(name: str) -> None:
-    """跑脚本：从脚本的起点开始一步一步跑，每一步返回下一步的名字。"""
+def run(name: str, switch: str | None = None) -> None:
+    """跑脚本：从脚本的起点开始一步一步跑，每一步返回下一步的名字。
+
+    switch 是机器名，写了就在这台上跑，不写按 runs/switches.toml 的 [scripts] 找。
+    """
     init_console()
     script = load_script(name)
-    settings = _load_settings(lambda: load_script_settings(name))
+    if switch:
+        settings = _load_settings(lambda: load_switch_settings(switch))
+    else:
+        settings = _load_settings(lambda: load_script_settings(name))
     _check(lambda: check_requires(settings, script.REQUIRES))
     devices = _create_devices(settings)
     _check(lambda: check_devices(devices, script.REQUIRES, script.TITLE_IDS))
@@ -124,14 +130,17 @@ def find(switch: str) -> None:
 def main(argv: list[str] | None = None) -> None:
     args = sys.argv[1:] if argv is None else argv
     commands = {"run": run, "restart": restart_game, "find": find}
-    if len(args) != 2 or args[0] not in commands:
+    # 只有 run 可以多带一个机器名
+    counts = {"run": (2, 3), "restart": (2,), "find": (2,)}
+    if not args or args[0] not in commands or len(args) not in counts[args[0]]:
         print(
-            "用法：control-switch run 游戏/脚本 | restart 机器 | find 机器\n"
-            "例如 control-switch run sv/egg、control-switch restart living，"
+            "用法：control-switch run 游戏/脚本 [机器] | restart 机器 | find 机器\n"
+            "例如 control-switch run sv/egg、control-switch run sv/egg living、"
+            "control-switch restart living，"
             "机器是 runs/switches.toml 里 [switch.名字] 的名字"
         )
         raise SystemExit(2)
-    commands[args[0]](args[1])
+    commands[args[0]](*args[1:])
 
 
 if __name__ == "__main__":

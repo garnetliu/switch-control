@@ -47,7 +47,8 @@ def new_log(sw: Session, name: str | None = None) -> None:
             logger.removeHandler(handler)
             handler.close()
     prefix = name or Path(sys.argv[0]).stem or "control-switch"
-    directory = sw.config.log_dir / prefix
+    # 再按机器分一层，几台机器同时跑同一个脚本时日志不混在一起
+    directory = sw.config.log_dir / prefix / sw.switch
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{time.strftime('%Y%m%d-%H%M%S')}.log"
     handler = logging.FileHandler(path, encoding="utf-8")

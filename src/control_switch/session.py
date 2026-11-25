@@ -30,12 +30,14 @@ class Session:
         devices: Devices,
     ):
         self.config = config
+        # 这台机器在 runs/switches.toml 里的名字，日志目录和通知里用来区分是哪台
+        self.switch = settings.switch
         # 现在是哪一步，入口的循环每一步之前写进来
         self.step = ""
         # 这一局截过的图，只放在内存里；出错时入口才把它们写进日志目录，新的一局开始时清空
         self.frames: list[Frame] = []
         # 往 Discord 推送消息，步骤里用 sw.notifier 取
-        self.notifier = Notifier(webhook_url=settings.discord_webhook_url)
+        self.notifier = Notifier(webhook_url=settings.discord_webhook_url, name=settings.switch)
         self.screen = devices.screen
         self.controller = devices.controller
         self._memory = devices.memory

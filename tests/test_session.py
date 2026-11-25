@@ -241,7 +241,7 @@ def test_notifier_is_created_with_webhook_url_from_settings(
     received: list[str | None] = []
 
     class RecordingNotifier:
-        def __init__(self, webhook_url: str | None = None) -> None:
+        def __init__(self, webhook_url: str | None = None, name: str | None = None) -> None:
             received.append(webhook_url)
 
     monkeypatch.setattr("control_switch.session.Notifier", RecordingNotifier)

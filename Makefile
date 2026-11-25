@@ -7,9 +7,10 @@ find:
 	uv run control-switch find $(switch)
 
 # 跑脚本，写成「游戏/脚本」：swsh/lair 是剑盾的极巨大冒险，sv/outbreak 是朱紫的大量出现，sv/egg 是朱紫孵蛋。
-# 跑在哪台机器上看 runs/switches.toml 的 [script."游戏/脚本"]。例如 make start script=sv/egg
+# 跑在哪台机器上看 runs/switches.toml 的 [scripts]，也可以用 switch 指定。
+# 例如 make start script=sv/egg、make start script=sv/egg switch=living
 start:
-	uv run control-switch run $(script)
+	uv run control-switch run $(script) $(switch)
 
 # 重启这台机器上的游戏，回到游戏里可以操作为止。极巨大冒险途中重启下次要付极矿石罚款。例如 make restart switch=living
 restart:

@@ -50,3 +50,19 @@
 # "swsh/lair" = "living"
 # "sv/outbreak" = "living"
 # "sv/egg" = "lite"
+
+[switch.lite]
+screen = "capture"
+capture_device = 0
+controller = "serial"
+serial_port = "/dev/cu.usbserial-2021230"
+memory = "none"
+
+[switch.living]
+connection = "usb"
+screen = "botbase"
+controller = "botbase"
+memory = "botbase"
+
+[scripts]
+"sv/egg" = "lite"

@@ -29,9 +29,11 @@ class Notifier:
     TEXT_TIMEOUT = 5
     FILE_TIMEOUT = 120
 
-    def __init__(self, webhook_url: str | None = None):
+    def __init__(self, webhook_url: str | None = None, name: str | None = None):
         # Discord 频道的 Webhook 地址，没配置是 None
         self._url = webhook_url
+        # 机器名，写在每条消息前面，几台机器同时跑时分得清是哪台发的
+        self._name = name
         # 没配置 Webhook 时只提醒一次，免得每局都记一条
         self._warned_missing = False
 
@@ -41,6 +43,8 @@ class Notifier:
         发不出去会重试，最多发 RETRIES 次，每两次之间等 RETRY_WAIT 秒。
         线程不是守护线程：程序要退出时会等它发完或者重试完。
         """
+        if self._name:
+            text = f"[{self._name}] {text}"
         threading.Thread(target=self._send, args=(text, files), name="notifier").start()
 
     def send_everyone(self, text: str, files: Sequence[str | Path] | None = None) -> None:
