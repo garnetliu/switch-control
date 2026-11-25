@@ -58,21 +58,10 @@ def test_sv_egg_requires_screen_and_controller_but_not_memory() -> None:
     assert "memory" not in requires
 
 
-def test_sv_egg_steps_are_the_eight_documented_steps() -> None:
-    """sv/egg 的 STEPS 正好是 initialize、picnic、sandwich、to_basket、collect、hatch_load、
-    hatch_walk、check 八步，每一步都能调用。
-    """
+def test_sv_egg_steps_are_the_three_documented_steps() -> None:
+    """sv/egg 的 STEPS 正好是 initialize、fetch、hatch 三步（任务 14：旧的 8 步改成 3 步），每一步都能调用。"""
     script = load_script("sv/egg")
-    assert set(script.STEPS) == {
-        "initialize",
-        "picnic",
-        "sandwich",
-        "to_basket",
-        "collect",
-        "hatch_load",
-        "hatch_walk",
-        "check",
-    }
+    assert set(script.STEPS) == {"initialize", "fetch", "hatch"}
     assert all(callable(step) for step in script.STEPS.values())
 
 

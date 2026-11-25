@@ -221,10 +221,11 @@ src/control_switch/
     │       ├── game_state.py      这一局的状态，存成 runs/state/game.yaml
     │       └── 其余文件            按 seed 算对手、读路线图、给首发和路线打分
     └── sv/                《宝可梦 朱/紫》
-        ├── data/              图片数据（fly_icon.png）
-        ├── config.py          朱紫脚本共用的配置：内存指针、存档块、按键后等多久
+        ├── data/              图片数据（fly_icon.png、sandwich_hand_free.png、sandwich_hand_grabbing.png）
+        ├── config.py          朱紫脚本共用的配置：内存指针、存档块、认画面用的区域和颜色、存档和野餐的等待
+        ├── screens.py         朱紫脚本共用的画面判断：对话框、选择框、野外、野餐、主菜单
         ├── blocks.py          在内存里找到存档块，解密读出、加密写回
-        ├── actions.py         存档、开野餐、收野餐
+        ├── actions.py         存档、开野餐、收野餐、从主菜单进某一项，每一步看画面
         ├── outbreak/          大量出现刷闪：config、session，steps/ 下每个步骤一个文件
         └── egg/               孵蛋刷闪：config、session，steps/ 下每个步骤一个文件，画面判断 screens.py，盒子里的操作 box.py，飞到闸口 fly.py
 

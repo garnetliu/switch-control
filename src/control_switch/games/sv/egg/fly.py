@@ -9,22 +9,16 @@ PokemonAutomation 是把地图光标往下推一小段对准飞行点；这里�
 import logging
 import math
 import time
-from typing import cast
 
 import cv2
 import numpy as np
 
 from control_switch.flow import act_until, capture
-from control_switch.session import Session
 from control_switch.vision import ImageChecker
 
-from . import screens
-from .box import exit_to_overworld
+from . import box, screens
 from .config import EggConfig
-
-
-def _config(sw: Session) -> EggConfig:
-    return cast(EggConfig, sw.config)
+from .session import EggSession
 
 
 def is_map(image: ImageChecker, config: EggConfig) -> bool:
@@ -58,9 +52,9 @@ def _menu_options(image: ImageChecker, config: EggConfig) -> list[str]:
     return [text for text, _ in found[1]] if found else []
 
 
-def open_map(sw: Session) -> ImageChecker:
+def open_map(sw: EggSession) -> ImageChecker:
     """在野外按 Y 打开地图，没反应就再按。"""
-    config = _config(sw)
+    config = sw.config
     return act_until(
         sw,
         lambda: sw.click("Y", 0),
@@ -71,10 +65,10 @@ def open_map(sw: Session) -> ImageChecker:
     )
 
 
-def fly_to_gate(sw: Session) -> None:
+def fly_to_gate(sw: EggSession) -> None:
     """飞到零区闸口，回到野外为止。"""
-    config = _config(sw)
-    exit_to_overworld(sw)
+    config = sw.config
+    box.exit_to_overworld(sw)
     image = open_map(sw)
     probes = 0
     for _ in range(config.map_moves):

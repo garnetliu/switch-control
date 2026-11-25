@@ -3,18 +3,13 @@
 from control_switch.games.sv import TITLE_IDS as TITLE_IDS
 
 from .session import EggSession
-from .steps import check, collect, hatch_load, hatch_walk, initialize, picnic, sandwich, to_basket
+from .steps import fetch, hatch, initialize
 
 # 步骤表：每一步是一个函数，传入连接，返回下一步的名字；返回的名字不在表里就结束
 STEPS = {
     "initialize": initialize,
-    "picnic": picnic,
-    "sandwich": sandwich,
-    "to_basket": to_basket,
-    "collect": collect,
-    "hatch_load": hatch_load,
-    "hatch_walk": hatch_walk,
-    "check": check,
+    "fetch": fetch,
+    "hatch": hatch,
 }
 # 从哪一步开始
 START = "initialize"
