@@ -1,4 +1,4 @@
-.PHONY: find start restart format lint test typecheck coverage
+.PHONY: find start restart view format lint test typecheck coverage
 
 # 机器的名字是 runs/switches.toml 里 [switch.名字] 的名字。
 
@@ -14,6 +14,10 @@ start:
 # 重启这台机器上的游戏，回到游戏里可以操作为止。极巨大冒险途中重启下次要付极矿石罚款。例如 make restart switch=living
 restart:
 	uv run control-switch restart $(switch)
+
+# 开一个窗口实时显示采集卡的画面，在窗口里按 q 关掉
+view:
+	uv run python scripts/view_capture.py
 
 format:
 	uv run ruff format .

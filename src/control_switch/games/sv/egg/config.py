@@ -287,6 +287,12 @@ class EggConfig(SvConfig):
     gate_turn_y = 0.75
     picnic_walk = 1.0
     ramp_walk = 1.6
+    # 野餐时左下角坐骑的提示：「收回故勒顿」说明坐骑在外面
+    ride_hint: Rect = ((0.05, 0.81), (0.2, 0.86))
+    ride_out_text = "收回"
+    # 对话框里的文字；桌子的对话是「是野餐组合！」
+    dialog_text: Rect = ((0.27, 0.75), (0.73, 0.88))
+    table_text = "野餐组合"
     # 做三明治的画面：底下的提示「长按以抓起」
     making_hint: Rect = ((0.40, 0.93), (0.60, 0.995))
     making_hint_text = "长按以抓起"
