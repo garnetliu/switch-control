@@ -23,17 +23,29 @@ from swsh.lair.lair import Lair
 
 TOP = {"mewtwo": 24, "tapu-lele": 21}
 MAPS = [
-    ("mewtwo", 3076008315599927110, [
-        ("好（6 局倒下 4）", "pangoro", ("fraxure", "obstagoon", "sneasel")),
-        ("差（9 局倒下 13）", "pangoro", ("swoobat", "tauros", "sneasel")),
-    ]),
-    ("tapu-lele", 12873702124229926581, [
-        ("好（22 局倒下 3）", "blaziken", ("togedemaru", "doublade", "dugtrio-alola")),
-        ("差（10 局倒下 9）", "combusken", ("togedemaru", "doublade", "mr-mime-galar")),
-    ]),
-    ("tapu-lele", 9960686445389280169, [
-        ("实测最好（只打过这一种）", "relicanth", ("rhydon", "dugtrio-alola", "togedemaru")),
-    ]),
+    (
+        "mewtwo",
+        3076008315599927110,
+        [
+            ("好（6 局倒下 4）", "pangoro", ("fraxure", "obstagoon", "sneasel")),
+            ("差（9 局倒下 13）", "pangoro", ("swoobat", "tauros", "sneasel")),
+        ],
+    ),
+    (
+        "tapu-lele",
+        12873702124229926581,
+        [
+            ("好（22 局倒下 3）", "blaziken", ("togedemaru", "doublade", "dugtrio-alola")),
+            ("差（10 局倒下 9）", "combusken", ("togedemaru", "doublade", "mr-mime-galar")),
+        ],
+    ),
+    (
+        "tapu-lele",
+        9960686445389280169,
+        [
+            ("实测最好（只打过这一种）", "relicanth", ("rhydon", "dugtrio-alola", "togedemaru")),
+        ],
+    ),
 ]
 
 
@@ -70,10 +82,18 @@ def m_average(scorer, name, defender_name):
     for dynamax in (False, True):
         version = replace(a, dynamax=dynamax)
         shrink = scoring.DYNAMAX_HP if dynamax else 1
-        to_self = sum(scoring.damage(regular, i, version, field) for i in range(len(regular.moves))) / len(regular.moves) / shrink
+        to_self = (
+            sum(scoring.damage(regular, i, version, field) for i in range(len(regular.moves)))
+            / len(regular.moves)
+            / shrink
+        )
         count = min(4, len(dynamaxed.max_moves))
-        to_self_max = sum(scoring.damage(dynamaxed, i, version, field) for i in range(count)) / count / shrink
-        received = (0.25 * to_self + 0.75 * to_mates_regular) * (1 - p) + (0.25 * to_self_max + 0.75 * to_mates_max) * p
+        to_self_max = (
+            sum(scoring.damage(dynamaxed, i, version, field) for i in range(count)) / count / shrink
+        )
+        received = (0.25 * to_self + 0.75 * to_mates_regular) * (1 - p) + (
+            0.25 * to_self_max + 0.75 * to_mates_max
+        ) * p
         best = max(scoring.damage(version, i, b, field) for i in range(len(version.moves)))
         scores[dynamax] = (best + mate_damage) / received if received else 1.0
     value = max(scores[False], (scores[False] + scores[True]) / 2)
@@ -109,7 +129,7 @@ for boss, seed, routes in MAPS:
     config = GameConfig()
     config.lair_first_draw_top = TOP[boss]
     data = GameData(config)
-    zh = lambda name: data.pokemon_object(name).name("zh-Hans")  # noqa: E731
+    zh = lambda name: data.pokemon_object(name).name("zh-Hans")
     scorer = upstream.Scorer(data, boss)
     lair = Lair(data, seed)
     rentals = scorer.rentals
@@ -123,12 +143,17 @@ for boss, seed, routes in MAPS:
     candidates = lair.candidates()[:3]
     starter = max(range(3), key=lambda i: m(scorer, candidates[i], boss, lair.teammates(i)))
     encounters = lair.encounters()
-    rows = {row: {item["col"]: item for item in items} for row, items in (lair.map_rows() if hasattr(lair, "map_rows") else {}).items()}
+    rows = {
+        row: {item["col"]: item for item in items}
+        for row, items in (lair.map_rows() if hasattr(lair, "map_rows") else {}).items()
+    }
 
     def path_scores(path):
         """路线分：每一层对手对首领的相性，带上抓到它那时的三个队友（按 seed 推，三关都不换）。"""
         names = [encounters[str(r)][c] for r, c in path]
-        walker = upstream.Walker(lair, data, boss, path, [candidates[starter], *lair.teammates(starter)])
+        walker = upstream.Walker(
+            lair, data, boss, path, [candidates[starter], *lair.teammates(starter)]
+        )
         actual = 0.0
         for weight, name in zip((1, 2, 3), names, strict=True):
             while walker.next_event() not in ("catch", None):
@@ -143,14 +168,29 @@ for boss, seed, routes in MAPS:
     scored = sorted((path_scores(p)[1], p) for p in upstream.paths(lair.map_type()))
     scored.reverse()
     print(f"\n== {seed}（{boss}）")
-    print("  首发：" + "，".join(f"{zh(c)} {m(scorer, c, boss, lair.teammates(i)):.2f}" for i, c in enumerate(candidates)) + f" → 选 {zh(candidates[starter])}")
+    print(
+        "  首发："
+        + "，".join(
+            f"{zh(c)} {m(scorer, c, boss, lair.teammates(i)):.2f}" for i, c in enumerate(candidates)
+        )
+        + f" → 选 {zh(candidates[starter])}"
+    )
     best_path = scored[0][1]
-    for label, route_starter, route in [("PokemonAutomation 选的", candidates[starter], None), *[(a, b, c) for a, b, c in routes]]:
-        path = best_path if route is None else next(p for _, p in scored if tuple(encounters[str(r)][c] for r, c in p) == route)
+    for label, route_starter, route in [
+        ("PokemonAutomation 选的", candidates[starter], None),
+        *[(a, b, c) for a, b, c in routes],
+    ]:
+        path = (
+            best_path
+            if route is None
+            else next(p for _, p in scored if tuple(encounters[str(r)][c] for r, c in p) == route)
+        )
         names, actual = path_scores(path)
         rank = next(k + 1 for k, (_, p) in enumerate(scored) if p == path)
         start_index = candidates.index(route_starter)
-        walker = upstream.Walker(lair, data, boss, path, [route_starter, *lair.teammates(start_index)])
+        walker = upstream.Walker(
+            lair, data, boss, path, [route_starter, *lair.teammates(start_index)]
+        )
         swaps = []
         while (event := walker.next_event()) is not None:
             if event == "backpacker":
@@ -158,10 +198,14 @@ for boss, seed, routes in MAPS:
             elif event == "scientist":
                 trial = list(walker.team)
                 trial[0] = median_rental
-                walker.scientist(team_score(scorer, trial, boss) > team_score(scorer, walker.team, boss))
+                walker.scientist(
+                    team_score(scorer, trial, boss) > team_score(scorer, walker.team, boss)
+                )
             else:
                 take = decide_catch(scorer, walker, boss)
                 swaps.append("换" if take else "不换")
                 walker.catch(take)
-        print(f"  {label}：{zh(route_starter)}；{' → '.join(zh(n) for n in names)}；{'、'.join(swaps)}；"
-              f"路线分 {actual:.2f}（第 {rank} / {len(scored)}）；首领战队伍 {'/'.join(zh(n) for n in walker.team)}")
+        print(
+            f"  {label}：{zh(route_starter)}；{' → '.join(zh(n) for n in names)}；{'、'.join(swaps)}；"
+            f"路线分 {actual:.2f}（第 {rank} / {len(scored)}）；首领战队伍 {'/'.join(zh(n) for n in walker.team)}"
+        )

@@ -22,7 +22,9 @@ from swsh.lair.lair import Lair
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.argv = [sys.argv[0], "--no-skip"]
-spec = importlib.util.spec_from_file_location("v13", os.path.join(HERE, "版本13-按实际上场算路线分.py"))
+spec = importlib.util.spec_from_file_location(
+    "v13", os.path.join(HERE, "版本13-按实际上场算路线分.py")
+)
 v13 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(v13)
 original = scoring.move_score
@@ -54,7 +56,14 @@ def worst_received(attacker, defender, teammates, field):
     return worst
 
 
-def move_score(attacker, move_index, defender, teammates, field, max_move_probability=scoring.MAX_MOVE_PROBABILITY):
+def move_score(
+    attacker,
+    move_index,
+    defender,
+    teammates,
+    field,
+    max_move_probability=scoring.MAX_MOVE_PROBABILITY,
+):
     if MODE["value"] == "原来":
         return original(attacker, move_index, defender, teammates, field, max_move_probability)
     teammates = [m for m in teammates if m is not attacker and m is not defender]
@@ -67,12 +76,38 @@ def move_score(attacker, move_index, defender, teammates, field, max_move_probab
 scoring.move_score = move_score
 
 PAIRS = {
-    12873702124229926581: [("火焰鸡", ("托戈德玛尔", "双剑鞘", "三地鼠"), ("不换", "不换", "换"), "9.18 分钟，倒下 0"),
-                           ("力壮鸡", ("托戈德玛尔", "双剑鞘", "魔墙人偶"), ("不换", "换", "不换"), "10.20 分钟，倒下 9")],
-    3076008315599927110: [("流氓熊猫", ("斧牙龙", "堵拦熊", "狃拉"), ("不换", "不换", "不换"), "6 局全胜，倒下 0.67"),
-                          ("流氓熊猫", ("心蝙蝠", "肯泰罗", "狃拉"), ("不换", "不换", "不换"), "9 局 8 胜，倒下 1.44")],
-    16238065963362826354: [("梦梦蚀", ("灯罩夜菇", "锹农炮虫", "劈斩司令"), ("换", "换", "不换"), "1 局，11.9 分钟，倒下 0"),
-                           ("梦梦蚀", ("灯罩夜菇", "阿勃梭鲁", "魔墙人偶"), ("换", "换", "不换"), "1 局，12.6 分钟，倒下 3")],
+    12873702124229926581: [
+        ("火焰鸡", ("托戈德玛尔", "双剑鞘", "三地鼠"), ("不换", "不换", "换"), "9.18 分钟，倒下 0"),
+        (
+            "力壮鸡",
+            ("托戈德玛尔", "双剑鞘", "魔墙人偶"),
+            ("不换", "换", "不换"),
+            "10.20 分钟，倒下 9",
+        ),
+    ],
+    3076008315599927110: [
+        ("流氓熊猫", ("斧牙龙", "堵拦熊", "狃拉"), ("不换", "不换", "不换"), "6 局全胜，倒下 0.67"),
+        (
+            "流氓熊猫",
+            ("心蝙蝠", "肯泰罗", "狃拉"),
+            ("不换", "不换", "不换"),
+            "9 局 8 胜，倒下 1.44",
+        ),
+    ],
+    16238065963362826354: [
+        (
+            "梦梦蚀",
+            ("灯罩夜菇", "锹农炮虫", "劈斩司令"),
+            ("换", "换", "不换"),
+            "1 局，11.9 分钟，倒下 0",
+        ),
+        (
+            "梦梦蚀",
+            ("灯罩夜菇", "阿勃梭鲁", "魔墙人偶"),
+            ("换", "换", "不换"),
+            "1 局，12.6 分钟，倒下 3",
+        ),
+    ],
 }
 CHECKS = v13.CHECKS + [("cresselia", 16238065963362826354, None)]
 
@@ -95,5 +130,7 @@ for mode in ("原来", "最坏情况"):
         for starter, path, swaps, note in PAIRS.get(seed, []):
             for k, r in enumerate(results):
                 if (r[1], r[2], r[3]) == (starter, path, swaps):
-                    print(f"    {starter}；{' → '.join(path)}；{'、'.join(swaps)}：{r[0]:.3f}，第 {k + 1} 名（实测 {note}）")
+                    print(
+                        f"    {starter}；{' → '.join(path)}；{'、'.join(swaps)}：{r[0]:.3f}，第 {k + 1} 名（实测 {note}）"
+                    )
                     break

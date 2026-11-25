@@ -43,7 +43,9 @@ def fights():
             for line in part.splitlines():
                 found = re.search(r"队伍: (\[.*?\])，自己的 PP", line)
                 if found:
-                    current = dict(team=[n for n, _ in ast.literal_eval(found[1])], opponent=None, lines=[])
+                    current = dict(
+                        team=[n for n, _ in ast.literal_eval(found[1])], opponent=None, lines=[]
+                    )
                     yield current
                     continue
                 if current is None:
@@ -91,7 +93,9 @@ for fight in ALL:
         if status[index]:
             continue
         values = [max(damage(pokemon, k, opponent, F), 0) for k in range(len(pokemon.moves))]
-        attacks = sorted((k for k in range(len(pokemon.moves)) if not status[k]), key=lambda k: -values[k])
+        attacks = sorted(
+            (k for k in range(len(pokemon.moves)) if not status[k]), key=lambda k: -values[k]
+        )
         position = next(r for r, k in enumerate(attacks) if values[k] <= values[index] + 1e-9)
         rank[(len(attacks), position)] += 1
         rank_total[len(attacks)] += 1
@@ -99,7 +103,9 @@ print("== 队友出招（只算队友，自己的不算）")
 for n in range(4):
     attack, status = count[("变化招式数", n, "进攻")], count[("变化招式数", n, "变化")]
     if attack + status:
-        print(f"  带 {n} 个变化招式：出招 {attack + status} 次，用变化招式 {status / (attack + status):.1%}（每招机会一样的话 {n / 4:.0%}）")
+        print(
+            f"  带 {n} 个变化招式：出招 {attack + status} 次，用变化招式 {status / (attack + status):.1%}（每招机会一样的话 {n / 4:.0%}）"
+        )
 print("  出进攻招式时，按对这个对手的伤害排第几（伤害一样的算靠前的）：")
 for n in sorted(rank_total):
     shares = "、".join(f"第 {r + 1} {rank[(n, r)] / rank_total[n]:.1%}" for r in range(n))
@@ -152,38 +158,55 @@ for fight in ALL:
             uses[opponent][0] += is_max
             uses[opponent][1] += 1
 total = [sum(v[0] for v in uses.values()), sum(v[1] for v in uses.values())]
-print(f"== 路上的对手用极巨招式：合计 {total[0]}/{total[1]} = {total[0] / total[1]:.1%}，{len(uses)} 种对手")
+print(
+    f"== 路上的对手用极巨招式：合计 {total[0]}/{total[1]} = {total[0] / total[1]:.1%}，{len(uses)} 种对手"
+)
 for opponent, (m, n) in sorted(uses.items(), key=lambda x: -x[1][1])[:25]:
     print(f"  {d.pokemon_object(opponent).name('zh-Hans')}：{m}/{n} = {m / n:.0%}")
 print("== 首领用极巨招式（陷入困境之前 / 之后）")
 for opponent, v in boss_uses.items():
     a, b = v["之前"], v["之后"]
-    print(f"  {d.pokemon_object(opponent).name('zh-Hans')}：之前 {a[0]}/{a[1]}" + (f" = {a[0] / a[1]:.0%}" if a[1] else "")
-          + f"，之后 {b[0]}/{b[1]}" + (f" = {b[0] / b[1]:.0%}" if b[1] else ""))
+    print(
+        f"  {d.pokemon_object(opponent).name('zh-Hans')}：之前 {a[0]}/{a[1]}"
+        + (f" = {a[0] / a[1]:.0%}" if a[1] else "")
+        + f"，之后 {b[0]}/{b[1]}"
+        + (f" = {b[0] / b[1]:.0%}" if b[1] else "")
+    )
 print("== 首领陷入困境：出现这句话之前那个回合开始时的血量 → 之后那个回合开始时的血量")
 for opponent in {t[0] for t in thresholds}:
     rows = [t for t in thresholds if t[0] == opponent and t[1] is not None]
     if rows:
         before = [t[1] for t in rows]
         after = [t[2] for t in rows if t[2] is not None]
-        print(f"  {d.pokemon_object(opponent).name('zh-Hans')} {len(rows)} 场：之前最低 {min(before):.0%}，"
-              + (f"之后最高 {max(after):.0%}，之后的中位 {st.median(after):.0%}" if after else "之后没有读数"))
+        print(
+            f"  {d.pokemon_object(opponent).name('zh-Hans')} {len(rows)} 场：之前最低 {min(before):.0%}，"
+            + (
+                f"之后最高 {max(after):.0%}，之后的中位 {st.median(after):.0%}"
+                if after
+                else "之后没有读数"
+            )
+        )
 print("== 首领每回合出手几次（按每回合数据之间数）")
 for opponent, v in per_turn.items():
     for when in ("之前", "之后"):
         if v[when]:
-            print(f"  {d.pokemon_object(opponent).name('zh-Hans')} {when}：{len(v[when])} 回合，次数分布 {dict(sorted(collections.Counter(v[when]).items()))}")
+            print(
+                f"  {d.pokemon_object(opponent).name('zh-Hans')} {when}：{len(v[when])} 回合，次数分布 {dict(sorted(collections.Counter(v[when]).items()))}"
+            )
 print("== 陷入困境之后用的、不在数据里 4 个招式之内的招式（第五个招式）")
 for opponent, c in fifth.items():
     print(f"  {d.pokemon_object(opponent).name('zh-Hans')}：{dict(c.most_common(3))}")
 
 # ---- 写 src/control_switch/games/swsh/data/max_move_rate.json：战斗选招式时对手用极巨招式的比例（scoring.move_score）
 # 出手不到 MIN 次的不单独记，用同类的合计：路上的对手按「路上」，首领按「首领」（陷入困境前后合在一起）
-import json  # noqa: E402
+import json
 
 MIN = 10
 rates = {"路上": round(total[0] / total[1], 3)}
-boss_total = [sum(v["之前"][0] + v["之后"][0] for v in boss_uses.values()), sum(v["之前"][1] + v["之后"][1] for v in boss_uses.values())]
+boss_total = [
+    sum(v["之前"][0] + v["之后"][0] for v in boss_uses.values()),
+    sum(v["之前"][1] + v["之后"][1] for v in boss_uses.values()),
+]
 rates["首领"] = round(boss_total[0] / boss_total[1], 3)
 for opponent, (m, n) in uses.items():
     if n >= MIN:
@@ -194,4 +217,6 @@ for opponent, v in boss_uses.items():
         rates[opponent] = round(m / n, 3)
 with open("src/control_switch/games/swsh/data/max_move_rate.json", "w", encoding="utf-8") as file:
     json.dump(rates, file, ensure_ascii=False, indent=4)
-print(f"== 写了 src/control_switch/games/swsh/data/max_move_rate.json：{len(rates) - 2} 种对手（出手 {MIN} 次以上），路上合计 {rates['路上']}，首领合计 {rates['首领']}")
+print(
+    f"== 写了 src/control_switch/games/swsh/data/max_move_rate.json：{len(rates) - 2} 种对手（出手 {MIN} 次以上），路上合计 {rates['路上']}，首领合计 {rates['首领']}"
+)

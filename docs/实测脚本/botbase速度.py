@@ -69,8 +69,15 @@ with open(f"run/道具口袋-备份-{mode}.bin", "wb") as f:
     f.write(original)
 for size in (4, 0x158, 0x400):
     data = original[:size]
-    show(f"  {size:#x} 字节（不等回复）", timed(lambda: conn.send(f"poke {ITEMS:#x} 0x{data.hex()}"), 20), size)
-    show(f"  {size:#x} 字节 + 读 4 字节确认", timed(lambda: (conn.send(f"poke {ITEMS:#x} 0x{data.hex()}"), peek(ITEMS, 4)), 20))
+    show(
+        f"  {size:#x} 字节（不等回复）",
+        timed(lambda: conn.send(f"poke {ITEMS:#x} 0x{data.hex()}"), 20),
+        size,
+    )
+    show(
+        f"  {size:#x} 字节 + 读 4 字节确认",
+        timed(lambda: (conn.send(f"poke {ITEMS:#x} 0x{data.hex()}"), peek(ITEMS, 4)), 20),
+    )
 assert peek(ITEMS, POUCH) == original, "道具口袋变了"
 print("  写完核对：道具口袋没变")
 

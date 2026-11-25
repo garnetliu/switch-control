@@ -24,13 +24,25 @@ from swsh.scoring import select_best_move, transform_ditto
 # 每只首领那段时间开头第一次抽数的上限（和 版本11-验收.py 一样；蝶蝶是现在的 21）
 TOP = {"mewtwo": 24, "tapu-bulu": 23, "tapu-lele": 21}
 MAPS = [
-    ("mewtwo", 3076008315599927110, "基准图，实测熊猫首发、斧牙龙 → 堵拦熊 → 狃拉最好，心蝙蝠 → 肯泰罗 → 狃拉差"),
+    (
+        "mewtwo",
+        3076008315599927110,
+        "基准图，实测熊猫首发、斧牙龙 → 堵拦熊 → 狃拉最好，心蝙蝠 → 肯泰罗 → 狃拉差",
+    ),
     ("tapu-bulu", 9004205710319247536, "哞哞，四张里实测最快"),
     ("tapu-bulu", 6986731677711377285, "哞哞，第 2 快"),
     ("tapu-bulu", 16753139388389203475, "哞哞，第 3 快"),
     ("tapu-bulu", 5938375612842167902, "哞哞，最慢"),
-    ("tapu-lele", 12873702124229926581, "蝶蝶，实测火焰鸡首发、托戈德玛尔 → 双剑鞘 → 三地鼠 比 力壮鸡、→ 魔墙人偶 快且稳"),
-    ("tapu-lele", 9960686445389280169, "蝶蝶，实测古空棘鱼首发、钻角犀兽 → 三地鼠 → 托戈德玛尔，全胜 9.0 分钟"),
+    (
+        "tapu-lele",
+        12873702124229926581,
+        "蝶蝶，实测火焰鸡首发、托戈德玛尔 → 双剑鞘 → 三地鼠 比 力壮鸡、→ 魔墙人偶 快且稳",
+    ),
+    (
+        "tapu-lele",
+        9960686445389280169,
+        "蝶蝶，实测古空棘鱼首发、钻角犀兽 → 三地鼠 → 托戈德玛尔，全胜 9.0 分钟",
+    ),
 ]
 
 
@@ -81,12 +93,16 @@ for measured in (True,):
         lair = Lair(data, seed)
         candidates = lair.candidates()[:3]
         starters = sorted(
-            ((rental_score(n, measured) ** 3 * matchup(n, boss, measured) ** 2) ** 0.2, n) for n in candidates
+            ((rental_score(n, measured) ** 3 * matchup(n, boss, measured) ** 2) ** 0.2, n)
+            for n in candidates
         )[::-1]
         encounters = lair.encounters()
         routes = sorted(
             (
-                sum((1 + 0.1 * i) * matchup(encounters[str(r)][c], boss, measured) for i, (r, c) in enumerate(path)),
+                sum(
+                    (1 + 0.1 * i) * matchup(encounters[str(r)][c], boss, measured)
+                    for i, (r, c) in enumerate(path)
+                ),
                 path,
             )
             for path in paths(lair.map_type())
@@ -101,27 +117,53 @@ for measured in (True,):
 # 自己的分 = (三关上场那只对该关对手的相性 × 打首领那只对首领的相性 ** 2) ** (1/5)；
 # 每个队友的分同样算（按那个位置每一场实际是谁）；总分 = 自己的分 + 0.5 × 三个队友的分之和。
 # 三关抓到后换不换 8 种都算，队友怎么变、研究员换掉谁用 plan.fate（自己在研究员那里不换）。
-import itertools  # noqa: E402
+import itertools
 
-from swsh.lair.plan import fate  # noqa: E402
+from swsh.lair.plan import fate
 
 KNOWN = {
-    3076008315599927110: [("流氓熊猫", ("斧牙龙", "堵拦熊", "狃拉"), (False, False, False), "实测好（6 局全胜，倒下 0.67）"),
-                          ("流氓熊猫", ("心蝙蝠", "肯泰罗", "狃拉"), (False, False, False), "实测差（9 局输 1，倒下 1.44）")],
-    12873702124229926581: [("火焰鸡", ("托戈德玛尔", "双剑鞘", "三地鼠"), (False, False, True), "实测好（10 局 9.2 分钟，倒下 0）"),
-                           ("力壮鸡", ("托戈德玛尔", "双剑鞘", "魔墙人偶"), (False, True, False), "实测差（10 局 10.2 分钟，倒下 9）")],
+    3076008315599927110: [
+        (
+            "流氓熊猫",
+            ("斧牙龙", "堵拦熊", "狃拉"),
+            (False, False, False),
+            "实测好（6 局全胜，倒下 0.67）",
+        ),
+        (
+            "流氓熊猫",
+            ("心蝙蝠", "肯泰罗", "狃拉"),
+            (False, False, False),
+            "实测差（9 局输 1，倒下 1.44）",
+        ),
+    ],
+    12873702124229926581: [
+        (
+            "火焰鸡",
+            ("托戈德玛尔", "双剑鞘", "三地鼠"),
+            (False, False, True),
+            "实测好（10 局 9.2 分钟，倒下 0）",
+        ),
+        (
+            "力壮鸡",
+            ("托戈德玛尔", "双剑鞘", "魔墙人偶"),
+            (False, True, False),
+            "实测差（10 局 10.2 分钟，倒下 9）",
+        ),
+    ],
 }
 
 
 def score(boss, opponents, teams):
     """teams[i] 是第 i 场（0～2 三关，3 首领）开打时的队伍，自己在第一个。"""
+
     def one(slot):
         values = [matchup(teams[i][slot], opponents[i], True) for i in range(3)]
         values.append(matchup(teams[3][slot], boss, True) ** 2)
         product = 1.0
         for value in values:
             product *= max(value, 1e-9)
-        return product ** 0.2
+        return product**0.2
+
     return one(0) + 0.5 * sum(one(slot) for slot in (1, 2, 3))
 
 
@@ -155,15 +197,23 @@ for boss, seed, note in MAPS:
                 teams.append(tuple(team))
                 if any(n not in RENTALS for t in teams for n in t):
                     continue
-                plans.append((score(boss, opponents, teams), starter, path, swaps, opponents, teams))
+                plans.append(
+                    (score(boss, opponents, teams), starter, path, swaps, opponents, teams)
+                )
     plans.sort(key=lambda p: -p[0])
     print(f"{seed}（{note}）")
     for total, starter, path, swaps, opponents, teams in plans[:3]:
-        print(f"  {total:.3f} {zh(candidates[starter])}：{' → '.join(zh(o) for o in opponents)}，"
-              f"{'、'.join('换' if s else '不换' for s in swaps)}；首领战 {'、'.join(zh(n) for n in teams[3])}")
+        print(
+            f"  {total:.3f} {zh(candidates[starter])}：{' → '.join(zh(o) for o in opponents)}，"
+            f"{'、'.join('换' if s else '不换' for s in swaps)}；首领战 {'、'.join(zh(n) for n in teams[3])}"
+        )
     for name, route, swaps, label in KNOWN.get(seed, []):
         for rank, plan in enumerate(plans, 1):
-            if zh(candidates[plan[1]]) == name and tuple(zh(o) for o in plan[4]) == route and plan[3] == swaps:
+            if (
+                zh(candidates[plan[1]]) == name
+                and tuple(zh(o) for o in plan[4]) == route
+                and plan[3] == swaps
+            ):
                 print(f"  {label}：{plan[0]:.3f}，第 {rank} 名（共 {len(plans)} 种）")
 
 
@@ -173,7 +223,7 @@ for boss, seed, note in MAPS:
 #         后面可能遇到的对手 = 没出现过、第一属性和路线上剩下的节点对得上的租借宝可梦。
 # 研究员：没出现过的租借宝可梦的 rental_boss_score 平均比自己这只高就换（这一局走到的层数 floor 决定权重）。
 # 队友实际怎么变用 plan.fate（自己每关换没换推到哪一步就按哪一步）。
-from swsh.lair.plan import positions  # noqa: E402
+from swsh.lair.plan import positions
 
 
 @functools.cache
@@ -199,9 +249,20 @@ def upstream_run(boss, seed):
     data = data_of(boss)
     lair = Lair(data, seed)
     candidates = lair.candidates()
-    starter = max(range(3), key=lambda s: (rental_score(candidates[s], True) ** 3 * matchup(candidates[s], boss, True) ** 2) ** 0.2)
+    starter = max(
+        range(3),
+        key=lambda s: (
+            (rental_score(candidates[s], True) ** 3 * matchup(candidates[s], boss, True) ** 2)
+            ** 0.2
+        ),
+    )
     encounters = lair.encounters()
-    path = max(paths(lair.map_type()), key=lambda p: sum((1 + 0.1 * i) * matchup(encounters[str(r)][c], boss, True) for i, (r, c) in enumerate(p)))
+    path = max(
+        paths(lair.map_type()),
+        key=lambda p: sum(
+            (1 + 0.1 * i) * matchup(encounters[str(r)][c], boss, True) for i, (r, c) in enumerate(p)
+        ),
+    )
     opponents = [encounters[str(r)][c] for r, c in path]
     events = data.lair_events(lair.map_type(), lair.layout())
     seen = set(candidates) | {n for row in encounters.values() for n in row}
@@ -221,17 +282,27 @@ def upstream_run(boss, seed):
         teams.append(tuple(team))
         caught = opponents[i]
         left_types = {pokemon(o).type_ids[0] for o in opponents[i + 1 :]}
-        potential = [n for n in RENTALS if n not in seen and n not in team and set(pokemon(n).type_ids) & left_types]
+        potential = [
+            n
+            for n in RENTALS
+            if n not in seen and n not in team and set(pokemon(n).type_ids) & left_types
+        ]
         r_weight = 3 - (i + 1)
 
         def team_score(first, rest):
-            rental = sum(matchup_with(first, p, tuple(rest)) for p in potential) / len(potential) if potential and r_weight else 1.0
+            rental = (
+                sum(matchup_with(first, p, tuple(rest)) for p in potential) / len(potential)
+                if potential and r_weight
+                else 1.0
+            )
             return weighted(rental, r_weight, matchup_with(first, boss, tuple(rest)), 2)
 
         own, mates = team[0], team[1:]
         take = team_score(caught, mates)
         stay = team_score(own, mates)
-        others = [team_score(own, [caught if k == j else mates[k] for k in range(3)]) for j in range(3)]
+        others = [
+            team_score(own, [caught if k == j else mates[k] for k in range(3)]) for j in range(3)
+        ]
         leave = 0.125 * stay + 0.875 * sum(others) / 3
         swaps.append(take > leave)
         notes.append(f"第{i + 1}只 换 {take:.2f} / 不换 {leave:.2f}")
@@ -247,13 +318,19 @@ def upstream_run(boss, seed):
     # 研究员：上游会不会换（程序现在永远不换，队友怎么变的推算也是按自己不换算的）
     researcher = []
     for place in scientists:
-        floor = int(place.split("-")[0]) if ">" not in place else int(place.split(">")[1].split("-")[0])
+        floor = (
+            int(place.split("-")[0]) if ">" not in place else int(place.split(">")[1].split("-")[0])
+        )
         names = [n for n in RENTALS if n not in seen]
         rental_weight = max(3 - floor, 0)
+
         def rbs(n):
             return weighted(rental_score(n, True), rental_weight, matchup(n, boss, True), 2)
+
         average = sum(rbs(n) for n in names) / len(names)
-        researcher.append(f"{place} 平均 {average:.2f} / 自己这只 {rbs(teams[min(floor, 3)][0]):.2f}，{'换' if average > rbs(teams[min(floor, 3)][0]) else '不换'}")
+        researcher.append(
+            f"{place} 平均 {average:.2f} / 自己这只 {rbs(teams[min(floor, 3)][0]):.2f}，{'换' if average > rbs(teams[min(floor, 3)][0]) else '不换'}"
+        )
     return candidates[starter], opponents, swaps, teams, notes, researcher
 
 
@@ -261,7 +338,9 @@ print("\n== 完全按上游的规则（首发、路线、抓到后换不换、�
 for boss, seed, note in MAPS:
     starter, opponents, swaps, teams, notes, researcher = upstream_run(boss, seed)
     print(f"{seed}（{note}）")
-    print(f"  {zh(starter)}：{' → '.join(zh(o) for o in opponents)}，{'、'.join('换' if s else '不换' for s in swaps)}（{'；'.join(notes)}）")
+    print(
+        f"  {zh(starter)}：{' → '.join(zh(o) for o in opponents)}，{'、'.join('换' if s else '不换' for s in swaps)}（{'；'.join(notes)}）"
+    )
     print(f"  每场队伍：{' | '.join('、'.join(zh(n) for n in t) for t in teams)}")
     if researcher:
         print("  研究员：" + "；".join(researcher))
@@ -273,8 +352,8 @@ for boss, seed, note in MAPS:
 # 抓到一只：draw(2)、三个队友各一个（偶数想要）；自己不换且有人想要才反复 draw(3) 定给谁。
 # 研究员：三个队友各一个；自己换：紧接着 1 个数当洗牌种子，洗出来的给自己；自己不换且有人想要：反复 draw(3) 定谁，再 1 个数洗牌给他。
 # 背包客：三个 draw(4)。
-from libs.xoroshiro import Xoroshiro  # noqa: E402
-from swsh.lair.lair import _first  # noqa: E402
+from libs.xoroshiro import Xoroshiro
+from swsh.lair.lair import _first
 
 
 def copy_rng(rng):
@@ -288,9 +367,20 @@ def real_run(boss, seed):
     lair = Lair(data, seed)
     candidates = lair.candidates()
     rows = data.lair_rows()
-    starter = max(range(3), key=lambda s: (rental_score(candidates[s], True) ** 3 * matchup(candidates[s], boss, True) ** 2) ** 0.2)
+    starter = max(
+        range(3),
+        key=lambda s: (
+            (rental_score(candidates[s], True) ** 3 * matchup(candidates[s], boss, True) ** 2)
+            ** 0.2
+        ),
+    )
     encounters = lair.encounters()
-    path = max(paths(lair.map_type()), key=lambda p: sum((1 + 0.1 * i) * matchup(encounters[str(r)][c], boss, True) for i, (r, c) in enumerate(p)))
+    path = max(
+        paths(lair.map_type()),
+        key=lambda p: sum(
+            (1 + 0.1 * i) * matchup(encounters[str(r)][c], boss, True) for i, (r, c) in enumerate(p)
+        ),
+    )
     opponents = [encounters[str(r)][c] for r, c in path]
     events = data.lair_events(lair.map_type(), lair.layout())
     schedule = []
@@ -345,7 +435,9 @@ def real_run(boss, seed):
                 chosen(rng, want)
                 if taker is not None:
                     team[1 + taker] = new
-                log.append(f"抓第{caught}只 不换（{take_score:.2f} / {leave_score:.2f}），{'队友换上' if taker is not None else '没人换'}")
+                log.append(
+                    f"抓第{caught}只 不换（{take_score:.2f} / {leave_score:.2f}），{'队友换上' if taker is not None else '没人换'}"
+                )
         elif event == "scientist":
             want = wants(rng)
             trial = copy_rng(rng)
@@ -356,7 +448,9 @@ def real_run(boss, seed):
                 rng.next_u32()
                 used.add((row[0], row[1]))
                 team[0] = give
-                log.append(f"研究员 换成 {zh(give)}（{score(give, mates, caught):.2f} / {score(own, mates, caught):.2f}）")
+                log.append(
+                    f"研究员 换成 {zh(give)}（{score(give, mates, caught):.2f} / {score(own, mates, caught):.2f}）"
+                )
             else:
                 member = chosen(rng, want)
                 log.append(f"研究员 不换（给的是 {zh(give) if give in RENTALS else give}）")
@@ -387,9 +481,20 @@ def real_run2(boss, seed):
     lair = Lair(data, seed)
     candidates = lair.candidates()
     rows = data.lair_rows()
-    starter = max(range(3), key=lambda s: (rental_score(candidates[s], True) ** 3 * matchup(candidates[s], boss, True) ** 2) ** 0.2)
+    starter = max(
+        range(3),
+        key=lambda s: (
+            (rental_score(candidates[s], True) ** 3 * matchup(candidates[s], boss, True) ** 2)
+            ** 0.2
+        ),
+    )
     encounters = lair.encounters()
-    path = max(paths(lair.map_type()), key=lambda p: sum((1 + 0.1 * i) * matchup(encounters[str(r)][c], boss, True) for i, (r, c) in enumerate(p)))
+    path = max(
+        paths(lair.map_type()),
+        key=lambda p: sum(
+            (1 + 0.1 * i) * matchup(encounters[str(r)][c], boss, True) for i, (r, c) in enumerate(p)
+        ),
+    )
     opponents = [encounters[str(r)][c] for r, c in path]
     events = data.lair_events(lair.map_type(), lair.layout())
     schedule = []
@@ -472,7 +577,9 @@ def real_run2(boss, seed):
             nxt = side_events(r, t, u, index + 1, caught, l)
             options[take] = (score(t[0], t[1:], caught), r, t, u, l, nxt)
         take = options[True][0] > options[False][0]
-        log.append(f"抓第{caught}只 {'换' if take else '不换'}（推完后面的研究员：换 {options[True][0]:.2f} / 不换 {options[False][0]:.2f}）")
+        log.append(
+            f"抓第{caught}只 {'换' if take else '不换'}（推完后面的研究员：换 {options[True][0]:.2f} / 不换 {options[False][0]:.2f}）"
+        )
         _, rng, team, used, extra, index = options[take]
         log += extra
     teams.append(tuple(team))

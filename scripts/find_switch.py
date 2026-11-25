@@ -25,12 +25,16 @@ def _local_prefix() -> str:
     不用"连一个外部地址再读本机 IP"的办法，开了代理的虚拟网卡（utun）会让它读到
     198.18.x.x 之类的假地址。
     """
-    route = subprocess.run(["route", "-n", "get", "default"], capture_output=True, text=True).stdout
+    route = subprocess.run(
+        ["route", "-n", "get", "default"], capture_output=True, text=True, check=False
+    ).stdout
     match = re.search(r"interface: (\S+)", route)
     if match is None:
         raise RuntimeError("找不到默认路由，没有连上网络")
     iface = match.group(1)
-    ip = subprocess.run(["ipconfig", "getifaddr", iface], capture_output=True, text=True)
+    ip = subprocess.run(
+        ["ipconfig", "getifaddr", iface], capture_output=True, text=True, check=False
+    )
     return ip.stdout.strip().rsplit(".", 1)[0]
 
 
@@ -58,8 +62,8 @@ def find_switch(switch_mac: str, rounds: int = 3) -> str | None:
                     pass
         time.sleep(1.5)
 
-        out = subprocess.run(["arp", "-an"], capture_output=True, text=True).stdout
-        for ip, found in re.findall(r"\(([\d.]+)\) at ([0-9a-f:]+)", out, re.I):
+        out = subprocess.run(["arp", "-an"], capture_output=True, text=True, check=False).stdout
+        for ip, found in re.findall(r"\(([\d.]+)\) at ([0-9a-f:]+)", out, re.IGNORECASE):
             if ip.startswith(prefix + ".") and _normalize_mac(found) == mac:
                 return ip
     return None
@@ -121,9 +125,7 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
     switch_mac = args[0]
     if not re.fullmatch(r"[0-9a-fA-F]{1,2}([:-][0-9a-fA-F]{1,2}){5}", switch_mac):
-        logging.error(
-            f"mac 格式不对：{switch_mac!r}，应该是 aa:bb:cc:dd:ee:ff 这样的 6 段十六进制"
-        )
+        logging.error(f"mac 格式不对：{switch_mac!r}，应该是 aa:bb:cc:dd:ee:ff 这样的 6 段十六进制")
         sys.exit(1)
     logging.info(f"正在查找 MAC 为 {switch_mac} 的 Switch ...")
     ip = find_switch(switch_mac)

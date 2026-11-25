@@ -24,7 +24,7 @@ SEEDS = {
     16238065963362826354: "cresselia",
 }
 data = GameData(GameConfig())
-zh = lambda name: data.pokemon_object(name).name("zh-Hans")  # noqa: E731
+zh = lambda name: data.pokemon_object(name).name("zh-Hans")
 
 
 def parse(path):
@@ -59,7 +59,11 @@ def parse(path):
 rows = defaultdict(list)
 for seed, boss in SEEDS.items():
     scorer = upstream.Scorer(data, boss)
-    logs = [p for p in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")) if f"读取到的 seed 是 {seed}" in open(p, encoding="utf-8").read()]
+    logs = [
+        p
+        for p in sorted(glob.glob("runs/logs/swsh-lair/start/*.log"))
+        if f"读取到的 seed 是 {seed}" in open(p, encoding="utf-8").read()
+    ]
     parsed = [parse(p) for p in logs]
     # 这个 seed 的中文名 → name_id（从有路线那一行的日志里收集）
     names = {}
@@ -80,9 +84,13 @@ for seed, boss in SEEDS.items():
             opp = boss if index == 3 else route[index]
             team = fight["team"]
             value = scorer.matchup(team[0], opp, team[1:])
-            rows[(seed, starter, key, index)].append((value, fight["turns"], fight["faints"], "/".join(zh(x) for x in team)))
+            rows[(seed, starter, key, index)].append(
+                (value, fight["turns"], fight["faints"], "/".join(zh(x) for x in team))
+            )
 
-for (seed, starter, route, index), items in sorted(rows.items(), key=lambda kv: (str(kv[0][0]), kv[0][1], kv[0][2], kv[0][3])):
+for (seed, starter, route, index), items in sorted(
+    rows.items(), key=lambda kv: (str(kv[0][0]), kv[0][1], kv[0][2], kv[0][3])
+):
     if index == 0:
         print(f"\n== {seed}：{starter} 首发；{route}（{len(items)} 局）")
     ms = [i[0] for i in items]

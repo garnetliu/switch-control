@@ -15,14 +15,17 @@
   python3 scripts/router.py '{"network":{"name":"wan_status"},"method":"get"}'
   python3 scripts/router.py --stok               # 只登录，打印 stok
 """
+
 import json
 import os
 import sys
 import urllib.request
 
-DICT = ("yLwVl0zKqws7LgKPRQ84Mdt708T1qQ3Ha7xv3H7NyU84p21BriUWBU43odz3iP4rBL3cD02KZciXTys"
-        "VXiV8ngg6vL48rPJyAUw0HurW20xqxv9aYb4M9wK1Ae0wlro510qXeU07kV57fQMc8L6aLgMLwygtc0F"
-        "10a0Dg70TOoouyFhdysuRMO51yY5ZlOZZLEal1h0t9YQW0Ko7oBwmCAHoic4HYbUyVeU3sfQ1xtXcPcf1aT303wAQhv66qzW")
+DICT = (
+    "yLwVl0zKqws7LgKPRQ84Mdt708T1qQ3Ha7xv3H7NyU84p21BriUWBU43odz3iP4rBL3cD02KZciXTys"
+    "VXiV8ngg6vL48rPJyAUw0HurW20xqxv9aYb4M9wK1Ae0wlro510qXeU07kV57fQMc8L6aLgMLwygtc0F"
+    "10a0Dg70TOoouyFhdysuRMO51yY5ZlOZZLEal1h0t9YQW0Ko7oBwmCAHoic4HYbUyVeU3sfQ1xtXcPcf1aT303wAQhv66qzW"
+)
 KEY = "RDpbLfCPsJZ7fiv"
 
 
@@ -73,12 +76,12 @@ def login(base, user, pwd):
     res = post(base, "/", {"method": "do", "login": {"username": user, "password": enc}})
     stok = res.get("stok")
     if not stok:
-        raise SystemExit("登录失败: %s" % json.dumps(res, ensure_ascii=False))
+        raise SystemExit(f"登录失败: {json.dumps(res, ensure_ascii=False)}")
     return stok
 
 
 def query(base, stok, body):
-    return post(base, "/stok=%s/ds" % stok, body)
+    return post(base, f"/stok={stok}/ds", body)
 
 
 def main():
@@ -110,7 +113,7 @@ def main():
         ("接口模式", {"network": {"name": "if_mode"}, "method": "get"}),
     ):
         try:
-            print("== %s ==" % label)
+            print(f"== {label} ==")
             print(json.dumps(query(base, stok, body), ensure_ascii=False))
         except Exception as ex:
             print("  查询失败:", ex)

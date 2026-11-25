@@ -28,17 +28,19 @@ def _init():
 
 def evaluate(seed: int):
     data, scorer = _state["data"], _state["scorer"]
-    zh = lambda name: data.pokemon_object(name).name("zh-Hans")  # noqa: E731
+    zh = lambda name: data.pokemon_object(name).name("zh-Hans")
     try:
         lair = Lair(data, seed)
         candidates = lair.candidates()[:3]
         best = None
         for starter in range(3):
             for path in upstream.paths(lair.map_type()):
-                walker = upstream.Walker(lair, data, BOSS, path, [candidates[starter], *lair.teammates(starter)])
+                walker = upstream.Walker(
+                    lair, data, BOSS, path, [candidates[starter], *lair.teammates(starter)]
+                )
                 swaps = upstream.plan_swaps(scorer, walker)
                 final = walker.copy()
-                decide = lambda w: upstream.decide_scientist(scorer, w)  # noqa: E731
+                decide = lambda w: upstream.decide_scientist(scorer, w)
                 final.side_events(decide)
                 fight = 0.0
                 for index, take in enumerate(swaps):
@@ -47,11 +49,16 @@ def evaluate(seed: int):
                     final.side_events(decide)
                 route = scorer.route_score(walker.opponents)
                 if best is None or fight + route > best[0]:
-                    best = (fight + route, fight, route, zh(candidates[starter]),
-                            " → ".join(zh(o) for o in walker.opponents),
-                            "、".join("换" if s else "不换" for s in swaps))
+                    best = (
+                        fight + route,
+                        fight,
+                        route,
+                        zh(candidates[starter]),
+                        " → ".join(zh(o) for o in walker.opponents),
+                        "、".join("换" if s else "不换" for s in swaps),
+                    )
         return seed, best, None
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:
         return seed, None, repr(error)
 
 
@@ -63,6 +70,8 @@ if __name__ == "__main__":
     failed = [r for r in results if not r[1]]
     print(f"{BOSS}：{len(ok)} 个算出来，{len(failed)} 个出错")
     for seed, (total, fight, route, starter, path, swaps), _ in ok[:15]:
-        print(f"{seed}：总 {total:.2f}（打关 {fight:.2f} + 路线 {route:.2f}）首发 {starter}；{path}；{swaps}")
+        print(
+            f"{seed}：总 {total:.2f}（打关 {fight:.2f} + 路线 {route:.2f}）首发 {starter}；{path}；{swaps}"
+        )
     for seed, _, error in failed[:5]:
         print(f"出错 {seed}：{error}")

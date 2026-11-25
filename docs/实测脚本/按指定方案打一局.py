@@ -14,14 +14,15 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 os.chdir(ROOT)
 
-from dotenv import load_dotenv  # noqa: E402
+from dotenv import load_dotenv
 
 load_dotenv(os.path.join(ROOT, ".env"))
 
-import swsh.lair as LAIR  # noqa: E402
-from swsh.lair import upstream  # noqa: E402
-from swsh.lair.plan import Plan  # noqa: E402
-import importlib  # noqa: E402
+import importlib
+
+import swsh.lair as LAIR
+from swsh.lair import upstream
+from swsh.lair.plan import Plan
 
 # steps 包里同名的函数会盖住模块，要按模块名取
 CATCH = importlib.import_module("swsh.lair.steps.catch")
@@ -47,9 +48,13 @@ def upstream_plan(sw, lair, map_type, layout, starters):
     if not active(sw) or "path" not in PLAN:
         return plan
     if list(sw.game.candidates[:3]) != PLAN["candidates"] or map_type != "2x2":
-        logging.warning(f"测试：候选 {sw.game.candidates} 或地图 {map_type} 和方案对不上，按程序自己选的打")
+        logging.warning(
+            f"测试：候选 {sw.game.candidates} 或地图 {map_type} 和方案对不上，按程序自己选的打"
+        )
         return plan
-    logging.info(f"测试：按新算法的方案打（分 {PLAN['score']}），下面日志里的首发分、路线分是程序自己那套的")
+    logging.info(
+        f"测试：按新算法的方案打（分 {PLAN['score']}），下面日志里的首发分、路线分是程序自己那套的"
+    )
     return Plan(
         PLAN["starter"],
         PLAN["path"],
@@ -113,6 +118,6 @@ def initialize(sw):
 
 LAIR.STEPS["initialize"] = initialize
 
-import main  # noqa: E402
+import main
 
 main.main("swsh/lair")

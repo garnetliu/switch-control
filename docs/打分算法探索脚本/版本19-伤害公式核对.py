@@ -36,12 +36,43 @@ from control_switch.vision.text import levenshtein
 
 ME = "夜暮林夕"
 SCREEN = 2732 / 4096  # 多打里光墙、反射壁的倍率
-ALLY_SPREAD = {"bulldoze", "discharge", "earthquake", "lava-plume", "sludge-wave", "surf", "brutal-swing"}
+ALLY_SPREAD = {
+    "bulldoze",
+    "discharge",
+    "earthquake",
+    "lava-plume",
+    "sludge-wave",
+    "surf",
+    "brutal-swing",
+}
 HEAL_MOVES = {
-    "drain-punch", "giga-drain", "draining-kiss", "leech-life", "horn-leech", "strength-sap", "recover",
-    "roost", "synthesis", "moonlight", "morning-sun", "wish", "rest", "absorb", "mega-drain",
-    "oblivion-wing", "parabolic-charge", "slack-off", "soft-boiled", "milk-drink", "shore-up",
-    "life-dew", "heal-pulse", "pollen-puff", "leech-seed", "pain-split", "floral-healing",
+    "drain-punch",
+    "giga-drain",
+    "draining-kiss",
+    "leech-life",
+    "horn-leech",
+    "strength-sap",
+    "recover",
+    "roost",
+    "synthesis",
+    "moonlight",
+    "morning-sun",
+    "wish",
+    "rest",
+    "absorb",
+    "mega-drain",
+    "oblivion-wing",
+    "parabolic-charge",
+    "slack-off",
+    "soft-boiled",
+    "milk-drink",
+    "shore-up",
+    "life-dew",
+    "heal-pulse",
+    "pollen-puff",
+    "leech-seed",
+    "pain-split",
+    "floral-healing",
 }
 
 data = GameData(GameConfig())
@@ -109,12 +140,20 @@ def parse_log(path: str) -> list[dict]:
         if m:
             abilities = [re.sub(r"（.*?）", "", x).strip() for x in m[1].split("，")]
             continue
-        m = re.search(r"INFO: 对手 (\S+)（种类 (\d+)）：特性 (\S+?)（编号 \d+），性格 (\d+)，.*?个体值 (\[.*?\])，等级 (\d+)", line)
+        m = re.search(
+            r"INFO: 对手 (\S+)（种类 (\d+)）：特性 (\S+?)（编号 \d+），性格 (\d+)，.*?个体值 (\[.*?\])，等级 (\d+)",
+            line,
+        )
         if m:
             cur = dict(
-                path=path, opponent=m[1], opp_ability=m[3], opp_nature=int(m[4]),
-                opp_ivs=ast.literal_eval(m[5]), opp_level=int(m[6]),
-                items=locals().get("items", []), abilities=locals().get("abilities", []),
+                path=path,
+                opponent=m[1],
+                opp_ability=m[3],
+                opp_nature=int(m[4]),
+                opp_ivs=ast.literal_eval(m[5]),
+                opp_level=int(m[6]),
+                items=locals().get("items", []),
+                abilities=locals().get("abilities", []),
                 events=[],
             )
             battles.append(cur)
@@ -125,8 +164,14 @@ def parse_log(path: str) -> list[dict]:
         m = SNAP.match(line)
         if m:
             entry = dict(
-                time=m[1], label=m[2], name=m[3], cur=int(m[5]), max=int(m[6]),
-                stats=ast.literal_eval(m[7]), stages=ast.literal_eval(m[8]), moves=parse_snapshot_moves(m[9]),
+                time=m[1],
+                label=m[2],
+                name=m[3],
+                cur=int(m[5]),
+                max=int(m[6]),
+                stats=ast.literal_eval(m[7]),
+                stages=ast.literal_eval(m[8]),
+                moves=parse_snapshot_moves(m[9]),
             )
             if m[2] == "对手":
                 snap = dict(time=m[1], slots=[entry])
@@ -193,7 +238,7 @@ class FieldTracker:
             if "物理" in t:
                 kinds.append("physical")
             for k in kinds:
-                for s in ([side] if side else ["own", "opp"]):
+                for s in [side] if side else ["own", "opp"]:
                     self.screens[(s, k)] = 5
 
     def end_turn(self) -> None:
@@ -211,26 +256,34 @@ class FieldTracker:
 
 # ---------------------------------------------------------------- 预测
 
+
 def accuracy_divisor(move, field: Field) -> float:
     """damage() 里乘的命中率（含天气对暴风雪、打雷、暴风的修正），用来换成「打中了的伤害」。"""
     acc = move.accuracy if move.accuracy and move.accuracy > 0 else 1.0
     f = 1.0
-    if field.weather == "hail" and move.name_id == "blizzard":
-        f = 1 / 0.7
-    elif field.weather == "rain" and move.name_id in ("thunder", "hurricane"):
+    if (
+        field.weather == "hail"
+        and move.name_id == "blizzard"
+        or field.weather == "rain"
+        and move.name_id in ("thunder", "hurricane")
+    ):
         f = 1 / 0.7
     elif field.weather == "sunlight" and move.name_id in ("thunder", "hurricane"):
         f = 0.5 / 0.7
     return acc * f
 
 
-def logged(base: Pokemon, entry: dict, crit_role: str | None = None, use_stages: bool = True) -> Logged:
+def logged(
+    base: Pokemon, entry: dict, crit_role: str | None = None, use_stages: bool = True
+) -> Logged:
     stages = list(entry["stages"][:5]) if use_stages else [0] * 5
     if crit_role == "attacker":
         stages = [max(s, 0) for s in stages]
     elif crit_role == "defender":
         stages = [min(s, 0) for s in stages]
-    override = tuple(entry["stats"][i] * stage_factor(stages[i]) for i in range(4)) + (entry["stats"][4],)
+    override = tuple(entry["stats"][i] * stage_factor(stages[i]) for i in range(4)) + (
+        entry["stats"][4],
+    )
     fields = {k: getattr(base, k) for k in base.__dataclass_fields__}
     return Logged(**fields, override=override)
 
@@ -261,6 +314,7 @@ def predict_pair(att_name, att_entry, dyn, index, dfd_name, dfd_entry, field, sp
 
 # ---------------------------------------------------------------- 主流程
 
+
 def main(paths: list[str]) -> None:
     samples_a: list[dict] = []
     samples_b: list[dict] = []
@@ -284,7 +338,14 @@ def main(paths: list[str]) -> None:
             first = snaps[0]["slots"]
             hp_rows.append((opp_name, is_boss, first[0]["max"], obj(opp_name).stats[0]))
             for entry in first:
-                stat_rows.append((entry["name"], entry["label"] == "对手", obj(entry["name"]).stats[1:], entry["stats"]))
+                stat_rows.append(
+                    (
+                        entry["name"],
+                        entry["label"] == "对手",
+                        obj(entry["name"]).stats[1:],
+                        entry["stats"],
+                    )
+                )
             # 我方每只不极巨化的最大血量：整场里见到的最小值
             normal_max = defaultdict(lambda: 10**9)
             for s in snaps:
@@ -295,7 +356,11 @@ def main(paths: list[str]) -> None:
             sticky = Counter()  # 这一场里出现过、之后一直排除的情况
             status_names: set[str] = set()
             # 按 snap 切回合
-            idx = [k for k, e in enumerate(battle["events"]) if e[0] == "snap" and len(e[1]["slots"]) == 5]
+            idx = [
+                k
+                for k, e in enumerate(battle["events"])
+                if e[0] == "snap" and len(e[1]["slots"]) == 5
+            ]
             # 第一次回合数据之前的文字（出场时特性带来的天气、场地）
             for e in battle["events"][: idx[0]]:
                 if e[0] == "text":
@@ -356,12 +421,24 @@ def main(paths: list[str]) -> None:
                                     if used.get(i) is None:
                                         return False
                                     me = obj(names[i])
-                                    return any(levenshtein(mv.name("zh-Hans"), move_text.rstrip("！!")) <= 1
-                                               for mv in (me.moves[used[i]], me.max_moves[used[i]]))
+                                    return any(
+                                        levenshtein(mv.name("zh-Hans"), move_text.rstrip("！!"))
+                                        <= 1
+                                        for mv in (me.moves[used[i]], me.max_moves[used[i]])
+                                    )
+
                                 cands = [i for i in cands if matches(i)]
                             slot = cands[0] if len(cands) == 1 else None
-                        actions.append(dict(slot=slot, move_text=move_text, after=[], field=None,
-                                            screens=dict(tracker.screens), before=list(pre_texts)))
+                        actions.append(
+                            dict(
+                                slot=slot,
+                                move_text=move_text,
+                                after=[],
+                                field=None,
+                                screens=dict(tracker.screens),
+                                before=list(pre_texts),
+                            )
+                        )
                         actions[-1]["field"] = tracker.field()
                     elif actions:
                         actions[-1]["after"].append(t)
@@ -389,7 +466,9 @@ def main(paths: list[str]) -> None:
                     turn_flags.add("替身")
                 if "帮助" in all_text:
                     turn_flags.add("帮助")
-                weather_dmg = any(a["field"].weather in ("sandstorm", "hail") for a in actions) or tracker.weather in ("sandstorm", "hail")
+                weather_dmg = any(
+                    a["field"].weather in ("sandstorm", "hail") for a in actions
+                ) or tracker.weather in ("sandstorm", "hail")
                 if weather_dmg:
                     turn_flags.add("沙暴冰雹")
 
@@ -403,7 +482,10 @@ def main(paths: list[str]) -> None:
                 def outcome(a):
                     after = "\n".join(a["after"])
                     return dict(
-                        miss="没有击中" in after or "没有效果" in after or "失败" in after or "躲开" in after,
+                        miss="没有击中" in after
+                        or "没有效果" in after
+                        or "失败" in after
+                        or "躲开" in after,
                         crit="要害" in after,
                         multi=bool(re.search(r"击中了\s*\d+\s*次", after)),
                         super="效果绝佳" in after,
@@ -416,9 +498,15 @@ def main(paths: list[str]) -> None:
                     a = opp_actions[0]
                     o = outcome(a)
                     opp = obj(opp_name)
-                    is_max = a["move_text"].startswith("极巨") or a["move_text"].startswith("超极巨")
+                    is_max = a["move_text"].startswith("极巨") or a["move_text"].startswith(
+                        "超极巨"
+                    )
                     pool = opp.max_moves if is_max else opp.moves
-                    cand = [j for j, mv in enumerate(pool) if levenshtein(mv.name("zh-Hans"), a["move_text"]) <= 1]
+                    cand = [
+                        j
+                        for j, mv in enumerate(pool)
+                        if levenshtein(mv.name("zh-Hans"), a["move_text"]) <= 1
+                    ]
                     if not cand:
                         drop_reasons["A: 对手招式没认出来"] += 1
                     elif len({pool[j].power for j in cand}) > 1:
@@ -446,15 +534,29 @@ def main(paths: list[str]) -> None:
                         hit = [i for i, d in drops.items() if d > 0]
                         # 我方自己的范围招式会打到队友
                         ally_spread = any(
-                            used.get(i) is not None and obj(names[i]).moves[used[i]].name_id in ALLY_SPREAD and not own_dyn[i]
+                            used.get(i) is not None
+                            and obj(names[i]).moves[used[i]].name_id in ALLY_SPREAD
+                            and not own_dyn[i]
                             for i in range(1, 5)
                         )
-                        healers = {i for i in range(1, 5) if used.get(i) is not None and obj(names[i]).moves[used[i]].name_id in HEAL_MOVES}
+                        healers = {
+                            i
+                            for i in range(1, 5)
+                            if used.get(i) is not None
+                            and obj(names[i]).moves[used[i]].name_id in HEAL_MOVES
+                        }
                         spread = move.is_spread and not is_max
                         flags = set(turn_flags)
                         if ally_spread:
                             flags.add("我方范围招式")
-                        bad = flags & {"混乱", "反伤", "天气扣血", "沙暴冰雹", "替身", "我方范围招式"}
+                        bad = flags & {
+                            "混乱",
+                            "反伤",
+                            "天气扣血",
+                            "沙暴冰雹",
+                            "替身",
+                            "我方范围招式",
+                        }
                         if unknown and not fainted:
                             drop_reasons["A: 有一只极巨化开始/结束"] += 1
                         elif bad:
@@ -480,7 +582,17 @@ def main(paths: list[str]) -> None:
                                 if not dead and slots1[i]["cur"] == 0:
                                     dead = True
                                 f = a["field"]
-                                pa, pb, pc, raw = predict_pair(opp_name, slots0[0], is_max, j, names[i], slots0[i], f, spread, o["crit"])
+                                pa, pb, pc, raw = predict_pair(
+                                    opp_name,
+                                    slots0[0],
+                                    is_max,
+                                    j,
+                                    names[i],
+                                    slots0[i],
+                                    f,
+                                    spread,
+                                    o["crit"],
+                                )
                                 if a["screens"].get(("own", move.category)):
                                     flags_s = True
                                 else:
@@ -488,18 +600,53 @@ def main(paths: list[str]) -> None:
                                 eff = type_multiplier(move.type_id, obj(names[i]).type_ids)
                                 effect_check[(eff > 1, eff < 1, o["super"], o["weak"])] += 1
                                 rec = dict(
-                                    kind="A", path=battle["path"], time=s0["time"], attacker=opp_name, defender=names[i],
-                                    move=move.name_id, move_zh=move.name("zh-Hans"), category=move.category,
-                                    is_max=is_max, spread=spread and len(hit) > 1, crit=o["crit"], multi=o["multi"],
-                                    mid_stage=o["mid_stage"], screen=flags_s, weather=f.weather, terrain=f.terrain,
-                                    actual=slots0[i]["cur"] - slots1[i]["cur"] if not dead else slots0[i]["cur"],
-                                    pa=pa, pb=pb, pc=pc, raw=raw, dead=dead, boss=is_boss, cf=move.correction_factor,
-                                    def_ability=battle["abilities"][i - 1] if len(battle["abilities"]) == 4 else "?",
+                                    kind="A",
+                                    path=battle["path"],
+                                    time=s0["time"],
+                                    attacker=opp_name,
+                                    defender=names[i],
+                                    move=move.name_id,
+                                    move_zh=move.name("zh-Hans"),
+                                    category=move.category,
+                                    is_max=is_max,
+                                    spread=spread and len(hit) > 1,
+                                    crit=o["crit"],
+                                    multi=o["multi"],
+                                    mid_stage=o["mid_stage"],
+                                    screen=flags_s,
+                                    weather=f.weather,
+                                    terrain=f.terrain,
+                                    actual=slots0[i]["cur"] - slots1[i]["cur"]
+                                    if not dead
+                                    else slots0[i]["cur"],
+                                    pa=pa,
+                                    pb=pb,
+                                    pc=pc,
+                                    raw=raw,
+                                    dead=dead,
+                                    boss=is_boss,
+                                    cf=move.correction_factor,
+                                    def_ability=battle["abilities"][i - 1]
+                                    if len(battle["abilities"]) == 4
+                                    else "?",
                                     att_ability=battle["opp_ability"],
-                                    item=battle["items"][i - 1] if len(battle["items"]) == 4 else "?",
-                                    stages_att=slots0[0]["stages"], stages_def=slots0[i]["stages"],
-                                    flags=flags, frac_a=damage(replace(obj(opp_name), dynamax=is_max), j, replace(obj(names[i]), dynamax=False), f, spread) / accuracy_divisor(move, f),
-                                    dmax=slots0[i]["max"], own_dyn=own_dyn[i], data_hp=obj(names[i]).stats[0],
+                                    item=battle["items"][i - 1]
+                                    if len(battle["items"]) == 4
+                                    else "?",
+                                    stages_att=slots0[0]["stages"],
+                                    stages_def=slots0[i]["stages"],
+                                    flags=flags,
+                                    frac_a=damage(
+                                        replace(obj(opp_name), dynamax=is_max),
+                                        j,
+                                        replace(obj(names[i]), dynamax=False),
+                                        f,
+                                        spread,
+                                    )
+                                    / accuracy_divisor(move, f),
+                                    dmax=slots0[i]["max"],
+                                    own_dyn=own_dyn[i],
+                                    data_hp=obj(names[i]).stats[0],
                                 )
                                 (censored if dead else samples_a).append(rec)
                 elif len(opp_actions) > 1:
@@ -512,8 +659,12 @@ def main(paths: list[str]) -> None:
                     drop_reasons["B: 对手最大血量变了"] += 1
                     continue
                 actual = slots0[0]["cur"] - slots1[0]["cur"]
-                opp_heal = any(obj(opp_name).moves[j].name_id in HEAL_MOVES for a in opp_actions
-                               for j, mv in enumerate(obj(opp_name).moves) if levenshtein(mv.name("zh-Hans"), a["move_text"]) <= 1)
+                opp_heal = any(
+                    obj(opp_name).moves[j].name_id in HEAL_MOVES
+                    for a in opp_actions
+                    for j, mv in enumerate(obj(opp_name).moves)
+                    if levenshtein(mv.name("zh-Hans"), a["move_text"]) <= 1
+                )
                 if opp_heal:
                     drop_reasons["B: 对手用了回血招式"] += 1
                     continue
@@ -548,7 +699,11 @@ def main(paths: list[str]) -> None:
                         break
                     a = acts[0]
                     o = outcome(a)
-                    dyn = own_dyn[i] or a["move_text"].startswith("极巨") or a["move_text"].startswith("超极巨")
+                    dyn = (
+                        own_dyn[i]
+                        or a["move_text"].startswith("极巨")
+                        or a["move_text"].startswith("超极巨")
+                    )
                     me = obj(names[i])
                     move = me.max_moves[j] if dyn else me.moves[j]
                     if levenshtein(move.name("zh-Hans"), a["move_text"]) > 1:
@@ -563,7 +718,17 @@ def main(paths: list[str]) -> None:
                     if base_move.name_id in HEAL_MOVES:
                         pass
                     f = a["field"]
-                    pa, pb, pc, raw = predict_pair(names[i], slots0[i], dyn, j, opp_name, slots0[0], f, base_move.name_id in ALLY_SPREAD and not dyn, o["crit"])
+                    pa, pb, pc, raw = predict_pair(
+                        names[i],
+                        slots0[i],
+                        dyn,
+                        j,
+                        opp_name,
+                        slots0[0],
+                        f,
+                        base_move.name_id in ALLY_SPREAD and not dyn,
+                        o["crit"],
+                    )
                     any_crit |= o["crit"]
                     any_multi |= o["multi"]
                     any_mid |= o["mid_stage"]
@@ -572,11 +737,28 @@ def main(paths: list[str]) -> None:
                     maxes.append(dyn)
                     eff = type_multiplier(move.type_id, obj(opp_name).type_ids)
                     effect_check[(eff > 1, eff < 1, o["super"], o["weak"])] += 1
-                    parts.append(dict(slot=i, name=names[i], move=move.name_id, move_zh=move.name("zh-Hans"), category=move.category,
-                                      is_max=dyn, crit=o["crit"], pa=pa, pb=pb, pc=pc, raw=raw,
-                                      item=battle["items"][i - 1] if len(battle["items"]) == 4 else "?",
-                                      ability=battle["abilities"][i - 1] if len(battle["abilities"]) == 4 else "?",
-                                      weather=f.weather, terrain=f.terrain, type=move.type_id))
+                    parts.append(
+                        dict(
+                            slot=i,
+                            name=names[i],
+                            move=move.name_id,
+                            move_zh=move.name("zh-Hans"),
+                            category=move.category,
+                            is_max=dyn,
+                            crit=o["crit"],
+                            pa=pa,
+                            pb=pb,
+                            pc=pc,
+                            raw=raw,
+                            item=battle["items"][i - 1] if len(battle["items"]) == 4 else "?",
+                            ability=battle["abilities"][i - 1]
+                            if len(battle["abilities"]) == 4
+                            else "?",
+                            weather=f.weather,
+                            terrain=f.terrain,
+                            type=move.type_id,
+                        )
+                    )
                 if not ok:
                     drop_reasons["B: 一只出手两次/对不上"] += 1
                     continue
@@ -585,12 +767,29 @@ def main(paths: list[str]) -> None:
                 if actual == 0 and sum(p["pa"] for p in parts) > 0:
                     drop_reasons["B: 有进攻但对手没掉血（守住之类）"] += 1
                     continue
-                samples_b.append(dict(
-                    kind="B", path=battle["path"], time=s0["time"], defender=opp_name, boss=is_boss, actual=actual,
-                    pa=sum(p["pa"] for p in parts), pb=sum(p["pb"] for p in parts), pc=sum(p["pc"] for p in parts), raw=sum(p["raw"] for p in parts), parts=parts,
-                    crit=any_crit, multi=any_multi, mid_stage=any_mid, cf=any_cf, ally_spread=any_spread,
-                    screen=any_screen, flags=turn_flags, def_ability=battle["opp_ability"],
-                ))
+                samples_b.append(
+                    dict(
+                        kind="B",
+                        path=battle["path"],
+                        time=s0["time"],
+                        defender=opp_name,
+                        boss=is_boss,
+                        actual=actual,
+                        pa=sum(p["pa"] for p in parts),
+                        pb=sum(p["pb"] for p in parts),
+                        pc=sum(p["pc"] for p in parts),
+                        raw=sum(p["raw"] for p in parts),
+                        parts=parts,
+                        crit=any_crit,
+                        multi=any_multi,
+                        mid_stage=any_mid,
+                        cf=any_cf,
+                        ally_spread=any_spread,
+                        screen=any_screen,
+                        flags=turn_flags,
+                        def_ability=battle["opp_ability"],
+                    )
+                )
 
     report(samples_a, samples_b, censored, stat_rows, hp_rows, drop_reasons, effect_check)
 
@@ -623,33 +822,62 @@ def table(title: str, rows: list[dict], key, which=("raw", "pa", "pc", "pb")) ->
 
 
 def clean_a(r):
-    return not (r["crit"] or r["multi"] or r["mid_stage"] or r["screen"] or r["cf"] != 1 or "帮助" in r["flags"] or "回血" in r["flags"])
+    return not (
+        r["crit"]
+        or r["multi"]
+        or r["mid_stage"]
+        or r["screen"]
+        or r["cf"] != 1
+        or "帮助" in r["flags"]
+        or "回血" in r["flags"]
+    )
 
 
 def clean_b(r):
-    return not (r["crit"] or r["multi"] or r["mid_stage"] or r["screen"] or r["cf"] or r["ally_spread"] or "帮助" in r["flags"])
+    return not (
+        r["crit"]
+        or r["multi"]
+        or r["mid_stage"]
+        or r["screen"]
+        or r["cf"]
+        or r["ally_spread"]
+        or "帮助" in r["flags"]
+    )
 
 
 def report(A, B, censored, stat_rows, hp_rows, drop_reasons, effect_check):
     print("# 样本数")
-    print(f"A 对手打我方 {len(A)} 条（另有倒下的 {len(censored)} 条只算下限）；B 我方打对手 {len(B)} 回合")
+    print(
+        f"A 对手打我方 {len(A)} 条（另有倒下的 {len(censored)} 条只算下限）；B 我方打对手 {len(B)} 回合"
+    )
     print("\n# 排除的原因")
     for k, v in drop_reasons.most_common():
         print(f"  {v:5d} {k}")
 
     print("\n# 能力值：数据（个体值 31、数据性格）÷ 日志实际，[攻 防 特攻 特防 速]")
     for side in (True, False):
-        ratios = [[d / a for d, a in zip(data_s, act)] for name, opp, data_s, act in stat_rows if opp == side]
+        ratios = [
+            [d / a for d, a in zip(data_s, act)]
+            for name, opp, data_s, act in stat_rows
+            if opp == side
+        ]
         if ratios:
             cols = list(zip(*ratios))
-            print(f"  {'对手' if side else '我方'} n={len(ratios)}: " + "  ".join(
-                f"中位 {statistics.median(c):.3f} [{min(c):.2f},{max(c):.2f}] 相同 {sum(abs(x - 1) < 1e-9 for x in c) / len(c):.0%}" for c in cols))
+            print(
+                f"  {'对手' if side else '我方'} n={len(ratios)}: "
+                + "  ".join(
+                    f"中位 {statistics.median(c):.3f} [{min(c):.2f},{max(c):.2f}] 相同 {sum(abs(x - 1) < 1e-9 for x in c) / len(c):.0%}"
+                    for c in cols
+                )
+            )
 
     print("\n# 对手血量倍数：战斗最大血量 ÷ 数据 HP（个体值 31）")
     for boss in (False, True):
         rs = [m / h for _, b, m, h in hp_rows if b == boss]
         if rs:
-            print(f"  {'首领' if boss else '路上'} n={len(rs)} 中位 {statistics.median(rs):.3f} 范围 {min(rs):.3f}～{max(rs):.3f}（代码用 {4.18 if boss else 3.8}）")
+            print(
+                f"  {'首领' if boss else '路上'} n={len(rs)} 中位 {statistics.median(rs):.3f} 范围 {min(rs):.3f}～{max(rs):.3f}（代码用 {4.18 if boss else 3.8}）"
+            )
 
     print("\n# 相克核对（预测倍率>1, <1, 文字效果绝佳, 文字效果不好）")
     for k, v in sorted(effect_check.items(), key=lambda x: -x[1]):
@@ -674,18 +902,38 @@ def report(A, B, censored, stat_rows, hp_rows, drop_reasons, effect_check):
             table("干净 按招式", cl, lambda r: r["move_zh"])
             table("全部 按墙", rows, lambda r: "墙" if r["screen"] else "无墙")
             table("全部 按回合中途能力变化", rows, lambda r: "中途变化" if r["mid_stage"] else "无")
-            table("全部 按被打方能力等级（防/特防）", rows, lambda r: tuple(r["stages_def"][1:4:2]) if any(r["stages_def"][1:4:2]) else "没变")
-            table("全部 按攻击方能力等级（攻/特攻）", rows, lambda r: tuple(r["stages_att"][0:3:2]) if any(r["stages_att"][0:3:2]) else "没变")
-            print("\n## A 按比例：(掉血/战斗最大血量) ÷ (预测/数据 HP ÷ 极巨倍数)，干净样本；raw 是 damage() 原样，pa 是去掉命中率")
+            table(
+                "全部 按被打方能力等级（防/特防）",
+                rows,
+                lambda r: tuple(r["stages_def"][1:4:2]) if any(r["stages_def"][1:4:2]) else "没变",
+            )
+            table(
+                "全部 按攻击方能力等级（攻/特攻）",
+                rows,
+                lambda r: tuple(r["stages_att"][0:3:2]) if any(r["stages_att"][0:3:2]) else "没变",
+            )
+            print(
+                "\n## A 按比例：(掉血/战斗最大血量) ÷ (预测/数据 HP ÷ 极巨倍数)，干净样本；raw 是 damage() 原样，pa 是去掉命中率"
+            )
             for w in ("raw", "pa"):
-                v = [(r["actual"] / r["dmax"]) / (r[w] / r["data_hp"] / (1.9 if r["own_dyn"] else 1)) for r in cl if r[w] > 0]
+                v = [
+                    (r["actual"] / r["dmax"]) / (r[w] / r["data_hp"] / (1.9 if r["own_dyn"] else 1))
+                    for r in cl
+                    if r[w] > 0
+                ]
                 print(f"  {w}: " + summary(v))
         else:
+
             def single(r, f):
                 return f(r["parts"][0]) if len(r["parts"]) == 1 else "多只"
+
             table("干净 按出手只数", cl, lambda r: len(r["parts"]))
             table("干净 只有一只出手 按物理/特殊", cl, lambda r: single(r, lambda p: p["category"]))
-            table("干净 按含不含极巨招式", cl, lambda r: "含极巨" if any(p["is_max"] for p in r["parts"]) else "普通")
+            table(
+                "干净 按含不含极巨招式",
+                cl,
+                lambda r: "含极巨" if any(p["is_max"] for p in r["parts"]) else "普通",
+            )
             table("干净 按首领", cl, lambda r: "首领" if r["boss"] else "路上")
             table("干净 按对手特性", cl, lambda r: r["def_ability"])
             table("干净 只有一只出手 按道具", cl, lambda r: single(r, lambda p: p["item"]))
@@ -699,12 +947,16 @@ def report(A, B, censored, stat_rows, hp_rows, drop_reasons, effect_check):
             table("全部 按多段", rows, lambda r: "多段" if r["multi"] else "无")
 
     print("\n\n######## 倒下的（实际掉血是下限 = 回合开头剩余血量）")
-    print(f"  n={len(censored)}；实际下限 ÷ 预测(b) 的中位 {statistics.median([r['actual'] / r['pb'] for r in censored]) if censored else 0:.3f}")
+    print(
+        f"  n={len(censored)}；实际下限 ÷ 预测(b) 的中位 {statistics.median([r['actual'] / r['pb'] for r in censored]) if censored else 0:.3f}"
+    )
     for r in censored:
         if "20261121-202446" in r["path"] and r["attacker"] == "absol":
-            print(f"  阿勃梭鲁那例 {r['time']} {r['move_zh']} → {r['defender']}：剩余 {r['actual']}，"
-                  f"(a) {r['pa']:.1f}（damage() 原样 {r['frac_a'] * accuracy_dummy(r):.3f}，去掉命中率 {r['frac_a']:.3f}），"
-                  f"(b) {r['pb']:.1f}（{r['pb'] / r['data_hp']:.3f}），被打方变化 {r['stages_def']}，攻击方变化 {r['stages_att']}，天气 {r['weather']}")
+            print(
+                f"  阿勃梭鲁那例 {r['time']} {r['move_zh']} → {r['defender']}：剩余 {r['actual']}，"
+                f"(a) {r['pa']:.1f}（damage() 原样 {r['frac_a'] * accuracy_dummy(r):.3f}，去掉命中率 {r['frac_a']:.3f}），"
+                f"(b) {r['pb']:.1f}（{r['pb'] / r['data_hp']:.3f}），被打方变化 {r['stages_def']}，攻击方变化 {r['stages_att']}，天气 {r['weather']}"
+            )
 
     dump = os.environ.get("V19_DUMP")  # 给了路径就把样本存下来，方便再分析
     if dump:
@@ -713,12 +965,16 @@ def report(A, B, censored, stat_rows, hp_rows, drop_reasons, effect_check):
 
 
 def accuracy_dummy(r):
-    move = next(m for m in obj(r["attacker"]).moves + obj(r["attacker"]).max_moves if m.name_id == r["move"])
+    move = next(
+        m for m in obj(r["attacker"]).moves + obj(r["attacker"]).max_moves if m.name_id == r["move"]
+    )
     return move.accuracy
 
 
 if __name__ == "__main__":
     files = sys.argv[1:] or sorted(
-        p for p in glob.glob("runs/logs/swsh-lair/start/*.log") if "回合数据" in open(p, encoding="utf-8", errors="replace").read()
+        p
+        for p in glob.glob("runs/logs/swsh-lair/start/*.log")
+        if "回合数据" in open(p, encoding="utf-8", errors="replace").read()
     )
     main(files)

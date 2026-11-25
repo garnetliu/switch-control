@@ -27,7 +27,9 @@ from swsh.lair.lair import Lair
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.argv = [sys.argv[0], "--no-skip"]
-spec = importlib.util.spec_from_file_location("v13", os.path.join(HERE, "版本13-按实际上场算路线分.py"))
+spec = importlib.util.spec_from_file_location(
+    "v13", os.path.join(HERE, "版本13-按实际上场算路线分.py")
+)
 v13 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(v13)
 
@@ -47,12 +49,16 @@ def dealt_received(attacker, index, defender, teammates, field, p):
         if move.is_spread:
             if attacker_move.name_id != "wide-guard" or attacker.dynamax:
                 received_regular += scoring.damage(regular, i, attacker, field, True) / count
-                received_regular += 3 * scoring.average_damage([regular], teammates, field, True) / count
+                received_regular += (
+                    3 * scoring.average_damage([regular], teammates, field, True) / count
+                )
         else:
             received_regular += scoring._received(regular, i, attacker, teammates, field) / count
     dynamaxed = replace(defender, dynamax=True)
     count = min(4, len(dynamaxed.max_moves))
-    received_max = sum(scoring._received(dynamaxed, i, attacker, teammates, field) / count for i in range(count))
+    received_max = sum(
+        scoring._received(dynamaxed, i, attacker, teammates, field) / count for i in range(count)
+    )
     return dealt, received_regular * (1 - p) + received_max * p
 
 
@@ -94,13 +100,15 @@ def fight(data, team, opponent, boss):
 
 
 def plan(data, boss, lair):
-    zh = lambda name: data.pokemon_object(name).name("zh-Hans")  # noqa: E731
+    zh = lambda name: data.pokemon_object(name).name("zh-Hans")
     scorer = upstream.Scorer(data, boss)
     candidates = lair.candidates()[:3]
     results = []
     for starter in range(3):
         for path in upstream.paths(lair.map_type()):
-            walker = upstream.Walker(lair, data, boss, path, [candidates[starter], *lair.teammates(starter)])
+            walker = upstream.Walker(
+                lair, data, boss, path, [candidates[starter], *lair.teammates(starter)]
+            )
             for catches, scientists, fighters, boss_team in v13.outcomes(walker):
                 turns = loss = 0.0
                 for team, opponent in zip(fighters, walker.opponents, strict=True):
@@ -110,18 +118,53 @@ def plan(data, boss, lair):
                 t, l = fight(data, boss_team, boss, boss)
                 turns += t
                 loss += 2 * l
-                results.append((loss, turns, zh(candidates[starter]), tuple(zh(o) for o in walker.opponents), catches, scientists))
+                results.append(
+                    (
+                        loss,
+                        turns,
+                        zh(candidates[starter]),
+                        tuple(zh(o) for o in walker.opponents),
+                        catches,
+                        scientists,
+                    )
+                )
     del scorer
     return results
 
 
 PAIRS = {
-    12873702124229926581: [("火焰鸡", ("托戈德玛尔", "双剑鞘", "三地鼠"), ("不换", "不换", "换"), "9.18 分钟，倒下 0"),
-                           ("力壮鸡", ("托戈德玛尔", "双剑鞘", "魔墙人偶"), ("不换", "换", "不换"), "10.20 分钟，倒下 9")],
-    3076008315599927110: [("流氓熊猫", ("斧牙龙", "堵拦熊", "狃拉"), ("不换", "不换", "不换"), "6 局全胜，倒下 0.67"),
-                          ("流氓熊猫", ("心蝙蝠", "肯泰罗", "狃拉"), ("不换", "不换", "不换"), "9 局 8 胜，倒下 1.44")],
-    16238065963362826354: [("梦梦蚀", ("灯罩夜菇", "锹农炮虫", "劈斩司令"), ("换", "换", "不换"), "1 局，11.9 分钟，倒下 0"),
-                           ("梦梦蚀", ("灯罩夜菇", "阿勃梭鲁", "魔墙人偶"), ("换", "换", "不换"), "1 局，12.6 分钟，倒下 3")],
+    12873702124229926581: [
+        ("火焰鸡", ("托戈德玛尔", "双剑鞘", "三地鼠"), ("不换", "不换", "换"), "9.18 分钟，倒下 0"),
+        (
+            "力壮鸡",
+            ("托戈德玛尔", "双剑鞘", "魔墙人偶"),
+            ("不换", "换", "不换"),
+            "10.20 分钟，倒下 9",
+        ),
+    ],
+    3076008315599927110: [
+        ("流氓熊猫", ("斧牙龙", "堵拦熊", "狃拉"), ("不换", "不换", "不换"), "6 局全胜，倒下 0.67"),
+        (
+            "流氓熊猫",
+            ("心蝙蝠", "肯泰罗", "狃拉"),
+            ("不换", "不换", "不换"),
+            "9 局 8 胜，倒下 1.44",
+        ),
+    ],
+    16238065963362826354: [
+        (
+            "梦梦蚀",
+            ("灯罩夜菇", "锹农炮虫", "劈斩司令"),
+            ("换", "换", "不换"),
+            "1 局，11.9 分钟，倒下 0",
+        ),
+        (
+            "梦梦蚀",
+            ("灯罩夜菇", "阿勃梭鲁", "魔墙人偶"),
+            ("换", "换", "不换"),
+            "1 局，12.6 分钟，倒下 3",
+        ),
+    ],
 }
 
 if __name__ == "__main__":
@@ -145,5 +188,7 @@ if __name__ == "__main__":
             for k, r in enumerate(by_loss):
                 if (r[2], r[3], r[4]) == (starter, path, swaps):
                     rt = next(j + 1 for j, x in enumerate(by_turns) if x is r)
-                    print(f"    {starter}；{' → '.join(path)}；{'、'.join(swaps)}：挨打 {r[0]:.2f}（第 {k + 1}），回合 {r[1]:.1f}（第 {rt}）；实测 {note}")
+                    print(
+                        f"    {starter}；{' → '.join(path)}；{'、'.join(swaps)}：挨打 {r[0]:.2f}（第 {k + 1}），回合 {r[1]:.1f}（第 {rt}）；实测 {note}"
+                    )
                     break

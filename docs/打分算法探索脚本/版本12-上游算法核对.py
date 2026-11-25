@@ -13,9 +13,21 @@ from swsh.lair.lair import Lair
 
 TOP = {"mewtwo": 24, "tapu-bulu": 23, "tapu-lele": 21}
 CHECKS = [
-    ("mewtwo", 3076008315599927110, ("流氓熊猫", ("斧牙龙", "堵拦熊", "狃拉"), (False, False, False))),
-    ("tapu-lele", 12873702124229926581, ("火焰鸡", ("托戈德玛尔", "双剑鞘", "三地鼠"), (False, False, True))),
-    ("tapu-lele", 9960686445389280169, ("古空棘鱼", ("钻角犀兽", "三地鼠", "托戈德玛尔"), (True, False, False))),
+    (
+        "mewtwo",
+        3076008315599927110,
+        ("流氓熊猫", ("斧牙龙", "堵拦熊", "狃拉"), (False, False, False)),
+    ),
+    (
+        "tapu-lele",
+        12873702124229926581,
+        ("火焰鸡", ("托戈德玛尔", "双剑鞘", "三地鼠"), (False, False, True)),
+    ),
+    (
+        "tapu-lele",
+        9960686445389280169,
+        ("古空棘鱼", ("钻角犀兽", "三地鼠", "托戈德玛尔"), (True, False, False)),
+    ),
     ("tapu-bulu", 6986731677711377285, None),
     ("tapu-bulu", 9004205710319247536, None),
     ("tapu-bulu", 16753139388389203475, None),
@@ -27,7 +39,7 @@ for boss, seed, expected in CHECKS:
     config = GameConfig()
     config.lair_first_draw_top = TOP[boss]
     data = GameData(config)
-    zh = lambda name: data.pokemon_object(name).name("zh-Hans")  # noqa: E731
+    zh = lambda name: data.pokemon_object(name).name("zh-Hans")
     lair = Lair(data, seed)
     scorer = upstream.Scorer(data, boss)
     began = time.monotonic()
@@ -35,16 +47,20 @@ for boss, seed, expected in CHECKS:
     starter = max(range(3), key=lambda index: scorer.starter_score(candidates[index]))
     seconds = time.monotonic() - began
     path, _ = upstream.best_path(scorer, lair.encounters(), lair.map_type())
-    walker = upstream.Walker(lair, data, boss, path, [candidates[starter], *lair.teammates(starter)])
+    walker = upstream.Walker(
+        lair, data, boss, path, [candidates[starter], *lair.teammates(starter)]
+    )
     swaps = tuple(upstream.plan_swaps(scorer, walker))
     got = (zh(candidates[starter]), tuple(zh(name) for name in walker.opponents), swaps)
     verdict = "" if expected is None else ("对" if got == expected else "不对")
     failed += verdict == "不对"
-    print(f"{seed}（{boss}）：{got[0]}；{' → '.join(got[1])}；{'、'.join('换' if s else '不换' for s in swaps)} {verdict}（选首发用了 {seconds:.1f} 秒）")
+    print(
+        f"{seed}（{boss}）：{got[0]}；{' → '.join(got[1])}；{'、'.join('换' if s else '不换' for s in swaps)} {verdict}（选首发用了 {seconds:.1f} 秒）"
+    )
 print("三张有实测的图都对" if not failed else f"{failed} 张不对")
 
-def route_plan(  # 试过、没放进项目：基准图选成了没打过的斧牙龙 → 龟足巨铠 → 狃拉
 
+def route_plan(  # 试过、没放进项目：基准图选成了没打过的斧牙龙 → 龟足巨铠 → 狃拉
     scorer: upstream.Scorer,
     lair: Lair,
     data: GameData,
@@ -82,13 +98,15 @@ def route_plan(  # 试过、没放进项目：基准图选成了没打过的斧�
     return path, swaps, score
 
 
-print("\n== 选路线时就把换不换、研究员推进去（每个首发都算一次路线，路线分只算最后在首领战队伍里的，取最高）")
+print(
+    "\n== 选路线时就把换不换、研究员推进去（每个首发都算一次路线，路线分只算最后在首领战队伍里的，取最高）"
+)
 failed = 0
 for boss, seed, expected in CHECKS:
     config = GameConfig()
     config.lair_first_draw_top = TOP[boss]
     data = GameData(config)
-    zh = lambda name: data.pokemon_object(name).name("zh-Hans")  # noqa: E731
+    zh = lambda name: data.pokemon_object(name).name("zh-Hans")
     lair = Lair(data, seed)
     scorer = upstream.Scorer(data, boss)
     began = time.monotonic()
@@ -101,8 +119,14 @@ for boss, seed, expected in CHECKS:
     )
     seconds = time.monotonic() - began
     encounters = lair.encounters()
-    got = (zh(lair.candidates()[starter]), tuple(zh(encounters[str(r)][c]) for r, c in path), tuple(swaps))
+    got = (
+        zh(lair.candidates()[starter]),
+        tuple(zh(encounters[str(r)][c]) for r, c in path),
+        tuple(swaps),
+    )
     verdict = "" if expected is None else ("对" if got == expected else "不对")
     failed += verdict == "不对"
-    print(f"{seed}（{boss}）：{got[0]}；{' → '.join(got[1])}；{'、'.join('换' if s else '不换' for s in swaps)}，分 {score:.2f} {verdict}（{seconds:.0f} 秒）")
+    print(
+        f"{seed}（{boss}）：{got[0]}；{' → '.join(got[1])}；{'、'.join('换' if s else '不换' for s in swaps)}，分 {score:.2f} {verdict}（{seconds:.0f} 秒）"
+    )
 print("三张有实测的图都对" if not failed else f"{failed} 张不对")

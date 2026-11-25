@@ -22,9 +22,21 @@ from swsh.lair.lair import Lair
 
 TOP = {"mewtwo": 24, "tapu-bulu": 23, "tapu-lele": 21}
 CHECKS = [
-    ("mewtwo", 3076008315599927110, ("流氓熊猫", ("斧牙龙", "堵拦熊", "狃拉"), (False, False, False))),
-    ("tapu-lele", 12873702124229926581, ("火焰鸡", ("托戈德玛尔", "双剑鞘", "三地鼠"), (False, False, True))),
-    ("tapu-lele", 9960686445389280169, ("古空棘鱼", ("钻角犀兽", "三地鼠", "托戈德玛尔"), (True, False, False))),
+    (
+        "mewtwo",
+        3076008315599927110,
+        ("流氓熊猫", ("斧牙龙", "堵拦熊", "狃拉"), (False, False, False)),
+    ),
+    (
+        "tapu-lele",
+        12873702124229926581,
+        ("火焰鸡", ("托戈德玛尔", "双剑鞘", "三地鼠"), (False, False, True)),
+    ),
+    (
+        "tapu-lele",
+        9960686445389280169,
+        ("古空棘鱼", ("钻角犀兽", "三地鼠", "托戈德玛尔"), (True, False, False)),
+    ),
     ("tapu-bulu", 6986731677711377285, None),
     ("tapu-bulu", 9004205710319247536, None),
     ("tapu-bulu", 16753139388389203475, None),
@@ -88,22 +100,33 @@ def route_score(scorer, fighters, opponents, boss_fighter):
         product *= m(scorer, fighter, opponent)
     if product <= 0:
         return None
-    return product ** 0.2
+    return product**0.2
 
 
 def plan(data, scorer, lair):
-    zh = lambda name: data.pokemon_object(name).name("zh-Hans")  # noqa: E731
+    zh = lambda name: data.pokemon_object(name).name("zh-Hans")
     candidates = lair.candidates()[:3]
     results = []
     for starter in range(3):
         for path in upstream.paths(lair.map_type()):
-            walker = upstream.Walker(lair, data, scorer.boss, path, [candidates[starter], *lair.teammates(starter)])
+            walker = upstream.Walker(
+                lair, data, scorer.boss, path, [candidates[starter], *lair.teammates(starter)]
+            )
             for catches, scientists, fighters, boss_fighter in outcomes(walker):
                 score = route_score(scorer, fighters, walker.opponents, boss_fighter)
                 if score is None:
                     continue
-                results.append((score, zh(candidates[starter]), tuple(zh(o) for o in walker.opponents),
-                                catches, scientists, [zh(f[0]) for f in fighters], zh(boss_fighter[0])))
+                results.append(
+                    (
+                        score,
+                        zh(candidates[starter]),
+                        tuple(zh(o) for o in walker.opponents),
+                        catches,
+                        scientists,
+                        [zh(f[0]) for f in fighters],
+                        zh(boss_fighter[0]),
+                    )
+                )
     results.sort(key=lambda r: -r[0])
     return results
 
@@ -121,10 +144,18 @@ if __name__ == "__main__":
             expected = (expected[0], expected[1], tuple("换" if t else "不换" for t in expected[2]))
             best = results[0]
             verdict = "对" if (best[1], best[2], best[3]) == expected else "不对"
-            rank = next((k + 1 for k, r in enumerate(results) if (r[1], r[2], r[3]) == expected), None)
+            rank = next(
+                (k + 1 for k, r in enumerate(results) if (r[1], r[2], r[3]) == expected), None
+            )
             verdict += f"（实测最好的方案排第 {rank} / {len(results)}）"
         print(f"\n{seed}（{boss}）{verdict}，{time.monotonic() - began:.0f} 秒")
         for score, starter, path, catches, scientists, fighters, boss_fighter in results[:3]:
             swaps = "、".join(catches)
-            extra = f"；研究员 {'、'.join('换' if t else '不换' for t in scientists)}" if scientists else ""
-            print(f"  {score:.3f} 首发 {starter}；{' → '.join(path)}；{swaps}{extra}；上场 {'/'.join(fighters)} → 首领 {boss_fighter}")
+            extra = (
+                f"；研究员 {'、'.join('换' if t else '不换' for t in scientists)}"
+                if scientists
+                else ""
+            )
+            print(
+                f"  {score:.3f} 首发 {starter}；{' → '.join(path)}；{swaps}{extra}；上场 {'/'.join(fighters)} → 首领 {boss_fighter}"
+            )

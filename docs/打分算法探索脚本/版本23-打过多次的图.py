@@ -20,7 +20,7 @@ sys.argv = [sys.argv[0], "--avg"]
 source = open(os.path.join(HERE, "版本22-PokemonAutomation的算法.py"), encoding="utf-8").read()
 exec(compile(source[: source.index("for boss, seed, routes in MAPS:")], "v22", "exec"))  # noqa: S102
 
-from swsh.lair.lair import Lair  # noqa: E402
+from swsh.lair.lair import Lair
 
 FIGHTS = os.environ.get(
     "FIGHTS_JSON",
@@ -48,7 +48,9 @@ for file, stages in runs.items():
     faints = sum(stages[i]["faints"] for i in range(4))
     plays[(first["seed"], first["boss"])][key].append((faints, won, minutes(file)))
 
-for (seed, boss), variants in sorted(plays.items(), key=lambda kv: (kv[0][1], -sum(len(v) for v in kv[1].values()))):
+for (seed, boss), variants in sorted(
+    plays.items(), key=lambda kv: (kv[0][1], -sum(len(v) for v in kv[1].values()))
+):
     if sum(len(v) for v in variants.values()) < 5:
         continue
     seed = int(seed)
@@ -63,7 +65,10 @@ for (seed, boss), variants in sorted(plays.items(), key=lambda kv: (kv[0][1], -s
             encounters = lair.encounters()
             if all(
                 key[0] in names
-                and any(tuple(encounters[str(r)][c] for r, c in p) == key[1:] for p in upstream.paths(lair.map_type()))
+                and any(
+                    tuple(encounters[str(r)][c] for r, c in p) == key[1:]
+                    for p in upstream.paths(lair.map_type())
+                )
                 for key in variants
             ):
                 found = (data, lair)
@@ -75,27 +80,43 @@ for (seed, boss), variants in sorted(plays.items(), key=lambda kv: (kv[0][1], -s
         print("  反推不出第一次抽数的上限，跳过")
         continue
     data, lair = found
-    zh = lambda name: data.pokemon_object(name).name("zh-Hans")  # noqa: E731
+    zh = lambda name: data.pokemon_object(name).name("zh-Hans")
     scorer = upstream.Scorer(data, boss)
     _avg_cache.clear()
     candidates = lair.candidates()[:3]
     encounters = lair.encounters()
     starter_scores = {c: m(scorer, c, boss, ()) for c in candidates}
     scored = sorted(
-        ((sum(w * m(scorer, encounters[str(r)][c], boss, ()) for w, (r, c) in zip((1, 2, 3), p, strict=True)), p)
-         for p in upstream.paths(lair.map_type())),
+        (
+            (
+                sum(
+                    w * m(scorer, encounters[str(r)][c], boss, ())
+                    for w, (r, c) in zip((1, 2, 3), p, strict=True)
+                ),
+                p,
+            )
+            for p in upstream.paths(lair.map_type())
+        ),
         reverse=True,
     )
     pick = max(candidates, key=starter_scores.get)
     best_path = tuple(encounters[str(r)][c] for r, c in scored[0][1])
-    print("  首发分：" + "，".join(f"{zh(c)} {v:.2f}" for c, v in starter_scores.items())
-          + f"；算法选 {zh(pick)}；{' → '.join(zh(n) for n in best_path)}（{scored[0][0]:.2f}，共 {len(scored)} 条）")
+    print(
+        "  首发分："
+        + "，".join(f"{zh(c)} {v:.2f}" for c, v in starter_scores.items())
+        + f"；算法选 {zh(pick)}；{' → '.join(zh(n) for n in best_path)}（{scored[0][0]:.2f}，共 {len(scored)} 条）"
+    )
     for key, items in sorted(variants.items(), key=lambda kv: -len(kv[1])):
-        rank, value = next((k + 1, v) for k, (v, p) in enumerate(scored)
-                           if tuple(encounters[str(r)][c] for r, c in p) == key[1:])
+        rank, value = next(
+            (k + 1, v)
+            for k, (v, p) in enumerate(scored)
+            if tuple(encounters[str(r)][c] for r, c in p) == key[1:]
+        )
         wins = [w for _, w, _ in items if w is not None]
         times = [t for _, _, t in items if t is not None]
         same = "（就是算法选的）" if key[0] == pick and key[1:] == best_path else ""
-        print(f"  打过：{zh(key[0])}；{' → '.join(zh(n) for n in key[1:])}{same}：{len(items)} 局，"
-              f"赢 {sum(wins)}/{len(wins)}，平均倒下 {statistics.mean(f for f, _, _ in items):.2f}，"
-              f"平均 {statistics.mean(times):.1f} 分钟；首发分 {starter_scores[key[0]]:.2f}，路线分 {value:.2f}（第 {rank}）")
+        print(
+            f"  打过：{zh(key[0])}；{' → '.join(zh(n) for n in key[1:])}{same}：{len(items)} 局，"
+            f"赢 {sum(wins)}/{len(wins)}，平均倒下 {statistics.mean(f for f, _, _ in items):.2f}，"
+            f"平均 {statistics.mean(times):.1f} 分钟；首发分 {starter_scores[key[0]]:.2f}，路线分 {value:.2f}（第 {rank}）"
+        )

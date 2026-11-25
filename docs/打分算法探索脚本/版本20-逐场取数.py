@@ -31,12 +31,33 @@ from swsh.lair.game_config import GameConfig
 from swsh.lair.game_data import GameData
 from swsh.lair.lair import Lair
 
-OUT = os.environ.get("FIGHTS_JSON", "/private/tmp/claude-503/-Users-garnet-projects-control-switch/6882f779-6294-4dce-875c-e2716eed87ee/scratchpad/fights.json")
+OUT = os.environ.get(
+    "FIGHTS_JSON",
+    "/private/tmp/claude-503/-Users-garnet-projects-control-switch/6882f779-6294-4dce-875c-e2716eed87ee/scratchpad/fights.json",
+)
 # 只用到这个日志为止（含），日志还在增加，固定下来才能复现
 LAST_LOG = os.environ.get("LAST_LOG", "20261121-211244.log")
 STAGE_HP, BOSS_HP = 3.8, 4.18
-RESTRICTED = {"mewtwo", "lugia", "ho-oh", "kyogre", "groudon", "rayquaza", "dialga", "palkia", "giratina-altered",
-              "reshiram", "zekrom", "kyurem", "xerneas", "yveltal", "zygarde-50", "solgaleo", "lunala", "necrozma"}
+RESTRICTED = {
+    "mewtwo",
+    "lugia",
+    "ho-oh",
+    "kyogre",
+    "groudon",
+    "rayquaza",
+    "dialga",
+    "palkia",
+    "giratina-altered",
+    "reshiram",
+    "zekrom",
+    "kyurem",
+    "xerneas",
+    "yveltal",
+    "zygarde-50",
+    "solgaleo",
+    "lunala",
+    "necrozma",
+}
 
 data = GameData(GameConfig())
 rentals = data.rental_pokemon_objects()
@@ -51,27 +72,45 @@ def norm(text):
 
 
 def parse(path):
-    run = {"file": os.path.basename(path), "seed": None, "boss_zh": None, "route": None, "caught": [], "fights": []}
+    run = {
+        "file": os.path.basename(path),
+        "seed": None,
+        "boss_zh": None,
+        "route": None,
+        "caught": [],
+        "fights": [],
+    }
     cur = None
     for line in open(path, encoding="utf-8"):
-        if (m := re.search(r"读取到的 seed 是 (\d+)", line)):
+        if m := re.search(r"读取到的 seed 是 (\d+)", line):
             run["seed"] = int(m.group(1))
-        elif (m := re.search(r"选择传说Boss选中了.*「(.+?)」", line)):
+        elif m := re.search(r"选择传说Boss选中了.*「(.+?)」", line):
             run["boss_zh"] = norm(m.group(1))
-        elif (m := re.search(r"INFO: 路线: (.+)$", line)):
+        elif m := re.search(r"INFO: 路线: (.+)$", line):
             run["route"] = [x.strip() for x in m.group(1).split("→")]
-        elif (m := re.search(r"INFO: 队伍: (\[.*?\])，", line)):
+        elif m := re.search(r"INFO: 队伍: (\[.*?\])，", line):
             team = ast.literal_eval(m.group(1))
-            cur = {"team": [n for n, _ in team], "hp": [h for _, h in team], "turns": 0, "faints": 0, "opp": None,
-                   "result": None, "snap": [], "gap": 0, "after_faint": False}
+            cur = {
+                "team": [n for n, _ in team],
+                "hp": [h for _, h in team],
+                "turns": 0,
+                "faints": 0,
+                "opp": None,
+                "result": None,
+                "snap": [],
+                "gap": 0,
+                "after_faint": False,
+            }
             run["fights"].append(cur)
         elif cur is None or cur["result"]:
-            if (m := re.search(r"第 (\d) 只「(.+?)」", line)):
+            if m := re.search(r"第 (\d) 只「(.+?)」", line):
                 run["caught"].append(norm(m.group(2)))
             continue
-        elif (m := re.search(r"INFO: 对手 ([a-z0-9-]+)（种类", line)):
+        elif m := re.search(r"INFO: 对手 ([a-z0-9-]+)（种类", line):
             cur["opp"] = m.group(1)
-        elif (m := re.search(r"回合数据 (对手|自己|队友\d) ([a-z0-9-]+)（种类 \d+）：血量 (\d+)/(\d+)", line)):
+        elif m := re.search(
+            r"回合数据 (对手|自己|队友\d) ([a-z0-9-]+)（种类 \d+）：血量 (\d+)/(\d+)", line
+        ):
             label, name, hp, top = m.group(1), m.group(2), int(m.group(3)), int(m.group(4))
             if label == "对手":
                 cur["opp"] = cur["opp"] or name
@@ -212,15 +251,25 @@ def features(team, opp, boss):
     hp = BOSS_HP if opp == boss else STAGE_HP
     T = max(1, math.ceil(hp / d)) if d > 0 else 99
     members = per_member_received(b, replace(a, dynamax=False), mates, p)
-    result = {"m": m, "d": d, "r": r, "T": T, "L": T * r, "hp_ratio": hp / d if d > 0 else 99,
-              "r_max": max(members), "r_members": members}
+    result = {
+        "m": m,
+        "d": d,
+        "r": r,
+        "T": T,
+        "L": T * r,
+        "hp_ratio": hp / d if d > 0 else 99,
+        "r_max": max(members),
+        "r_members": members,
+    }
     cache[key] = result
     return result
 
 
 def measured(fight, battle_hp):
     """回合数据里中间几回合的实测打出（普通血量单位）和受到（四只掉血比例之和），都是每回合平均。"""
-    snaps = [s for s in fight["snap"] if all(k in s for k in ("opp", "自己", "队友1", "队友2", "队友3"))]
+    snaps = [
+        s for s in fight["snap"] if all(k in s for k in ("opp", "自己", "队友1", "队友2", "队友3"))
+    ]
     if len(snaps) < 2:
         return None
     dealt, recv = [], []
@@ -232,7 +281,11 @@ def measured(fight, battle_hp):
 
 def main():
     rows, skipped = [], {"没有选首领那一行或选了不指定": 0, "认不出对手": 0, "没打完": 0}
-    files = [p for p in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")) if os.path.basename(p) <= LAST_LOG]
+    files = [
+        p
+        for p in sorted(glob.glob("runs/logs/swsh-lair/start/*.log"))
+        if os.path.basename(p) <= LAST_LOG
+    ]
     zh_boss = {norm(o.name("zh-Hans")): n for n, o in bosses.items()}
     for path in files:
         run = parse(path)
@@ -257,19 +310,35 @@ def main():
             f = features(fight["team"], opp, boss)
             battle_hp = BOSS_HP if index == 3 else STAGE_HP
             meas = measured(fight, battle_hp)
-            rows.append({
-                "file": run["file"], "seed": str(run["seed"]), "boss": boss, "restricted": boss in RESTRICTED,
-                "stage": index, "team": fight["team"], "hp": fight["hp"], "opp": opp,
-                "turns": fight["turns"], "faints": fight["faints"], "result": fight["result"],
-                "faints_before": before, "snaps": len(fight["snap"]), "gap": fight["gap"],
-                "meas_d": meas[0] if meas else None, "meas_r": meas[1] if meas else None, "meas_n": meas[2] if meas else 0,
-                **f,
-            })
+            rows.append(
+                {
+                    "file": run["file"],
+                    "seed": str(run["seed"]),
+                    "boss": boss,
+                    "restricted": boss in RESTRICTED,
+                    "stage": index,
+                    "team": fight["team"],
+                    "hp": fight["hp"],
+                    "opp": opp,
+                    "turns": fight["turns"],
+                    "faints": fight["faints"],
+                    "result": fight["result"],
+                    "faints_before": before,
+                    "snaps": len(fight["snap"]),
+                    "gap": fight["gap"],
+                    "meas_d": meas[0] if meas else None,
+                    "meas_r": meas[1] if meas else None,
+                    "meas_n": meas[2] if meas else 0,
+                    **f,
+                }
+            )
             before += fight["faints"]
             sys.stdout.flush()
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     json.dump(rows, open(OUT, "w"), ensure_ascii=False)
-    print(f"{len(files)} 个日志（{os.path.basename(files[0])} ～ {os.path.basename(files[-1])}），取到 {len(rows)} 场；跳过 {skipped}；写到 {OUT}")
+    print(
+        f"{len(files)} 个日志（{os.path.basename(files[0])} ～ {os.path.basename(files[-1])}），取到 {len(rows)} 场；跳过 {skipped}；写到 {OUT}"
+    )
 
 
 if __name__ == "__main__":

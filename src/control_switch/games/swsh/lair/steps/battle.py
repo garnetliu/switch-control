@@ -302,8 +302,8 @@ def _move_target_cursor(sw: LairSession) -> None:
         before = _target_cursor(sw, capture(sw, "选目标的光标"))
         act_until(
             sw,
-            lambda: sw.click(button, 0),
-            lambda screen: _target_cursor(sw, screen) not in (before, -1),
+            lambda button=button: sw.click(button, 0),
+            lambda screen, before=before: _target_cursor(sw, screen) not in (before, -1),
             "选目标的光标移动",
         )
 
