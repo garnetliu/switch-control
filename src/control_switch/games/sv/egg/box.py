@@ -32,7 +32,10 @@ class Mon(NamedTuple):
 
 
 def open_box(sw: EggSession) -> None:
-    """从野外打开盒子（主菜单第 2 项），再把盒子转到放蛋的那个。"""
+    """从野外打开盒子（主菜单第 2 项），再把盒子转到放蛋的那个。
+
+    第一次打开时开着的是放亲代和带队宝可梦的盒子，放蛋的是它后面那个，记在 sw.egg_box。
+    """
     config = sw.config
     deadline = time.monotonic() + config.open_box_timeout
     while True:
@@ -48,6 +51,12 @@ def open_box(sw: EggSession) -> None:
         if time.monotonic() >= deadline:
             raise TimeoutError(f"等了 {config.open_box_timeout} 秒，还是没打开盒子")
     time.sleep(config.box_open_wait)
+    if sw.egg_box is None:
+        number = _read_title(sw)
+        if number is None:
+            raise RuntimeError("读不出盒子编号，不知道哪个是放蛋的盒子，不敢往下做")
+        sw.egg_box = number % config.box_count + 1
+        logging.info(f"开始时是盒子 {number}，蛋放在盒子 {sw.egg_box}")
     _turn_to_egg_box(sw)
 
 
@@ -65,21 +74,23 @@ def _read_title(sw: EggSession) -> int | None:
 
 
 def _turn_to_egg_box(sw: EggSession) -> None:
-    """用 L、R 把盒子转到放蛋的那个（config.egg_box），往近的方向转。读不出盒子编号抛 RuntimeError，转了 box_rounds 轮还没到也抛。"""
+    """用 L、R 把盒子转到放蛋的那个（sw.egg_box），往近的方向转。读不出盒子编号抛 RuntimeError，转了 box_rounds 轮还没到也抛。"""
     config = sw.config
+    egg_box = sw.egg_box
+    assert egg_box is not None
     for _ in range(config.box_rounds):
         number = _read_title(sw)
         if number is None:
             raise RuntimeError("读不出盒子编号，不知道开着的是不是放蛋的盒子，不敢往下做")
-        if number == config.egg_box:
+        if number == egg_box:
             return
-        forward = (config.egg_box - number) % config.box_count
+        forward = (egg_box - number) % config.box_count
         backward = config.box_count - forward
         button, count = ("R", forward) if forward <= backward else ("L", backward)
-        logging.info(f"现在是盒子 {number}，转到盒子 {config.egg_box}")
+        logging.info(f"现在是盒子 {number}，转到盒子 {egg_box}")
         for _ in range(count):
             sw.click(button, config.box_turn_wait)
-    raise RuntimeError(f"转了 {config.box_rounds} 轮，还是没转到盒子 {config.egg_box}")
+    raise RuntimeError(f"转了 {config.box_rounds} 轮，还是没转到盒子 {egg_box}")
 
 
 def exit_to_overworld(sw: EggSession) -> None:

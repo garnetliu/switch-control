@@ -283,12 +283,33 @@ def test_open_box_raises_runtime_error_when_box_number_cannot_be_read(stage: Any
 
 
 def test_open_box_returns_without_turning_when_already_on_egg_box(stage: Any) -> None:
-    """盒子编号读出来就是放蛋的盒子（config.egg_box）：不按 L、R，正常返回。"""
+    """盒子编号读出来就是放蛋的盒子（sw.egg_box）：不按 L、R，正常返回。"""
     stage.set_screens(box_cursor=lambda: ("slots", 0, 0))
-    stage.replace(box_module, "_read_title", lambda sw: stage.sw.config.egg_box)
+    stage.sw.egg_box = 3
+    stage.replace(box_module, "_read_title", lambda sw: 3)
     box_module.open_box(stage.sw)
     assert "L" not in stage.clicks()
     assert "R" not in stage.clicks()
+
+
+def test_open_box_first_time_takes_next_box_as_egg_box_and_turns_right_once(stage: Any) -> None:
+    """第一次开盒子，开着的是盒子 29：放蛋的记成盒子 30，按一下 R 转过去。"""
+    stage.set_screens(box_cursor=lambda: ("slots", 0, 0))
+    titles = iter([29, 29, 30])
+    stage.replace(box_module, "_read_title", lambda sw: next(titles))
+    box_module.open_box(stage.sw)
+    assert stage.sw.egg_box == 30
+    assert stage.clicks().count("R") == 1
+    assert "L" not in stage.clicks()
+
+
+def test_open_box_first_time_on_last_box_wraps_egg_box_to_first(stage: Any) -> None:
+    """第一次开盒子，开着的是最后一个盒子 32：放蛋的是盒子 1。"""
+    stage.set_screens(box_cursor=lambda: ("slots", 0, 0))
+    titles = iter([32, 32, 1])
+    stage.replace(box_module, "_read_title", lambda sw: next(titles))
+    box_module.open_box(stage.sw)
+    assert stage.sw.egg_box == 1
 
 
 # ---- 放生 ----

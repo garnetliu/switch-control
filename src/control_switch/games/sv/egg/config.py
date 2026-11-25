@@ -45,8 +45,7 @@ class EggConfig(SvConfig):
     # 一次野餐最多收几个蛋，收蛋最多等几秒（三明治的效果 30 分钟）
     max_eggs = 30
     fetch_limit = 1800
-    # 放蛋的盒子编号：左边的盒子放野餐队伍和带队的，右边的盒子放留下的
-    egg_box = 3
+    # 一共几个盒子。开始时开着的盒子放亲代和带队的，后面一个放蛋，再后面一个放留下的
     box_count = 32
     box_rows = 5
     box_columns = 6
