@@ -1,7 +1,7 @@
 """验证：自己每 4 个回合可以极巨化一次，极巨化期间（3 回合，或到这场结束）不计回合。"""
 import glob, re, collections
 runs = []
-for f in sorted(glob.glob("logs/swsh-lair/start/*.log")):
+for f in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")):
     t = open(f, encoding="utf-8", errors="replace").read()
     fights = []; cur = None; pending = False
     for line in t.splitlines():

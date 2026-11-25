@@ -93,8 +93,8 @@ def ping(ip: str, count: int = 4, timeout_ms: int = 1000) -> float | None:
 
 
 def _init_log() -> None:
-    """日志写到终端和 logs/find/ 下带时间戳的文件。"""
-    directory = ROOT / "logs" / "find"
+    """日志写到终端和 runs/logs/find/ 下带时间戳的文件。"""
+    directory = ROOT / "runs" / "logs" / "find"
     directory.mkdir(parents=True, exist_ok=True)
     formatter = logging.Formatter("%(asctime)s | %(levelname)s: %(message)s", "%H:%M:%S")
     logger = logging.getLogger()

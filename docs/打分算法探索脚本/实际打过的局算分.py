@@ -10,7 +10,7 @@ for boss, top in (("mewtwo", 24), ("tapu-bulu", 23)):
     c = GameConfig(); c.lair_first_draw_top = top; d = GameData(c); ctx[boss] = (c, d, Planner(d, c, boss))
 ZH = lambda d, n: d.pokemon_object(n).name("zh-Hans") if hasattr(d.pokemon_object(n), "name") else n
 games = []; skipped = defaultdict(int)
-for f in sorted(glob.glob("logs/swsh-lair/start/*.log")):
+for f in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")):
     t = open(f, encoding="utf-8", errors="replace").read()
     m = re.search(r"读取到的 seed 是 (\d+)", t)
     rep = re.search(r"第 (\d+) 轮战报：\n(胜|负)[^，]*，倒下 (\d+) 次，([\d.]+) 分钟，抓到 (\d)/4\n路线：(.*)\n", t)

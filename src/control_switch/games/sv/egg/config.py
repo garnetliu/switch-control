@@ -1,6 +1,8 @@
 """孵蛋刷闪的配置：坐标、颜色阈值、等待时间、按键路线。坐标是占画面宽高的比例，按 1920×1080 量的。"""
 
-from control_switch.config import ROOT
+from importlib.resources import files
+from pathlib import Path
+
 from control_switch.games.sv.config import SvConfig
 from control_switch.types import Hsv, Rect
 
@@ -8,7 +10,7 @@ from control_switch.types import Hsv, Rect
 class EggConfig(SvConfig):
     """孵蛋刷闪的配置。"""
 
-    log_dir = ROOT / "logs" / "sv-egg"
+    log_dir = SvConfig.root / "runs" / "logs" / "sv-egg"
 
     # ---- 玩法 ----
     # 孵的宝可梦，也是亲代
@@ -249,7 +251,7 @@ class EggConfig(SvConfig):
 
     # ---- 飞到零区闸口（fly.py） ----
     gate_name = "零区闸口"
-    fly_icon = ROOT / "data" / "sv" / "fly_icon.png"
+    fly_icon = Path(str(files("control_switch.games.sv") / "data" / "fly_icon.png"))
     fly_icon_score = 0.8
     # 地图画面：左上角的标题、能看到地图的范围、光标的位置（画面中间）、光标上方的地点名
     map_title: Rect = ((0.17, 0.12), (0.25, 0.18))

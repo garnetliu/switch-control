@@ -1,6 +1,6 @@
 """control_switch.games.swsh.lair.upstream：选首发、路线、换不换、研究员换不换。
 
-用 data/swsh/ 里真实的数据和基准 seed 3076008315599927110（extra 为 0）。
+用 src/control_switch/games/swsh/data/ 里真实的数据和基准 seed 3076008315599927110（extra 为 0）。
 首领是 tapu-lele，路线是 ((1, 0), (2, 1), (3, 2))，路上的事件手写在 EVENTS 里（不读 lair_event_LUT.json，
 那个文件每跑一局就会变）。队伍是「选的首发 + 三个队友」：
   首发选界面第 0 只：pangoro、maractus、galvantula、cofagrigus

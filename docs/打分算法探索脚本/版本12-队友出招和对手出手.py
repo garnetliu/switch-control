@@ -32,7 +32,7 @@ def closest(text: str, options: list[str], limit: int) -> str | None:
 def fights():
     """每一场：队伍、对手、按顺序的战斗文字和每回合数据。同一局只取一次。"""
     seen = set()
-    for path in sorted(glob.glob("logs/swsh-lair/start/*.log")):
+    for path in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")):
         text = open(path, encoding="utf-8", errors="replace").read()
         for part in re.split(r"(?=\d\d:\d\d:\d\d \| INFO: 读取到的 seed 是 \d+)", text)[1:]:
             key = part[:60]
@@ -177,7 +177,7 @@ print("== 陷入困境之后用的、不在数据里 4 个招式之内的招式�
 for opponent, c in fifth.items():
     print(f"  {d.pokemon_object(opponent).name('zh-Hans')}：{dict(c.most_common(3))}")
 
-# ---- 写 data/swsh/max_move_rate.json：战斗选招式时对手用极巨招式的比例（scoring.move_score）
+# ---- 写 src/control_switch/games/swsh/data/max_move_rate.json：战斗选招式时对手用极巨招式的比例（scoring.move_score）
 # 出手不到 MIN 次的不单独记，用同类的合计：路上的对手按「路上」，首领按「首领」（陷入困境前后合在一起）
 import json  # noqa: E402
 
@@ -192,6 +192,6 @@ for opponent, v in boss_uses.items():
     m, n = v["之前"][0] + v["之后"][0], v["之前"][1] + v["之后"][1]
     if n >= MIN:
         rates[opponent] = round(m / n, 3)
-with open("data/swsh/max_move_rate.json", "w", encoding="utf-8") as file:
+with open("src/control_switch/games/swsh/data/max_move_rate.json", "w", encoding="utf-8") as file:
     json.dump(rates, file, ensure_ascii=False, indent=4)
-print(f"== 写了 data/swsh/max_move_rate.json：{len(rates) - 2} 种对手（出手 {MIN} 次以上），路上合计 {rates['路上']}，首领合计 {rates['首领']}")
+print(f"== 写了 src/control_switch/games/swsh/data/max_move_rate.json：{len(rates) - 2} 种对手（出手 {MIN} 次以上），路上合计 {rates['路上']}，首领合计 {rates['首领']}")

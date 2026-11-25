@@ -13,7 +13,7 @@ def avg(a, b):  # a 四个普通招式打 b 的平均
         cache[(a, b)] = st.mean(max(damage(A, i, B, f) / 2, 0) for i in range(len(A.moves)))
     return cache[(a, b)]
 runs = []
-for file in sorted(glob.glob("logs/swsh-lair/start/*.log")):
+for file in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")):
     t = open(file, encoding="utf-8", errors="replace").read()
     r = re.search(r"\n路线：(.*)\n", t); rep = re.search(r"战报：\n(胜|负)[^，]*，倒下 (\d+) 次，([\d.]+) 分钟", t)
     if not r or not rep: continue

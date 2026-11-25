@@ -50,7 +50,7 @@ def stream(lair, count=90):
     return raw, names
 zh = {}
 runs = {}
-for f in sorted(glob.glob("logs/swsh-lair/start/*.log")) + sys.argv[1:]:
+for f in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")) + sys.argv[1:]:
     t = open(f, encoding="utf-8", errors="replace").read()
     for p in re.split(r"(?=读取到的 seed 是 \d+)", t)[1:]:
         seed = int(re.match(r"读取到的 seed 是 (\d+)", p)[1])

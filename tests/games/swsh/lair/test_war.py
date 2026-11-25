@@ -1,6 +1,6 @@
 """control_switch.games.swsh.lair.war：一场对战里的场上状态。
 
-宝可梦用 data/swsh/ 里真实的数据：自己 rhydon，对手 tapu-lele，队友 starmie、scyther、chansey。
+宝可梦用 src/control_switch/games/swsh/data/ 里真实的数据：自己 rhydon，对手 tapu-lele，队友 starmie、scyther、chansey。
 期望值取自搬迁前 swsh.lair.war 的运行结果。
 """
 

@@ -2,7 +2,7 @@
 
 不连 Switch：load_script 换成返回假脚本的函数，init_log、init_console 换成不做事（或只记下调用）的函数，
 check_controller_reaches_screen 换成什么都不做的函数，
-load_dotenv 换掉，不读仓库里真实的 .env，Settings 读的环境变量清掉。create_devices 换成不连接、
+不读仓库里真实的 .env、Settings 读的环境变量清掉，由 conftest 的 clean_settings_env 做。create_devices 换成不连接、
 直接返回一个假 Devices 的函数，这个假 Devices 先交给 check_devices 检查（假 Screen 给的是真机截图，
 假 Memory 的 title_id 和假脚本的 TITLE_IDS 对得上），再传给假脚本的 SESSION，不会放进 Session。
 假脚本的 SESSION 接收 (settings, devices)，不管传进来什么，
@@ -57,32 +57,6 @@ class Calls:
         self.create_devices = 0
         # init_console 被调了几次
         self.init_console = 0
-
-
-SETTINGS_ENV_NAMES = (
-    "SCREEN",
-    "CONTROLLER",
-    "MEMORY",
-    "SWITCH_CONNECTION",
-    "SWITCH_IP",
-    "SWITCH_PORT",
-    "PKHEX_API_URL",
-    "DISCORD_WEBHOOK_URL",
-    "KEEP_PATH",
-    "SERIAL_PORT",
-    "SERIAL_BAUD",
-    "CAPTURE_DEVICE",
-)
-
-
-@pytest.fixture(autouse=True)
-def clean_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """load_dotenv 换成什么都不读，Settings 读的环境变量都清掉：
-    这个文件里的测试不读仓库里真实的 .env，也不受终端里设过的环境变量影响。
-    """
-    monkeypatch.setattr("control_switch.settings.load_dotenv", lambda *args, **kwargs: False)
-    for name in SETTINGS_ENV_NAMES:
-        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture

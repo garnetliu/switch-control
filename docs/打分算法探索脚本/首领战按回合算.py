@@ -53,7 +53,7 @@ for s in (9004205710319247536, 7141377954180009874, 5938375612842167902, 9634935
     r = plans("tapu-bulu", 23, s)[0]; print("  ", s, round(r[0][0], 3), ["换" if x else "不" for x in r[0][1]], "| 现在", round(r[1], 3), r[2], r[3])
 # 实际打过的局
 C = {"mewtwo": ctx("mewtwo", 24), "tapu-bulu": ctx("tapu-bulu", 23)}; games = []
-for f in sorted(glob.glob("logs/swsh-lair/start/*.log")):
+for f in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")):
     t = open(f, encoding="utf-8", errors="replace").read()
     m = re.search(r"读取到的 seed 是 (\d+)", t); rep = re.search(r"战报：\n(胜|负)[^，]*，倒下 (\d+) 次，([\d.]+) 分钟，抓到 (\d)/4\n路线：(.*)\n", t)
     team = re.search(r"队伍: (\[.*?\])，自己的 PP", t)

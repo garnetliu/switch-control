@@ -1,7 +1,7 @@
 """核对伤害公式 scoring.damage()：拿日志里每回合记录的实际掉血，和公式算出来的比。
 
 用法：PYTHONPATH=src uv run python docs/打分算法探索脚本/版本19-伤害公式核对.py [日志...]
-不给日志就读 logs/swsh-lair/start/ 下所有带「回合数据」的日志。
+不给日志就读 runs/logs/swsh-lair/start/ 下所有带「回合数据」的日志。
 
 两次「回合数据」之间就是一回合。挑两种能确定来源的掉血：
 - 对手打我方（A）：这一回合对手只出了一招、是进攻招式、打中了；单体招式要求我方只有一只掉血，
@@ -719,6 +719,6 @@ def accuracy_dummy(r):
 
 if __name__ == "__main__":
     files = sys.argv[1:] or sorted(
-        p for p in glob.glob("logs/swsh-lair/start/*.log") if "回合数据" in open(p, encoding="utf-8", errors="replace").read()
+        p for p in glob.glob("runs/logs/swsh-lair/start/*.log") if "回合数据" in open(p, encoding="utf-8", errors="replace").read()
     )
     main(files)

@@ -1,9 +1,10 @@
 """极巨大冒险的配置：路径、界面区域、游戏参数。"""
 
+from importlib.resources import files
+from pathlib import Path
 from typing import ClassVar
 
-from control_switch.config import ROOT, BaseConfig, BaseRects
-from control_switch.games.swsh import TITLE_IDS
+from control_switch.config import BaseConfig
 from control_switch.types import Hsv, Rect
 
 # 岔路口的光标区域：{(出发层号, 出发列号): (能走到的每一列的光标区域, ...)}
@@ -57,7 +58,7 @@ class Addresses:
     battle_state_shield = 0x3F128626
 
 
-class Rects(BaseRects):
+class Rects:
     """画面上的坐标范围。"""
 
     # 画面底部的文字面板一共三种：黑色占满左右的、黑色只在中间的、白色在中间的。
@@ -305,9 +306,9 @@ class GameConfig(BaseConfig):
     # 要找的传说宝可梦，数据文件里的 name_id；None 是在研究员那里选「不指定」，首领从 seed 算（Lair.boss）
     boss: str | None = "articuno"
     # 数据文件和图片资源
-    data_dir = ROOT / "data" / "swsh"
-    # 运行状态快照：YAML 文件 run/game.yaml
-    game_state_file = ROOT / "run" / "game.yaml"
+    data_dir = Path(str(files("control_switch.games.swsh") / "data"))
+    # 运行状态快照：YAML 文件 runs/state/game.yaml
+    game_state_file = BaseConfig.root / "runs" / "state" / "game.yaml"
     # 游戏的语言，对应数据文件里 names 的键
     language = "zh-Hans"
     # 游戏内存地址
@@ -315,8 +316,8 @@ class GameConfig(BaseConfig):
     # 画面上的坐标范围
     rects = Rects()
     # 日志和出错时的截图
-    log_dir = ROOT / "logs" / "swsh-lair"
-    # 战果截图：闪光的放 catch_dir，不是闪光的放 result_dir
+    log_dir = BaseConfig.root / "runs" / "logs" / "swsh-lair"
+    # 战果截图：闪光的放 shiny_dir，不是闪光的放 result_dir
     result_dir = log_dir / "results"
     # 路线图第 2 层四个标签里最高和最低的间距对应的地图类型，间距是占画面高度的比例。
     # 三种都是真机实测：换算到 1080 行的画面上，2x2 是 143 像素，2x3 是 180 像素，3x2 是 67 像素
@@ -594,5 +595,3 @@ class GameConfig(BaseConfig):
     lock_min_ore = 10
     lock_early_fails = 2
     lock_min_win_rate = 0.9
-    # 《宝可梦 剑》《宝可梦 盾》的 Title ID
-    game_title_ids = TITLE_IDS

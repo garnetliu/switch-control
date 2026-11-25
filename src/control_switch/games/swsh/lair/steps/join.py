@@ -107,7 +107,7 @@ def _select_target(sw: LairSession):
     image = wait_for(
         sw,
         lambda screen: menu_last_item(screen, rects.lobby_menu, 1) == solo,
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "极巨大冒险的大厅",
     )
     move_menu_option(
@@ -132,7 +132,7 @@ def _select_starter(sw: LairSession, boss: str | None) -> bool:
     wait_for(
         sw,
         lambda screen: screen.has_text(sw.config.rects.starter_hint, "按顺序选择"),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "选宝可梦的界面",
     )
 
@@ -172,9 +172,9 @@ def _check_map_type(sw: LairSession) -> None:
 
     读到的类型和 seed 算出来的不一样，按画面上的类型、首发不变重新选路线。
     """
-    wait_for(sw, lambda screen: not screen.is_black(), sw.config.timeout, "开场黑屏结束")
+    wait_for(sw, lambda screen: not screen.is_black(), sw.config.wait.timeout, "开场黑屏结束")
     reader = MapTypeReader(sw)
-    deadline = time.monotonic() + sw.config.timeout
+    deadline = time.monotonic() + sw.config.wait.timeout
     seen: str | None = None
     while True:
         image = capture(sw, "读地图类型")
@@ -183,7 +183,7 @@ def _check_map_type(sw: LairSession) -> None:
         if seen is None:
             seen = reader.update(image)
         if time.monotonic() >= deadline:
-            raise TimeoutError(f"等了 {sw.config.timeout} 秒，路线图一直没有出现")
+            raise TimeoutError(f"等了 {sw.config.wait.timeout} 秒，路线图一直没有出现")
     if seen is None:
         raise RuntimeError("没读到路线图类型")
     maps = sw.game.maps
@@ -341,7 +341,7 @@ def _move_starter_cursor(sw: LairSession) -> None:
     image = wait_for(
         sw,
         lambda screen: screen.selected(rects) != -1,
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "选宝可梦的光标",
     )
     for _ in range(len(rects)):

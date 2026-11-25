@@ -25,14 +25,14 @@ class FakeConfig(BaseConfig):
     """计时全设成最短，log_dir 指到临时目录（failed_dir 由 log_dir 算出来）。"""
 
     def __init__(self, log_dir: Path) -> None:
-        self.interval = 0.0
-        self.press_interval = 0.0
+        super().__init__()
+        self.wait.interval = 0.0
+        self.wait.press_interval = 0.0
         # 不要比 1 秒短：第一次建 ImageChecker 要初始化 OCR，约 0.1 秒
-        self.timeout = 1.0
-        self.load_timeout = 1.0
-        self.boot_timeout = 1.0
+        self.wait.timeout = 1.0
+        self.restart.load_timeout = 1.0
+        self.restart.boot_timeout = 1.0
         self.log_dir = log_dir
-        self.game_title_ids = (DEFAULT_TITLE_ID,)
 
 
 class FakeScreen:
@@ -155,6 +155,32 @@ class FakeMemory:
     def close(self) -> None:
         """记下调用次数。"""
         self.close_calls += 1
+
+
+SETTINGS_ENV_NAMES = (
+    "SCREEN",
+    "CONTROLLER",
+    "MEMORY",
+    "SWITCH_CONNECTION",
+    "SWITCH_IP",
+    "SWITCH_PORT",
+    "PKHEX_API_URL",
+    "DISCORD_WEBHOOK_URL",
+    "KEEP_PATH",
+    "SERIAL_PORT",
+    "SERIAL_BAUD",
+    "CAPTURE_DEVICE",
+)
+
+
+@pytest.fixture(autouse=True)
+def clean_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """load_dotenv 换成什么都不读，Settings 读的环境变量都清掉：
+    所有测试都不读仓库里真实的 .env，也不受终端里设过的环境变量影响。
+    """
+    monkeypatch.setattr("control_switch.settings.load_dotenv", lambda *args, **kwargs: False)
+    for name in SETTINGS_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture

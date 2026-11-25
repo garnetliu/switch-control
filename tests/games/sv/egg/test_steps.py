@@ -764,7 +764,7 @@ def test_check_shiny_pushes_once_saves_screenshot_saves_game_and_is_done(
     tmp_path: Path,
 ) -> None:
     """check：队伍第 5 格是闪光：推送一次，文字里有「闪光」、名字「爱吃豚」和格子「5」，附一张存在
-    catch_dir 里的截图；退出盒子后存档（开菜单 X、R 等确认框、A 等「记录」的对话，再按 B 退回野外）；
+    shiny_dir 里的截图；退出盒子后存档（开菜单 X、R 等确认框、A 等「记录」的对话，再按 B 退回野外）；
     存上了所以只推送一次；返回 "done"。
     """
     world = hatch_world(party=party_with(s3="parent3", s4="shiny"), riding=True)
@@ -779,7 +779,7 @@ def test_check_shiny_pushes_once_saves_screenshot_saves_game_and_is_done(
     assert "5" in text
     assert len(files) == 1
     assert files[0].is_file()
-    assert files[0].parent == tmp_path / "catches"
+    assert files[0].parent == tmp_path / "shinys"
     assert contains_run(controller.pressed, ["X", "R", "A"])
     assert controller.pressed[-1] == "B"
     assert len(pushes) == 1

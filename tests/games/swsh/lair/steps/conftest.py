@@ -18,7 +18,7 @@ from control_switch.games.swsh.lair.session import LairSession
 # 超梦基准图的 seed（和 tests/games/swsh/lair/conftest.py 里的一样）
 SEED = 3076008315599927110
 
-# 这个 seed 的图（2x2，布局 4）路上已经知道的事件，是改动前 data/swsh/lair_event_LUT.json 里的内容。
+# 这个 seed 的图（2x2，布局 4）路上已经知道的事件，是改动前 src/control_switch/games/swsh/data/lair_event_LUT.json 里的内容。
 # 事件表以后会随着真机跑出来的记录变多，测试里固定成这一份，期望值不跟着变
 EVENTS = {
     "0-0": [],

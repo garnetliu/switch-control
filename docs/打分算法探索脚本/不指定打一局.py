@@ -1,5 +1,5 @@
 """测试：研究员那里选「不指定」打一整局，看开头第一次抽数的上限是多少、随机到的是哪只神兽。只打一局就退出。
-刷闪程序停着的时候才能跑。日志照常写在 logs/swsh-lair/start/ 里，本脚本的发现用「不指定测试」开头。"""
+刷闪程序停着的时候才能跑。日志照常写在 runs/logs/swsh-lair/start/ 里，本脚本的发现用「不指定测试」开头。"""
 import logging, sys
 from dotenv import load_dotenv
 

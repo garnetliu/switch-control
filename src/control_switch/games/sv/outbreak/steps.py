@@ -91,8 +91,8 @@ def scan(sw: OutbreakSession) -> str:
         for p in found
     ]
     logging.info("找到了：" + "；".join(lines))
-    sw.config.catch_dir.mkdir(parents=True, exist_ok=True)
-    path = sw.config.catch_dir / f"shiny-{time.strftime('%Y%m%d-%H%M%S')}-sv-outbreak.jpg"
+    sw.config.shiny_dir.mkdir(parents=True, exist_ok=True)
+    path = sw.config.shiny_dir / f"shiny-{time.strftime('%Y%m%d-%H%M%S')}-sv-outbreak.jpg"
     capture(sw, "闪光").save(str(path))
     sw.notifier.send_everyone("大量出现刷到闪光，已经存档，等你来抓\n" + "\n".join(lines), [path])
     return "done"

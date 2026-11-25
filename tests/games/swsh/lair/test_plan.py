@@ -1,6 +1,6 @@
 """control_switch.games.swsh.lair.plan：按这张图实际要打的对手，给首发和路线打分。
 
-用 data/swsh/ 里真实的数据和基准 seed 3076008315599927110（extra 为 0），配置用固定了打分参数的子类。
+用 src/control_switch/games/swsh/data/ 里真实的数据和基准 seed 3076008315599927110（extra 为 0），配置用固定了打分参数的子类。
 没有真实数据可用的函数（decide、fight、rotate 等纯计算）直接传数字。
 首领是 tapu-lele（kill 分支用 moltres），路线是 ((1, 0), (2, 1), (3, 2))，路上的事件手写在 EVENTS 里。
 期望值取自搬迁前 swsh.lair.plan 的运行结果。

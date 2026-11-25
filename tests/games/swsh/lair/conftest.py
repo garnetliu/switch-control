@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from control_switch.config import WaitConfig
 from control_switch.device import Devices
 from control_switch.games.swsh.lair.game_config import GameConfig
 from control_switch.games.swsh.lair.game_data import GameData
@@ -72,7 +73,7 @@ def fixed_config() -> FixedConfig:
 
 @pytest.fixture(scope="session")
 def fixed_data(fixed_config: FixedConfig) -> GameData:
-    """用固定了名单的配置读 data/swsh/，只读。"""
+    """用固定了名单的配置读 src/control_switch/games/swsh/data/，只读。"""
     return GameData(fixed_config)
 
 
@@ -195,7 +196,7 @@ def fake_images(monkeypatch: pytest.MonkeyPatch) -> FakeImages:
 def lair_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
     """GameConfig 的数据目录、运行状态、日志、战果和闪光截图目录都指到临时目录，计时设成最短。
 
-    data_dir 是把仓库里的 data/swsh 复制过去的，path 步骤会写 lair_event_LUT.json，不能写仓库里的。
+    data_dir 是把仓库里的 src/control_switch/games/swsh/data 复制过去的，path 步骤会写 lair_event_LUT.json，不能写仓库里的。
     名单、打分参数固定成 FixedConfig 里的值，首领是 tapu-lele。
     要在创建 LairSession 之前用，所以要用 LairSession 的测试都要用到它。
     """
@@ -207,15 +208,15 @@ def lair_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]
             monkeypatch.setattr(GameConfig, name, value)
     monkeypatch.setattr(GameConfig, "boss", "tapu-lele")
     monkeypatch.setattr(GameConfig, "data_dir", data_dir)
-    monkeypatch.setattr(GameConfig, "game_state_file", root / "run" / "game.yaml")
-    log_dir = root / "logs" / "swsh-lair"
+    monkeypatch.setattr(GameConfig, "game_state_file", root / "runs" / "state" / "game.yaml")
+    log_dir = root / "runs" / "logs" / "swsh-lair"
     monkeypatch.setattr(GameConfig, "log_dir", log_dir)
     monkeypatch.setattr(GameConfig, "result_dir", log_dir / "results")
-    monkeypatch.setattr(GameConfig, "catch_dir", root / "catches")
+    monkeypatch.setattr(GameConfig, "shiny_dir", root / "runs" / "shinys")
     # 不要比 1 秒短：第一次建 ImageChecker 要初始化 OCR
-    monkeypatch.setattr(GameConfig, "timeout", 1.0)
-    monkeypatch.setattr(GameConfig, "interval", 0.0)
-    monkeypatch.setattr(GameConfig, "press_interval", 0.0)
+    monkeypatch.setattr(WaitConfig, "timeout", 1.0)
+    monkeypatch.setattr(WaitConfig, "interval", 0.0)
+    monkeypatch.setattr(WaitConfig, "press_interval", 0.0)
     yield root
 
 

@@ -685,7 +685,7 @@ def make_egg(
 ) -> Callable[[Callable[[], bytes]], EggSession]:
     """返回一个函数：传入「每次截图返回图片字节」的函数，返回用假设备建的 EggSession。
 
-    没有内存设备。config 的 log_dir、catch_dir 指到临时目录，egg_boxes 设成 (21, 22)、flame_box 设成 23、flame_name 设成「啪嘧海胆」，
+    没有内存设备。config 的 log_dir、shiny_dir 指到临时目录，egg_boxes 设成 (21, 22)、flame_box 设成 23、flame_name 设成「啪嘧海胆」，
     interval 改成 0.5 秒（少截几次图）。controller.click 会让假时钟往前走 delay 秒，
     按键超过 MAX_CLICKS 次抛 AssertionError。
     """
@@ -703,14 +703,14 @@ def make_egg(
         devices = Devices(SceneScreen(scene), controller, None)
         sw = EggSession(load_settings({}), devices)
         sw.config.log_dir = tmp_path / "logs"
-        sw.config.catch_dir = tmp_path / "catches"
-        sw.config.catch_dir.mkdir()
+        sw.config.shiny_dir = tmp_path / "shinys"
+        sw.config.shiny_dir.mkdir()
         # 测试用的盒子编号只有 21、22、23 有真机的标题图片
         sw.config.egg_boxes = (21, 22)
         sw.config.flame_box = 23
         # 真机截图里没有鸭嘴火兽的面板，用啪嘧海胆（盒子-打开.jpg 的面板）当火焰之躯
         sw.config.flame_name = "啪嘧海胆"
-        sw.config.interval = 0.5
+        sw.config.wait.interval = 0.5
         return sw
 
     return factory

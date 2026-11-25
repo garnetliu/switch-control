@@ -1,7 +1,7 @@
 """从每局日志里取首领战的数据：四只是谁、血量、打了几回合、首领战倒下几次、输赢。写到 /tmp/turns_data.json。"""
 import ast, glob, json, re
 out = []
-for f in sorted(glob.glob("logs/swsh-lair/start/*.log")):
+for f in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")):
     t = open(f, encoding="utf-8", errors="replace").read()
     rep = re.search(r"第 (\d+) 轮战报：\n(胜|负)[^，]*，倒下 (\d+) 次，([\d.]+) 分钟，抓到 (\d)/4", t)
     teams = list(re.finditer(r"队伍: (\[.*?\])，自己的 PP", t))

@@ -26,7 +26,7 @@ ZH = {d.pokemon_object(n).name("zh-Hans"): n for n in [*D, *d.boss_pokemon()]}
 def games():
     """日志里每一局：首领、输赢、每一场的队伍、对手、实际回合数、倒下次数。同一局只取一次。"""
     seen = set()
-    for file in sorted(glob.glob("logs/swsh-lair/start/*.log")):
+    for file in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")):
         text = open(file, encoding="utf-8", errors="replace").read()
         marks = list(re.finditer(r"(\d\d:\d\d:\d\d) \| INFO: 读取到的 seed 是 (\d+)", text))
         for index, mark in enumerate(marks):

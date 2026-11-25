@@ -1,7 +1,7 @@
 """scripts/find_switch.py：按 MAC 找 Switch、ping、把 ip 写进 .env。
 
 脚本不在包里，用文件路径加载。subprocess.run、socket.socket、time.sleep 都换成假的，
-不发网络包、不跑 route、arp、ping；ROOT、ENV_FILE 指到临时目录，不写仓库的 .env 和 logs/find。
+不发网络包、不跑 route、arp、ping；ROOT、ENV_FILE 指到临时目录，不写仓库的 .env 和 runs/logs/find。
 """
 
 import importlib.util
@@ -251,14 +251,14 @@ def isolated_main(
 
 def read_log(root: Path) -> str:
     return "\n".join(
-        path.read_text(encoding="utf-8") for path in (root / "logs" / "find").glob("*.log")
+        path.read_text(encoding="utf-8") for path in (root / "runs" / "logs" / "find").glob("*.log")
     )
 
 
 def test_main_writes_switch_ip_to_env_file_when_found(
     monkeypatch: pytest.MonkeyPatch, isolated_main: ModuleType, tmp_path: Path
 ) -> None:
-    """main 找到 Switch：把 SWITCH_IP 写进 .env，并 ping 一下记录延迟，日志写在 logs/find/ 下。"""
+    """main 找到 Switch：把 SWITCH_IP 写进 .env，并 ping 一下记录延迟，日志写在 runs/logs/find/ 下。"""
     from dotenv import dotenv_values
 
     install_network(monkeypatch, isolated_main, FakeNetwork(arp_rounds=[SWITCH_ARP_LINE]))

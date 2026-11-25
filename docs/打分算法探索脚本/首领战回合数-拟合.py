@@ -1,6 +1,6 @@
 """首领战打几个回合和四只的进攻的关系。先跑 首领战回合数-取数据.py。"""
 import json, statistics as st, numpy as np
-D = json.load(open("data/swsh/boss_attack_defense_LUT.json"))
+D = json.load(open("src/control_switch/games/swsh/data/boss_attack_defense_LUT.json"))
 G = [g for g in json.load(open("/tmp/turns_data.json")) if len(g["fights"]) == 4]
 rows = []
 for g in G:

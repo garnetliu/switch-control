@@ -33,7 +33,7 @@ for row in rows:
 
 
 def minutes(file):
-    text = open(os.path.join("logs/swsh-lair/start", file), encoding="utf-8").read()
+    text = open(os.path.join("runs/logs/swsh-lair/start", file), encoding="utf-8").read()
     found = re.findall(r"用时 ([\d.]+) 分钟", text)
     return float(found[-1]) if found else None
 

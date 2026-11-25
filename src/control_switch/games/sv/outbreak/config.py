@@ -1,6 +1,5 @@
 """大量出现刷闪的配置。"""
 
-from control_switch.config import ROOT
 from control_switch.games.sv.config import SvConfig
 
 
@@ -8,7 +7,7 @@ class OutbreakConfig(SvConfig):
     """大量出现刷闪的配置。"""
 
     # 日志和出错时的截图
-    log_dir = ROOT / "logs" / "sv-outbreak"
+    log_dir = SvConfig.root / "runs" / "logs" / "sv-outbreak"
     # 要找的宝可梦，写简体中文名，比如 ("伊布", "拉鲁拉丝")。空着就是任何闪光都停
     targets: tuple[str, ...] = ()
     # 开始时要不要把大量出现的击败数改满（要重启一次游戏）

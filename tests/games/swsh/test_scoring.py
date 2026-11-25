@@ -1,6 +1,6 @@
 """control_switch.games.swsh.scoring：评分公式。
 
-宝可梦用 data/swsh/ 里真实的数据，个体值固定 31。期望值取自搬迁前 swsh.scoring 的运行结果。
+宝可梦用 src/control_switch/games/swsh/data/ 里真实的数据，个体值固定 31。期望值取自搬迁前 swsh.scoring 的运行结果。
 常用的组合：自己 rhydon，对手首领 tapu-lele，队友 starmie、scyther、chansey。
 """
 

@@ -8,7 +8,7 @@ TOP = {"mewtwo": 24, "tapu-bulu": 23}; E = {}
 for b, t in TOP.items():
     c = GameConfig(); c.lair_first_draw_top = t; d = GameData(c); E[b] = (d, Planner(d, c, b))
 seeds = {}
-for f in sorted(glob.glob("logs/swsh-lair/start/*.log")):
+for f in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")):
     t = open(f, encoding="utf-8", errors="replace").read()
     m = re.search(r"读取到的 seed 是 (\d+)", t)
     if m and "首发" in t: seeds[int(m[1])] = "tapu-bulu" if "卡璞・哞哞" in t else "mewtwo"

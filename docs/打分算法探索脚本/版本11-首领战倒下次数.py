@@ -20,7 +20,7 @@ from swsh.lair import plan
 common = runpy.run_path(str(Path(__file__).with_name("版本11-验收.py")))
 collect, config_of, data_of = common["collect"], common["config_of"], common["data_of"]
 
-games = collect(sorted(glob.glob("logs/swsh-lair/start/*.log")) + sys.argv[1:])
+games = collect(sorted(glob.glob("runs/logs/swsh-lair/start/*.log")) + sys.argv[1:])
 
 
 def likelihood(predicted: list[float], actual: list[int]) -> float:

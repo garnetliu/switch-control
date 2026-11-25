@@ -17,6 +17,7 @@ from typing import Any, cast
 
 import pytest
 
+from control_switch.config import StickConfig, WaitConfig
 from control_switch.games.swsh.lair.game_config import GameConfig
 from control_switch.games.swsh.lair.session import LairSession
 from control_switch.types import Rect
@@ -27,8 +28,8 @@ battle = module.battle
 
 RECTS = GameConfig.rects
 ADDRESSES = GameConfig.addresses
-STICK_MAX = GameConfig.stick_max
-STICK_TICK = GameConfig.stick_tick
+STICK_MAX = StickConfig.max
+STICK_TICK = StickConfig.tick
 SessionFactory = Callable[..., LairSession]
 PrepareRun = Callable[..., Any]
 ImageFactory = Any
@@ -906,7 +907,7 @@ def test_dynamax_retries_a_when_cursor_does_not_leave_button(
     """往左推摇杆把光标移到极巨化按钮上，按 A 之后光标还停在按钮上（按键丢了）：等 2 秒再按一次 A，
     光标离开按钮、招式列表换成极巨招式之后返回；摇杆推了一次，按过的键是 A、A。这条要等 2 秒以上。
     """
-    monkeypatch.setattr(GameConfig, "timeout", 5.0)
+    monkeypatch.setattr(WaitConfig, "timeout", 5.0)
 
     def ratio(rect: Rect, lower: Any) -> float:
         presses = len(controller.pressed)

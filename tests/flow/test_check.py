@@ -3,7 +3,7 @@
 control_switch.flow.check.home_shown 换成按事先给定的顺序返回，用完后一直返回最后一个值
 （等画面时会反复调用，次数定不了）。不能按 control_switch.flow.restart 这个路径换，
 flow/__init__.py 里的同名函数 restart 把它盖住了。
-check_timeout 设成 1.0，超时的用例不用真等 10 秒。
+config.check.timeout 设成 1.0，超时的用例不用真等 10 秒。
 """
 
 from collections.abc import Callable, Sequence
@@ -37,9 +37,9 @@ def install_home_shown(monkeypatch: pytest.MonkeyPatch, values: Sequence[bool]) 
 
 @pytest.fixture
 def sw(make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch) -> Any:
-    """用假设备建的 Session，config.check_timeout 设成 1.0。"""
+    """用假设备建的 Session，config.check.timeout 设成 1.0。"""
     session = make_session([ROUTE])
-    monkeypatch.setattr(session.config, "check_timeout", 1.0)
+    monkeypatch.setattr(session.config.check, "timeout", 1.0)
     return session
 
 

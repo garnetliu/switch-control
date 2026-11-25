@@ -1,9 +1,9 @@
 """遇到研究员之后，队友手上的宝可梦变成了什么：换了几只，换上来的对首领是更强还是更弱。"""
 import ast, glob, json, re, statistics as st, sys
-B = json.load(open("data/swsh/boss_attack_defense_LUT.json"))
+B = json.load(open("src/control_switch/games/swsh/data/boss_attack_defense_LUT.json"))
 import collections
 rows = []; rounds = collections.Counter(); result = collections.defaultdict(list)
-for f in sorted(glob.glob("logs/swsh-lair/start/*.log")) + sys.argv[1:]:
+for f in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")) + sys.argv[1:]:
     t = open(f, encoding="utf-8", errors="replace").read()
     for p in re.split(r"(?=读取到的 seed 是 \d+)", t)[1:]:
         boss = "tapu-bulu" if ("卡璞" in p or "tapu-bulu" in p) else "mewtwo"

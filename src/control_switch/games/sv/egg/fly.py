@@ -67,7 +67,7 @@ def open_map(sw: Session) -> ImageChecker:
         lambda s: is_map(s, config),
         "地图",
         interval=config.map_retry,
-        timeout=config.timeout,
+        timeout=config.wait.timeout,
     )
 
 
@@ -90,8 +90,8 @@ def fly_to_gate(sw: Session) -> None:
             probes += 1
             sw.stick(
                 "LEFT",
-                round(config.stick_max * config.map_probe_tilt * px),
-                round(config.stick_max * config.map_probe_tilt * py),
+                round(config.stick.max * config.map_probe_tilt * px),
+                round(config.stick.max * config.map_probe_tilt * py),
                 config.map_probe_time,
             )
             time.sleep(config.map_move_wait)
@@ -102,7 +102,7 @@ def fly_to_gate(sw: Session) -> None:
         dx, dy = target[0] - cx, target[1] - cy
         distance = math.hypot(dx, dy)
         seconds = min(max(distance / config.map_cursor_speed, config.map_move_min), 1.0)
-        stick = config.stick_max
+        stick = config.stick.max
         sw.stick("LEFT", round(stick * dx / distance), round(-stick * dy / distance), seconds)
         time.sleep(config.map_move_wait)
         image = capture(sw, "地图上找零区闸口")
@@ -115,7 +115,7 @@ def fly_to_gate(sw: Session) -> None:
         lambda s: any(config.cancel_text in text for text in _menu_options(s, config)),
         "地图上的菜单",
         interval=config.map_retry,
-        timeout=config.timeout,
+        timeout=config.wait.timeout,
     )
     options = _menu_options(menu, config)
     if not any(config.fly_text in text for text in options):
@@ -128,7 +128,7 @@ def fly_to_gate(sw: Session) -> None:
         lambda s: screens.is_prompt(s, config),
         "飞翔的确认",
         interval=config.map_retry,
-        timeout=config.timeout,
+        timeout=config.wait.timeout,
     )
     act_until(
         sw,
@@ -136,7 +136,7 @@ def fly_to_gate(sw: Session) -> None:
         lambda s: not is_map(s, config) and not screens.is_prompt(s, config),
         "飞走",
         interval=config.map_retry,
-        timeout=config.timeout,
+        timeout=config.wait.timeout,
     )
     act_until(
         sw,

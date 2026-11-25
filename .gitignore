@@ -2,12 +2,10 @@
 __pycache__/
 *.pyc
 .DS_Store
-logs/
 .idea/
 .env
 state/
 .mcp.json
 .codex/
-run/
-catches/
 .coverage
+runs/

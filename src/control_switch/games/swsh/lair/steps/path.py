@@ -59,7 +59,7 @@ def path(sw: LairSession) -> str:
         image = wait_for(
             sw,
             lambda screen, active=states: found(screen, active),
-            sw.config.timeout,
+            sw.config.wait.timeout,
             "路线上的界面",
         )
         state = _match_state(sw, image, states)
@@ -144,7 +144,7 @@ def _handle_berry(sw: LairSession) -> None:
         sw,
         lambda screen: not screen.has_text(sw.config.rects.black_center_line1, "树果"),
         "树果的对话结束",
-        timeout=sw.config.timeout,
+        timeout=sw.config.wait.timeout,
     )
 
 
@@ -181,7 +181,7 @@ def _move_fork_cursor(sw: LairSession, cursors: dict[int, Rect], column: int) ->
     image = wait_for(
         sw,
         lambda screen: _path_cursor_index(sw, screen, rects) != -1,
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "岔路口光标",
     )
     start = _path_cursor_index(sw, image, rects)
@@ -194,7 +194,7 @@ def _move_fork_cursor(sw: LairSession, cursors: dict[int, Rect], column: int) ->
         image = act_until(
             sw,
             lambda step=direction: sw.stick(
-                "LEFT", step * sw.config.stick_max, 0, sw.config.stick_tick
+                "LEFT", step * sw.config.stick.max, 0, sw.config.stick.tick
             ),
             lambda screen, before=current: (
                 _path_cursor_index(sw, screen, rects) not in (before, -1)
@@ -220,7 +220,7 @@ def _handle_backpacker(sw: LairSession) -> None:
     image = wait_for(
         sw,
         lambda screen: _backpacker_shown(sw, screen),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "背包客的道具面板",
     )
     items = [image.read_text(rect).strip() for rect in sw.config.rects.backpacker_items]
@@ -229,7 +229,7 @@ def _handle_backpacker(sw: LairSession) -> None:
     wait_for(
         sw,
         lambda screen: not _backpacker_shown(sw, screen),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "背包客的道具面板消失",
     )
 
@@ -256,7 +256,7 @@ def _handle_scientist(sw: LairSession) -> None:
     image = wait_for(
         sw,
         lambda screen: screen.has_text(sw.config.rects.black_center_line1, "希望交换成"),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "研究员问换不换",
     )
     offered = image.read_text(sw.config.rects.black_center_line1) + image.read_text(
@@ -275,7 +275,7 @@ def _handle_scientist(sw: LairSession) -> None:
     wait_for(
         sw,
         lambda screen: not screen.has_text(sw.config.rects.black_center_line1, "希望交换成"),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "研究员问话消失",
     )
     if found is not None:

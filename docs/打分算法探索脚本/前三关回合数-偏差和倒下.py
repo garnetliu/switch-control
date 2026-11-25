@@ -6,7 +6,7 @@ from swsh.lair.plan import fight
 c = GameConfig(); d = GameData(c); D = d.rental_damages()
 zh = {d.pokemon_object(n).name("zh-Hans"): n for n in D}
 rows = []
-for file in sorted(glob.glob("logs/swsh-lair/start/*.log")):
+for file in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")):
     t = open(file, encoding="utf-8", errors="replace").read()
     r = re.search(r"\n路线：(.*)\n", t)
     if not r: continue

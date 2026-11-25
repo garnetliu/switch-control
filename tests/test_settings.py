@@ -1,6 +1,6 @@
 """control_switch.settings：从环境变量读配置。
 
-都用传进去的字典，不碰真的环境变量，也不读 .env。
+conftest 的 clean_settings_env 把 .env 和相关环境变量清掉了，这里传进去的字典就是全部配置。
 """
 
 import pytest

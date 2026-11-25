@@ -1,4 +1,4 @@
-"""游戏数据：data/swsh/ 里的数据文件。"""
+"""游戏数据：src/control_switch/games/swsh/data/ 里的数据文件。"""
 
 import json
 import logging
@@ -13,7 +13,7 @@ from .game_config import GameConfig
 
 
 class GameData:
-    """加载 data/swsh/ 里的数据文件。"""
+    """加载 src/control_switch/games/swsh/data/ 里的数据文件。"""
 
     def __init__(self, config: GameConfig):
         self._config = config
@@ -119,7 +119,7 @@ class GameData:
     def type_icons(self) -> dict[str, Any]:
         """路线图上的属性图标模板：{属性: 单通道黑白图}，和截图一样是原始大小。
 
-        图在 data/swsh/type_icons/属性名.png，都是从真机截图上抠下来的。
+        图在 src/control_switch/games/swsh/data/type_icons/属性名.png，都是从真机截图上抠下来的。
         """
         type_icons = self._type_icons_cache
         if type_icons is None:

@@ -18,6 +18,7 @@ from typing import Any, cast
 
 import pytest
 
+from control_switch.config import StickConfig
 from control_switch.games.swsh.lair import upstream
 from control_switch.games.swsh.lair.game_config import GameConfig
 from control_switch.games.swsh.lair.game_data import GameData
@@ -41,7 +42,7 @@ RESEARCHER_GONE = (IMAGES / "研究员问话消失.jpg").read_bytes()
 FORK = (IMAGES / "路线上的界面-要走哪条路.jpg").read_bytes()
 
 RECTS = GameConfig.rects
-STICK_MAX = GameConfig.stick_max
+STICK_MAX = StickConfig.max
 SessionFactory = Callable[..., LairSession]
 PrepareRun = Callable[..., Any]
 ImageFactory = Any
@@ -352,7 +353,7 @@ def test_handle_fork_moves_cursor_right_by_pushing_stick_then_confirms(
     )
     maps = prepared(sw, prepare_run)
     module._handle_fork(sw)
-    assert controller.sticks == [("LEFT", STICK_MAX, 0, GameConfig.stick_tick)]
+    assert controller.sticks == [("LEFT", STICK_MAX, 0, StickConfig.tick)]
     assert controller.pressed == ["A"]
     assert maps["current_index"] == 1
 
@@ -373,7 +374,7 @@ def test_handle_fork_moves_cursor_left_by_pushing_stick_the_other_way(
     )
     prepared(sw, prepare_run, [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]])
     module._handle_fork(sw)
-    assert controller.sticks == [("LEFT", -STICK_MAX, 0, GameConfig.stick_tick)]
+    assert controller.sticks == [("LEFT", -STICK_MAX, 0, StickConfig.tick)]
 
 
 def test_handle_fork_raises_runtime_error_when_route_has_no_next_node(
@@ -423,7 +424,7 @@ def test_handle_fork_raises_timeout_error_when_cursor_never_moves(
     with pytest.raises(TimeoutError, match="岔路口光标移动"):
         module._handle_fork(sw)
     assert controller.sticks
-    assert set(controller.sticks) == {("LEFT", STICK_MAX, 0, GameConfig.stick_tick)}
+    assert set(controller.sticks) == {("LEFT", STICK_MAX, 0, StickConfig.tick)}
     assert controller.pressed == []
 
 

@@ -2,7 +2,7 @@
 
 没有带走宝可梦界面的截图（logs/keep 里没有），画面判断用假截图（conftest 的 fake_images）。
 战报里的极矿石和球的数量读假 Memory 的道具口袋（极矿石 37 个、究极球 25 个）。
-战果截图存进临时目录的 result_dir、catch_dir。KEEP_PATH 不开（不锁定）；要锁定的用例创建 LairSession 时自己传 settings。
+战果截图存进临时目录的 result_dir、shiny_dir。KEEP_PATH 不开（不锁定）；要锁定的用例创建 LairSession 时自己传 settings。
 选好首发和路线之后的状态用 prepare_run 按 seed 算出来（基准 seed，路线 斧牙龙 → 龟足巨铠 → 狃拉，
 首领卡璞・蝶蝶，首发流氓熊猫）。期望值是改动前的代码跑出来的。
 """
@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from control_switch.config import StickConfig
 from control_switch.games.swsh.lair.game_config import GameConfig
 from control_switch.games.swsh.lair.session import LairSession
 from control_switch.settings import load_settings
@@ -35,7 +36,7 @@ TITLE_TEXT = "选1只要带回去的宝可梦"
 OPTION_RECT = ((0.75, 0.40), (0.85, 0.45))
 OPTIONS = [("选择", OPTION_RECT), ("查看能力", OPTION_RECT), ("取消", OPTION_RECT)]
 SHINY_RATIO = 0.2
-STICK_MAX = GameConfig.stick_max
+STICK_MAX = StickConfig.max
 
 
 def pouch(slots: int, item: int, count: int) -> bytes:
@@ -185,7 +186,7 @@ def test_select_pokemon_single_non_shiny_goes_back_to_scientist(
     restarts: list[object],
 ) -> None:
     """抓到 1 只、不是闪光、不锁定：按过的键是 A（查看能力）、B（回到列表）、B（不带走）、A（到黑屏），
-    返回 "initialize"，战报里「不带走」，战果截图存进 result_dir（一张列表），catch_dir 里没有。
+    返回 "initialize"，战报里「不带走」，战果截图存进 result_dir（一张列表），shiny_dir 里没有。
     """
     sw = make_lair_session(
         [
@@ -210,7 +211,7 @@ def test_select_pokemon_single_non_shiny_goes_back_to_scientist(
     assert restarts == []
     assert "处理：不带走\n" in notifier_of(sw).sent[0][0]
     assert files_in(sw.config.result_dir) == ["list.jpg"]
-    assert not sw.config.catch_dir.exists()
+    assert not sw.config.shiny_dir.exists()
     assert notifier_of(sw).sent_everyone == []
 
 
@@ -220,7 +221,7 @@ def test_select_pokemon_single_shiny_is_taken_away(
     screens: Screens,
     controller: Any,
 ) -> None:
-    """抓到 1 只、是闪光：资料页截图和列表截图都存进 catch_dir，各按一次 CAPTURE，发 @全体 的通知（带资料页截图），
+    """抓到 1 只、是闪光：资料页截图和列表截图都存进 shiny_dir，各按一次 CAPTURE，发 @全体 的通知（带资料页截图），
     光标已经在这只上不用推摇杆，一直按 A 到黑屏；按过的键是 A、CAPTURE、B、CAPTURE、A，返回 "initialize"，
     战报里「带走第 1 只闪光」，闪光记进 game.shinies。
     """
@@ -246,7 +247,7 @@ def test_select_pokemon_single_shiny_is_taken_away(
     assert select_pokemon(sw) == "initialize"
     assert controller.pressed == ["A", "CAPTURE", "B", "CAPTURE", "A"]
     assert controller.sticks == []
-    assert files_in(sw.config.catch_dir) == ["shiny-list.jpg", "shiny-summary.jpg"]
+    assert files_in(sw.config.shiny_dir) == ["shiny-list.jpg", "shiny-summary.jpg"]
     assert not sw.config.result_dir.exists()
     assert [text for text, _ in notifier_of(sw).sent_everyone] == ["闪光！第 1 只 斧牙龙"]
     summary_files = notifier_of(sw).sent_everyone[0][1]
@@ -264,7 +265,7 @@ def test_select_pokemon_several_shinies_notifies_everyone_and_exits(
 ) -> None:
     """抓到 2 只、两只都是闪光：战报照常发出，发 @全体 的通知（「这一局有 2 只闪光（第 1、2 只）…」），
     然后抛 SystemExit，不替人选，没有按 A 到黑屏。按过的键是 A（查看能力）、两只资料页各一次 CAPTURE、B（回到列表）、
-    两只列表各一次 CAPTURE；资料页往下翻两次、列表光标往下推一次（都是 -stick_max）。
+    两只列表各一次 CAPTURE；资料页往下翻两次、列表光标往下推一次（都是 -stick.max）。
     """
     sw = make_lair_session(
         [
@@ -304,9 +305,9 @@ def test_select_pokemon_several_shinies_notifies_everyone_and_exits(
     assert "处理：有 2 只闪光（第 1、2 只），停下来等人选\n" in notifier_of(sw).sent[0][0]
     assert controller.pressed == ["A", "CAPTURE", "CAPTURE", "B", "CAPTURE", "CAPTURE"]
     assert controller.sticks == [
-        ("LEFT", 0, -STICK_MAX, GameConfig.stick_tick),
-        ("LEFT", 0, -STICK_MAX, GameConfig.stick_tick),
-        ("LEFT", 0, -STICK_MAX, GameConfig.stick_tick),
+        ("LEFT", 0, -STICK_MAX, StickConfig.tick),
+        ("LEFT", 0, -STICK_MAX, StickConfig.tick),
+        ("LEFT", 0, -STICK_MAX, StickConfig.tick),
     ]
 
 
@@ -561,21 +562,21 @@ def test_take_exits_with_notification_when_more_than_one_shiny(
 def test_move_list_cursor_pushes_stick_up_when_target_is_above_cursor(
     make_lair_session: SessionFactory, prepare_run: PrepareRun, screens: Screens, controller: Any
 ) -> None:
-    """列表光标在第 2 只、要移到第 1 只：往上推（+stick_max），推一次光标就到了。"""
+    """列表光标在第 2 只、要移到第 1 只：往上推（+stick.max），推一次光标就到了。"""
     sw = make_lair_session([screens.cursor(1), screens.cursor(1), screens.cursor(0)], data=MEMORY)
     finished_run(sw, prepare_run, ["fraxure", "barbaracle"])
     module._move_list_cursor(sw, 0)
-    assert controller.sticks == [("LEFT", 0, STICK_MAX, GameConfig.stick_tick)]
+    assert controller.sticks == [("LEFT", 0, STICK_MAX, StickConfig.tick)]
 
 
 def test_move_list_cursor_pushes_stick_down_when_target_is_below_cursor(
     make_lair_session: SessionFactory, prepare_run: PrepareRun, screens: Screens, controller: Any
 ) -> None:
-    """列表光标在第 1 只、要移到第 2 只：往下推（-stick_max）。"""
+    """列表光标在第 1 只、要移到第 2 只：往下推（-stick.max）。"""
     sw = make_lair_session([screens.cursor(0), screens.cursor(0), screens.cursor(1)], data=MEMORY)
     finished_run(sw, prepare_run, ["fraxure", "barbaracle"])
     module._move_list_cursor(sw, 1)
-    assert controller.sticks == [("LEFT", 0, -STICK_MAX, GameConfig.stick_tick)]
+    assert controller.sticks == [("LEFT", 0, -STICK_MAX, StickConfig.tick)]
 
 
 # ---------------------------------------------------------------- _report
@@ -716,8 +717,8 @@ def test_report_attaches_screenshots_saved_since_the_run_started(
     os.utime(old, (past, past))
     new_result = sw.config.result_dir / "new-result.jpg"
     new_result.write_bytes(b"new")
-    sw.config.catch_dir.mkdir(parents=True)
-    new_shiny = sw.config.catch_dir / "new-shiny.jpg"
+    sw.config.shiny_dir.mkdir(parents=True)
+    new_shiny = sw.config.shiny_dir / "new-shiny.jpg"
     new_shiny.write_bytes(b"new")
     module._report(sw, [], [0.0], False, "x")
     assert notifier_of(sw).sent[0][1] == sorted([new_result, new_shiny])

@@ -2,12 +2,12 @@
 
 from pathlib import Path
 
-from control_switch.config import ROOT, BaseConfig, BaseRects
+from control_switch.config import BaseConfig, RestartConfig
 
 
 def test_root_points_to_repo_root() -> None:
-    """ROOT 指向仓库根目录：下面有 pyproject.toml。"""
-    assert (ROOT / "pyproject.toml").exists()
+    """BaseConfig.root 指向仓库根目录：下面有 pyproject.toml。"""
+    assert (BaseConfig.root / "pyproject.toml").exists()
 
 
 def test_failed_dir_is_log_dir_failed() -> None:
@@ -25,10 +25,10 @@ def test_failed_dir_follows_overridden_log_dir(tmp_path: Path) -> None:
 
 
 def test_base_rects_are_ratio_rects() -> None:
-    """BaseRects 里的区域是 ((左, 上), (右, 下))，数值都在 0 到 1 之间。"""
-    rects = BaseConfig().rects
-    assert isinstance(rects, BaseRects)
-    for rect in (rects.home_hint, rects.close_dialog, rects.user_picker):
+    """RestartConfig 里的区域是 ((左, 上), (右, 下))，数值都在 0 到 1 之间。"""
+    restart = BaseConfig().restart
+    assert isinstance(restart, RestartConfig)
+    for rect in (restart.home_hint, restart.close_dialog, restart.user_picker):
         (left, top), (right, bottom) = rect
         assert 0 <= left < right <= 1
         assert 0 <= top < bottom <= 1

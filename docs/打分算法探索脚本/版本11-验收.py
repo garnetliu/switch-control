@@ -190,7 +190,7 @@ def metrics(
 
 def main() -> None:
     params = {}
-    files = sorted(glob.glob("logs/swsh-lair/start/*.log"))
+    files = sorted(glob.glob("runs/logs/swsh-lair/start/*.log"))
     for argument in sys.argv[1:]:
         if "=" in argument:
             name, value = argument.split("=", 1)

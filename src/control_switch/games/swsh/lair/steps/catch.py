@@ -61,7 +61,7 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
     wait_for(
         sw,
         lambda screen: screen.has_text(sw.config.rects.catch_option, "捕捉"),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "「捕捉 / 不捕捉」",
     )
     logging.info(f"抓第 {sw.game.num_caught + 1} 只")
@@ -75,7 +75,7 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
     image = wait_for(
         sw,
         lambda screen: screen.has_text(sw.config.rects.ball_use, "使用"),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "选球界面",
     )
 
@@ -116,7 +116,7 @@ def _swap_pokemon(sw: LairSession, take: bool) -> None:
     image = wait_for(
         sw,
         lambda screen: screen.has_text(sw.config.rects.swap_options[0], "替换"),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "换不换的界面",
     )
 

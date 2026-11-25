@@ -1,4 +1,4 @@
-"""把 logs/swsh-lair/start/*.log 每一局拆成每一场，算出这一场的 m、d、r、T、L 和实际回合、倒下，存成一张表。
+"""把 runs/logs/swsh-lair/start/*.log 每一局拆成每一场，算出这一场的 m、d、r、T、L 和实际回合、倒下，存成一张表。
 
 一个日志文件是一局。一场：从「队伍: [...]」开始，到「抓第 N 只」（赢）或「还剩 0 条命」（输）结束；
 被重启截断、没打完的场丢掉。
@@ -232,7 +232,7 @@ def measured(fight, battle_hp):
 
 def main():
     rows, skipped = [], {"没有选首领那一行或选了不指定": 0, "认不出对手": 0, "没打完": 0}
-    files = [p for p in sorted(glob.glob("logs/swsh-lair/start/*.log")) if os.path.basename(p) <= LAST_LOG]
+    files = [p for p in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")) if os.path.basename(p) <= LAST_LOG]
     zh_boss = {norm(o.name("zh-Hans")): n for n, o in bosses.items()}
     for path in files:
         run = parse(path)

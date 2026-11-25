@@ -40,7 +40,7 @@ def _check_shiny(sw: LairSession) -> tuple[list[int], list[float]]:
     wait_for(
         sw,
         lambda screen: screen.has_text(sw.config.rects.result_title, "选1只要带回去的宝可梦"),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "带走宝可梦的界面",
     )
     values = _find_shiny(sw)
@@ -78,7 +78,7 @@ def _save_list_screenshots(sw: LairSession, results: list[bool]) -> None:
                     )
                     > sw.config.result_preview_ratio
                 ),
-                sw.config.timeout,
+                sw.config.wait.timeout,
                 "列表左边的宝可梦",
             )
             _save_screenshot(sw, image, "list", shiny)
@@ -87,10 +87,10 @@ def _save_list_screenshots(sw: LairSession, results: list[bool]) -> None:
 
 
 def _save_screenshot(sw: LairSession, image: ImageChecker, kind: str, shiny: bool) -> Path:
-    """存一张战果截图，返回存下的文件：闪光的存进 catch_dir，文件名带 shiny-，Switch 自己也截一张
+    """存一张战果截图，返回存下的文件：闪光的存进 shiny_dir，文件名带 shiny-，Switch 自己也截一张
     存进相册；不是闪光的存进 result_dir。kind 是 summary（资料页）或 list（带走列表）。
     """
-    directory = sw.config.catch_dir if shiny else sw.config.result_dir
+    directory = sw.config.shiny_dir if shiny else sw.config.result_dir
     directory.mkdir(parents=True, exist_ok=True)
     name = f"shiny-{kind}" if shiny else kind
     path = directory / f"{time.strftime('%Y%m%d-%H%M%S')}-{name}.jpg"
@@ -223,7 +223,7 @@ def _report(
     # 这一局存下的战果截图：开始时间之后存进闪光目录和战果目录的图片
     files = sorted(
         path
-        for directory in (sw.config.catch_dir, sw.config.result_dir)
+        for directory in (sw.config.shiny_dir, sw.config.result_dir)
         if directory.exists()
         for path in directory.glob("*.jpg")
         if path.stat().st_mtime >= game.started
@@ -263,11 +263,11 @@ def _move_list_cursor(sw: LairSession, index: int) -> None:
     """把带走列表的光标移到第 index 只（按抓到的顺序，从 0 开始）。"""
     rows = list(sw.config.rects.result_rows[: sw.game.num_caught])
     current = capture(sw, "带走列表的光标").selected(rows)
-    # 往上推是 +stick_max，往下推是 -stick_max
+    # 往上推是 +stick.max，往下推是 -stick.max
     direction = 1 if index < current else -1
     act_until(
         sw,
-        lambda: sw.stick("LEFT", 0, direction * sw.config.stick_max, sw.config.stick_tick),
+        lambda: sw.stick("LEFT", 0, direction * sw.config.stick.max, sw.config.stick.tick),
         lambda screen: screen.selected(rows) == index,
         f"列表光标移到第 {index + 1} 只",
     )
@@ -304,7 +304,7 @@ def _find_shiny(sw: LairSession) -> list[float]:
         image = wait_for(
             sw,
             lambda screen: bool(_summary_name(sw, screen)),
-            sw.config.timeout,
+            sw.config.wait.timeout,
             f"资料页上第 {index + 1} 只（{name}）的名字",
         )
         shown = _summary_name(sw, image)
@@ -317,7 +317,7 @@ def _find_shiny(sw: LairSession) -> list[float]:
                 lambda screen: (
                     screen.edge_ratio(rects.summary_sprite) > sw.config.summary_sprite_edge
                 ),
-                sw.config.timeout,
+                sw.config.wait.timeout,
                 "资料页右边的宝可梦",
             )
             path = _save_screenshot(sw, image, "summary", True)
@@ -330,7 +330,7 @@ def _find_shiny(sw: LairSession) -> list[float]:
             break
         act_until(
             sw,
-            lambda: sw.stick("LEFT", 0, -sw.config.stick_max, sw.config.stick_tick),
+            lambda: sw.stick("LEFT", 0, -sw.config.stick.max, sw.config.stick.tick),
             lambda screen, before=shown: _summary_name(sw, screen) not in ("", before),
             "资料页换到下一只",
         )
@@ -383,4 +383,6 @@ def _press_until_black(sw: LairSession) -> None:
     带走和不带走之后都是：报酬页面 → 转场黑屏 → 回到科学家面前。黑屏之后科学家说什么不固定
     （打赢了有时还会写下位置记录），这里不再等结束语，后面的对话交给 initialize。
     """
-    press_until(sw, lambda screen: screen.is_black(), "转场黑屏", timeout=sw.config.timeout * 2)
+    press_until(
+        sw, lambda screen: screen.is_black(), "转场黑屏", timeout=sw.config.wait.timeout * 2
+    )

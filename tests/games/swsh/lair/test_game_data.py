@@ -1,7 +1,7 @@
-"""control_switch.games.swsh.lair.game_data：data/swsh/ 里的数据文件。
+"""control_switch.games.swsh.lair.game_data：src/control_switch/games/swsh/data/ 里的数据文件。
 
-用 data/swsh/ 里真实的数据，只读。要写文件的测试（record_lair_events）和要换路上事件表的测试，
-把 data_dir 指到 pytest 临时目录里的一份复制，不碰仓库里的 data/swsh/。
+用 src/control_switch/games/swsh/data/ 里真实的数据，只读。要写文件的测试（record_lair_events）和要换路上事件表的测试，
+把 data_dir 指到 pytest 临时目录里的一份复制，不碰仓库里的 src/control_switch/games/swsh/data/。
 期望值取自搬迁前 swsh.lair.game_data 的运行结果。
 租借宝可梦挑 rhydon，首领挑 tapu-lele。
 """
@@ -44,7 +44,7 @@ def make_data(**attributes: object) -> GameData:
 
 
 def copy_data(tmp_path: Path) -> Path:
-    """把 data/swsh 复制到临时目录，返回复制出来的目录。"""
+    """把 src/control_switch/games/swsh/data 复制到临时目录，返回复制出来的目录。"""
     target = tmp_path / "swsh"
     shutil.copytree(REPO_DATA_DIR, target)
     return target

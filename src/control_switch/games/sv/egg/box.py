@@ -29,14 +29,14 @@ def open_menu(sw: Session) -> ImageChecker:
         lambda s: screens.menu_row(s, config) != -1,
         "主菜单",
         interval=config.menu_retry,
-        timeout=config.timeout,
+        timeout=config.wait.timeout,
     )
 
 
 def menu_to_row(sw: Session, row: int) -> None:
     """主菜单光标移到第 row 行，按 A。"""
     config = _config(sw)
-    image = wait_for(sw, lambda s: screens.menu_row(s, config) != -1, config.timeout, "主菜单")
+    image = wait_for(sw, lambda s: screens.menu_row(s, config) != -1, config.wait.timeout, "主菜单")
     current = screens.menu_row(image, config)
     while current != row:
         button = "DDOWN" if row > current else "DUP"
@@ -55,7 +55,7 @@ def menu_to_row(sw: Session, row: int) -> None:
         lambda s: screens.menu_row(s, config) == -1,
         "进主菜单的这一行",
         interval=config.menu_enter_interval,
-        timeout=config.timeout,
+        timeout=config.wait.timeout,
     )
 
 
@@ -118,7 +118,9 @@ def open_box(sw: Session) -> None:
     config = _config(sw)
     open_menu(sw)
     menu_to_row(sw, 1)
-    wait_for(sw, lambda s: screens.box_title(s, config) is not None, config.timeout, "盒子画面")
+    wait_for(
+        sw, lambda s: screens.box_title(s, config) is not None, config.wait.timeout, "盒子画面"
+    )
 
 
 def _read_title(sw: Session) -> int:
@@ -139,7 +141,7 @@ def _read_title(sw: Session) -> int:
             lambda s: screens.box_title(s, config) is not None,
             "盒子画面",
             interval=config.title_retry,
-            timeout=config.timeout,
+            timeout=config.wait.timeout,
         )
         title = screens.box_title(image, config)
         if title is not None and title == previous:
@@ -219,7 +221,7 @@ def _wait_cursor_change(sw: Session, current: Cursor) -> Cursor | None:
             return cursor
         if time.monotonic() >= deadline:
             return cursor
-        time.sleep(config.interval)
+        time.sleep(config.wait.interval)
 
 
 def move_cursor(sw: Session, target: Cursor) -> None:
@@ -232,7 +234,7 @@ def move_cursor(sw: Session, target: Cursor) -> None:
         lambda s: screens.box_cursor(s, config) is not None,
         "盒子的光标",
         interval=config.title_retry,
-        timeout=config.timeout,
+        timeout=config.wait.timeout,
     )
     cursor = screens.box_cursor(image, config)
     assert cursor is not None
@@ -330,7 +332,7 @@ def release_current(sw: Session) -> None:
         lambda s: screens.is_dialog(s, config),
         "盒子的操作菜单",
         interval=config.operation_interval,
-        timeout=config.timeout,
+        timeout=config.wait.timeout,
     )
     # 按 DDOWN 移到「放生」，每按一下读一次选中的是哪项；按键偶尔会被吞（真机上停在过「标记」），所以不按固定次数
     selected = ""
@@ -342,10 +344,10 @@ def release_current(sw: Session) -> None:
     else:
         raise RuntimeError(f"操作菜单选中的是「{selected}」，移不到「{config.release_text}」")
     sw.click("A", config.box_click_wait)
-    wait_for(sw, lambda s: screens.is_prompt(s, config), config.timeout, "放生确认")
+    wait_for(sw, lambda s: screens.is_prompt(s, config), config.wait.timeout, "放生确认")
     sw.click("DUP", config.release_down_wait)
     sw.click("A", config.box_click_wait)
-    wait_for(sw, lambda s: screens.is_dialog(s, config), config.timeout, "放生后的对话")
+    wait_for(sw, lambda s: screens.is_dialog(s, config), config.wait.timeout, "放生后的对话")
     # 「已将……放生了。再见……」有两句，字还在一个个出来时按 A 只会把字显示完，所以一直按到对话框消失
     # 「已将……放生了」的对话出现过就是放生成功了。放生后面板会晚一点刷新，不再拿名字比较（真机上读到过旧的名字）。
     # 放生的是队伍最后一只时，光标停在变空的那一格上，这一格不会变黄，认不出光标，所以只等对话框消失
@@ -355,6 +357,6 @@ def release_current(sw: Session) -> None:
         lambda s: not screens.is_dialog(s, config),
         "放生后的盒子",
         interval=config.dialog_retry,
-        timeout=config.timeout,
+        timeout=config.wait.timeout,
     )
     logging.info(f"放生了{before}")

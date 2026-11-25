@@ -4,13 +4,11 @@
 """
 
 from control_switch.config import BaseConfig
-from control_switch.games.sv import TITLE_IDS
 
 
 class SvConfig(BaseConfig):
     """朱紫的配置。"""
 
-    game_title_ids = TITLE_IDS
     # 存档块表的指针链：main+... → ...，游戏版本 4.0.0
     block_key_pointer = (0x47350D8, 0xD8, 0x0, 0x0, 0x30, 0x0)
     # 存档：X 开菜单、R 存档、A 确认，每个键按完等几秒；再按 save_back 下 B 回到野外，每下等 save_back_wait 秒

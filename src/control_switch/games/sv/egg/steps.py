@@ -509,7 +509,7 @@ def _flee(sw: Session) -> None:
             lambda s: screens.battle_row(s, config) != -1,
             "战斗菜单",
             interval=config.flee_move_interval * 3,
-            timeout=config.timeout,
+            timeout=config.wait.timeout,
         )
         row = screens.battle_row(image, config)
         while row != config.flee_row:
@@ -563,7 +563,7 @@ def _leave_gate(sw: Session, walk: float) -> None:
     config = cast(EggConfig, sw.config)
     sw.click("L", config.camera_wait)
     sw.stick(
-        "LEFT", config.stick_max, round(config.stick_max * config.gate_turn_y), config.gate_turn
+        "LEFT", config.stick.max, round(config.stick.max * config.gate_turn_y), config.gate_turn
     )
     sw.click("L", config.camera_wait)
     _push(sw, "LEFT", "U", walk)
@@ -634,8 +634,8 @@ def _save_game(sw: EggSession) -> bool:
 def _announce_shiny(sw: EggSession, name: str, slot: int) -> str:
     """闪光：截图、推送、退出盒子存档。存档失败再推送一次，提醒手动存档。"""
     logging.info(f"队伍第 {slot + 1} 格是闪光{name}")
-    sw.config.catch_dir.mkdir(parents=True, exist_ok=True)
-    path = sw.config.catch_dir / f"shiny-{time.strftime('%Y%m%d-%H%M%S')}-sv-egg.jpg"
+    sw.config.shiny_dir.mkdir(parents=True, exist_ok=True)
+    path = sw.config.shiny_dir / f"shiny-{time.strftime('%Y%m%d-%H%M%S')}-sv-egg.jpg"
     capture(sw, "闪光").save(str(path))
     sw.notifier.send_everyone(f"孵蛋刷到闪光{name}，在队伍第 {slot + 1} 格", [path])
     exit_to_overworld(sw)

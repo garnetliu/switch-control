@@ -119,7 +119,7 @@ def test_press_until_waits_press_interval_not_interval_between_presses(
     如果错用 interval（这里是 0），按一次就会马上再按，按键次数会大于 1。
     """
     sw = make_session([ROUTE])
-    sw.config.press_interval = 0.6
+    sw.config.wait.press_interval = 0.6
     with pytest.raises(TimeoutError):
         press_until(sw, never, "一直不满足", timeout=0.2)
     assert controller.pressed == ["A"]

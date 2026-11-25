@@ -59,7 +59,7 @@ def parse(path):
 rows = defaultdict(list)
 for seed, boss in SEEDS.items():
     scorer = upstream.Scorer(data, boss)
-    logs = [p for p in sorted(glob.glob("logs/swsh-lair/start/*.log")) if f"读取到的 seed 是 {seed}" in open(p, encoding="utf-8").read()]
+    logs = [p for p in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")) if f"读取到的 seed 是 {seed}" in open(p, encoding="utf-8").read()]
     parsed = [parse(p) for p in logs]
     # 这个 seed 的中文名 → name_id（从有路线那一行的日志里收集）
     names = {}

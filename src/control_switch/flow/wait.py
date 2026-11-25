@@ -50,7 +50,7 @@ def wait_for(
     timeout: 最多等几秒，超时抛 TimeoutError。
     what: 在等什么，写进超时的报错里。
     """
-    interval = sw.config.interval if interval is None else interval
+    interval = sw.config.wait.interval if interval is None else interval
     deadline = time.monotonic() + timeout
     while True:
         image = capture(sw, what)
@@ -79,8 +79,8 @@ def press_until(
         lambda: sw.click(button, 0),
         done,
         what,
-        interval=sw.config.press_interval,
-        timeout=sw.config.timeout if timeout is None else timeout,
+        interval=sw.config.wait.press_interval,
+        timeout=sw.config.wait.timeout if timeout is None else timeout,
     )
 
 
@@ -97,7 +97,7 @@ def act_until(
     每做一次之后 interval 秒里一直看画面，满足就返回；没满足就再做一次。
     超过 timeout 秒还没满足，抛 TimeoutError。
     """
-    timeout = sw.config.timeout if timeout is None else timeout
+    timeout = sw.config.wait.timeout if timeout is None else timeout
     deadline = time.monotonic() + timeout
     attempt = 0
     while True:
@@ -120,4 +120,4 @@ def act_until(
                 raise TimeoutError(f"等了 {timeout} 秒，画面一直没有出现：{what}")
             if now >= poll_deadline:
                 break
-            time.sleep(sw.config.interval)
+            time.sleep(sw.config.wait.interval)

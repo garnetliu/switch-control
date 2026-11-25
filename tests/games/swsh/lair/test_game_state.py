@@ -20,7 +20,7 @@ def make_config(directory: Path, boss_name: str = BOSS) -> GameConfig:
     """game_state_file 在临时目录里、boss 固定的配置。"""
 
     class TmpConfig(GameConfig):
-        game_state_file = directory / "run" / "game.yaml"
+        game_state_file = directory / "runs" / "state" / "game.yaml"
         boss = boss_name
 
     return TmpConfig()

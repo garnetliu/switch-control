@@ -1,4 +1,4 @@
-"""剑盾测试共用的 fixture：读一次 data/swsh/ 的真实数据，每次取宝可梦都给一份复制。"""
+"""剑盾测试共用的 fixture：读一次 src/control_switch/games/swsh/data/ 的真实数据，每次取宝可梦都给一份复制。"""
 
 from collections.abc import Callable
 from dataclasses import replace
@@ -12,7 +12,7 @@ from control_switch.games.swsh.pokemon import Pokemon
 
 @pytest.fixture(scope="session")
 def data() -> GameData:
-    """用默认配置读 data/swsh/ 的数据，整个测试过程只读一次，测试里不要改它。"""
+    """用默认配置读 src/control_switch/games/swsh/data/ 的数据，整个测试过程只读一次，测试里不要改它。"""
     return GameData(GameConfig())
 
 

@@ -1,6 +1,6 @@
 """生成选首发和路线用的两张表：uv run python scripts/make_lair_damage.py。
 
-只做计算，不连 Switch。结果写到 data/swsh/：
+只做计算，不连 Switch。结果写到 src/control_switch/games/swsh/data/：
 - rental_damage_LUT.json：{进攻的: {防守的: [普通, 极巨, 平均]}}，租借宝可梦两两之间，进攻的一回合打掉
   防守方血量的比例。防守方按路上的对手算，战斗里的血量是不极巨化的 stage_hp 倍。
   普通和极巨是没极巨化、极巨化了各用伤害最高的招式（scoring.evaluate_damage），

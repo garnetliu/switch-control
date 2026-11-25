@@ -2,37 +2,93 @@
 
 用电脑控制已装大气层的 Switch，自动刷闪光宝可梦。现在有三个脚本：
 
-| 脚本 | 游戏 | 刷什么 |
-|---|---|---|
-| `swsh/lair` | 《宝可梦 剑/盾》 | 极巨大冒险里的闪光神兽 |
-| `sv/outbreak` | 《宝可梦 朱/紫》 | 大量出现里的闪光宝可梦 |
-| `sv/egg` | 《宝可梦 朱/紫》 | 孵蛋刷闪光 |
+| 脚本 | 游戏 | 刷什么 | 说明 |
+|---|---|---|---|
+| `swsh/lair` | 《宝可梦 剑/盾》 | 极巨大冒险里的闪光神兽 | [README](src/control_switch/games/swsh/lair/README.md) |
+| `sv/outbreak` | 《宝可梦 朱/紫》 | 大量出现里的闪光宝可梦 | [README](src/control_switch/games/sv/outbreak/README.md) |
+| `sv/egg` | 《宝可梦 朱/紫》 | 孵蛋刷闪光 | [README](src/control_switch/games/sv/egg/README.md) |
+
+每个脚本开始前要怎么准备、配置在哪、每一步做什么，见脚本目录下的 README。
 
 Switch 上要装 usb-botbase（USB 连接）或 sys-botbase（WiFi 连接，TCP 6000）。
 
 ## 安装
 
+以下步骤在 macOS 上操作。
+
+### 第 1 步：准备 Switch
+
+Switch 要装好大气层，并装上 botbase：
+
+- 用 USB 线连接：装 usb-botbase。
+- 用 WiFi 连接：装 sys-botbase，Switch 和电脑要在同一个局域网里。
+
+没破解的 Switch 用采集卡和单片机，见下面的「采集卡」和「用单片机按键」，这一步可以跳过。
+
+### 第 2 步：安装 uv 和 Docker
+
+uv 用来装 Python 和依赖，Docker 用来跑 PKHeX 服务。已经装过的跳过。
+
 ```bash
+brew install uv
+brew install --cask docker
+```
+
+装完打开一次 Docker Desktop，让它在后台运行。
+
+### 第 3 步：下载代码，安装依赖
+
+```bash
+git clone git@github.com:garnetliu/switch-control.git
+cd switch-control
 uv sync
 ```
 
-复制 `.env.example` 为 `.env`，按里面的说明填写。用 WiFi 连接时要填 Switch 的 MAC 地址（`SWITCH_MAC`），再用 `make find` 找 ip。
+`uv sync` 会自己装好 Python 3.11 以上的版本和全部依赖。
 
-`make find` 要用系统自带的 Python 运行，需要在系统 Python 里装 python-dotenv：
+### 第 4 步：填写 .env
+
+```bash
+cp .env.example .env
+open -e .env
+```
+
+`.env.example` 里每一项都有说明，按你的连接方式改这几项：
+
+- USB 连接：`SWITCH_CONNECTION=usb`，其他不用改。
+- WiFi 连接：`SWITCH_CONNECTION=wifi`，`SWITCH_MAC` 填 Switch 的 MAC 地址（Switch 上「设置 → 互联网 → 互联网设置」里看）。ip 下一步自动找。
+- 要收通知：`DISCORD_WEBHOOK_URL` 填 Discord 频道的 Webhook URL。
+
+### 第 5 步：找 Switch 的 ip（只有 WiFi 连接要做）
+
+`make find` 用系统自带的 Python 运行，要先给它装 python-dotenv：
 
 ```bash
 /usr/bin/python3 -m pip install --user python-dotenv
+make find
 ```
 
-## PKHeX 服务
+找到后会把 ip 写进 `.env` 的 `SWITCH_IP`，再 ping 一下打印延迟。
 
-程序通过本机的 PKHeX 服务解析游戏内存里的宝可梦数据，开始之前要先启动容器：
+### 第 6 步：启动 PKHeX 服务
+
+`swsh/lair` 和 `sv/outbreak` 要用 PKHeX 服务解析游戏内存里的宝可梦数据，`sv/egg` 不用。
 
 ```bash
 docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 ```
 
-服务地址是 `http://127.0.0.1:8787`，也可以用环境变量 `PKHEX_API_URL` 指定。接口说明见 `docker`。
+服务地址是 `http://127.0.0.1:8787`。服务在别的机器或端口上时，改 `.env` 里的 `PKHEX_API_URL`。接口说明见 `docker/pkhex-reader/API.md`。
+
+### 第 7 步：开始运行
+
+在 Switch 上打开要刷的游戏，按脚本目录下 README 写的准备好，然后：
+
+```bash
+make start script=swsh/lair
+```
+
+`script=` 换成要跑的脚本：`swsh/lair`、`sv/outbreak`、`sv/egg`。启动时会先检查设备，没通过会打印报错并退出，报错的意思见「启动时的检查」。按 `Ctrl+C` 停止。
 
 ## 命令
 
@@ -51,15 +107,23 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 
 ## 环境变量
 
-全部变量和说明都在 `.env.example` 里，复制成 `.env` 再改。所有环境变量都在 `src/control_switch/settings.py` 里读，其他地方用传进来的 `Settings`。
+写在 `.env` 里，`.env.example` 是模板。程序用的都在 `src/control_switch/settings.py` 里读；`SWITCH_MAC` 只有 `make find` 用。写了不在可选值里的值，启动时报错退出并说明可以写什么。
 
-`SCREEN`（`botbase`、`capture`）、`CONTROLLER`（`botbase`、`serial`）、`MEMORY`（`botbase`、`none`）决定画面、按键、读写内存各用哪种设备，不写都是 `botbase`，由 `device/factory.py` 创建；选了 `botbase` 的共用同一个连接。`capture` 是用采集卡取图，见下面「采集卡」。写错值也会报错退出，并说明可以写什么。
-
-连接和通知之外，还有一个开关，只有极巨大冒险用，不写就是关：
-
-| 变量 | 作用 |
-|---|---|
-| `KEEP_PATH` | 设成 `1` 才开启。一局没刷到闪光、打赢并且倒下次数和用时都在范围内时，重启游戏保留这张图（keep path）。重启要付极矿石，矿石不够时不要开 |
+| 变量 | 可以写 | 不写时 | 作用 |
+|---|---|---|---|
+| `SCREEN` | `botbase`、`capture` | `botbase` | 用什么取图：botbase 或采集卡（见「采集卡」） |
+| `CONTROLLER` | `botbase`、`serial` | `botbase` | 用什么按键：botbase 或单片机（见「用单片机按键」） |
+| `MEMORY` | `botbase`、`none` | `botbase` | 用什么读写内存；`none` 是不读写，只能跑不读内存的脚本（`sv/egg`） |
+| `SWITCH_CONNECTION` | `usb`、`wifi` | `wifi` | botbase 用 USB（usb-botbase）还是 WiFi（sys-botbase）连 Switch。上面三项选了 `botbase` 的共用这一个连接 |
+| `SWITCH_IP` | ip 地址 | 无 | WiFi 连接时 Switch 的 ip，`make find` 自动写入。WiFi 连接没写会报错 |
+| `SWITCH_PORT` | 整数 | 无 | WiFi 连接时 sys-botbase 的端口，一般是 `6000`。WiFi 连接没写会报错 |
+| `SWITCH_MAC` | MAC 地址 | 无 | Switch 的 MAC 地址，`make find` 用它在局域网里找 ip |
+| `SERIAL_PORT` | 串口路径 | 无 | `CONTROLLER=serial` 时单片机的串口，例如 `/dev/cu.usbserial-xxxx`，这时必须写 |
+| `SERIAL_BAUD` | 整数 | `9600` | 单片机串口的波特率 |
+| `CAPTURE_DEVICE` | 不小于 0 的整数 | `0` | `SCREEN=capture` 时采集卡在 OpenCV 里的序号 |
+| `PKHEX_API_URL` | URL | `http://127.0.0.1:8787/api/v1/execute` | PKHeX 服务的地址，服务在别的机器或端口上才要改 |
+| `DISCORD_WEBHOOK_URL` | URL | 无，不发通知 | Discord 频道的 Webhook，发每局战报、超时和出错的通知 |
+| `KEEP_PATH` | `1` | 不开启 | 只有极巨大冒险用。设成 `1` 时，一局没刷到闪光、打赢并且倒下次数和用时都在范围内，就重启游戏保留这张图（keep path）。重启要付极矿石，矿石不够时不要开 |
 
 ## 采集卡
 
@@ -81,87 +145,7 @@ CAPTURE_DEVICE=0
 | `取图：采集卡打开了但读不到画面` | 终端没有摄像头权限 |
 | 日志警告 `采集卡的画面是 … 不是 1920×1080` | 序号可能指到了别的摄像头，换个 `CAPTURE_DEVICE` |
 
-## 启动时的检查
-
-每个脚本在 `__init__.py` 的 `REQUIRES` 里写明要用取图、按键、内存里的哪几样，`TITLE_IDS` 写明能跑的游戏。`control-switch run` 和 `restart` 开始时先检查，没通过就打印报错、以非 0 退出，不发通知。报错开头是哪一类，就是哪一类设备没通过：
-
-| 报错开头 | 意思 |
-|---|---|
-| `取图、按键、内存：botbase（USB）连接失败` | 连不上 Switch，前面写的是用 botbase 的那几类，括号里是 USB 或 WiFi，后面是原来的报错 |
-| `内存：这个脚本要读内存` | 脚本要读内存，`.env` 的 `MEMORY` 不能是 `none`。连接之前就会报 |
-| `取图：` | 取不到画面、画面是空的、不是图片，或者宽高比不是 16:9（报错里有实际的宽高）。画面全黑不报错，只在终端打一条警告，可能是没有画面输出 |
-| `内存：` | 读不到前台游戏的 Title ID，或者没有游戏在运行，或者前台不是这个脚本的游戏（报错里有读到的 Title ID） |
-| `按键：` | 只有 `run` 检查：按一下 HOME，画面没有变化，按键可能没有送到，或者取图和按键接的不是同一台 Switch。检查会按两次 HOME，第一次让画面切到 HOME 或回到游戏，第二次切回来 |
-
-`restart` 不检查游戏，也不按 HOME：重启时游戏可能已经崩了。
-
-## 流程
-
-`control-switch run` 按名字找到脚本，从脚本的起点开始一步一步跑，每一步返回下一步的名字。
-
-### 极巨大冒险 `swsh/lair`
-
-游戏停在科学家面前开始。配置在 `src/control_switch/games/swsh/lair/game_config.py`。
-
-| 步骤 | 文件 | 做什么 |
-|---|---|---|
-| initialize | `src/control_switch/games/swsh/lair/steps/initialize.py` | 把游戏带到科学家面前 |
-| join | `src/control_switch/games/swsh/lair/steps/join.py` | 选神兽，选初始租借宝可梦，读路线图并规划路线 |
-| path | `src/control_switch/games/swsh/lair/steps/path.py` | 处理路线上的岔路口、背包客、研究员、树果，直到进入战斗 |
-| battle | `src/control_switch/games/swsh/lair/steps/battle.py` | 选招式、决定要不要极巨化、记录天气场地和倒下次数 |
-| catch | `src/control_switch/games/swsh/lair/steps/catch.py` | 抓宝可梦，普通关决定换不换 |
-| select_pokemon | `src/control_switch/games/swsh/lair/steps/select_pokemon.py` | 查闪光，有闪光就带走，没有就不带走或重启保留路线 |
-
-### 大量出现 `sv/outbreak`
-
-开始前：游戏版本 4.0.0；人站在大量出现的范围里；打开过一次菜单，把光标停在「野餐」上。配置在 `src/control_switch/games/sv/outbreak/config.py`（要找的宝可梦、要不要改击败数）和 `src/control_switch/games/sv/config.py`（每个键按完等几秒）。
-
-步骤都在 `src/control_switch/games/sv/outbreak/steps.py`：
-
-| 步骤 | 做什么 |
-|---|---|
-| initialize | 找到内存里的存档块表 |
-| knockout | 存档，重启游戏，停在标题画面时把所有大量出现的击败数改满，再进游戏。配置里可以关掉 |
-| refresh | 开野餐再收起，身边的宝可梦重新生成 |
-| scan | 存档，读内存里身边的宝可梦。有要找的闪光就截图、推送并结束，没有就回到 refresh |
-
-刷到闪光时已经存过档，那只宝可梦在存档里，没抓到重启游戏它还在。还没有做三明治这一步。
-
-### 朱紫孵蛋 `sv/egg`
-
-自动开野餐、做三明治、从篮子收蛋、孵蛋、看孵出来的宝可梦，直到孵出闪光；闪光会推送到 Discord 并存档停下。不是闪光的放生，个体比队伍里亲代好的换掉亲代。只用取图和按键，不读内存，没破解的 Switch 也能跑。
-
-`.env` 这样写：
-
-```
-SCREEN=capture
-CONTROLLER=serial
-MEMORY=none
-SERIAL_PORT=/dev/cu.usbserial-xxxx
-```
-
-游戏里要先准备好：
-
-- 人站在野外空地，没有骑坐骑，前面没有障碍。
-- 队伍第 1 格是有「火焰之躯」的宝可梦，第 2 格百变怪，第 3 格爱吃豚（亲代），第 4–6 格空着。
-- 放蛋的盒子（默认 21、22、23，配置里的 `egg_boxes`）有足够的空格，打开盒子时停在第一个上。
-- 设置：语速快、自动记录关、跳过学习招式开、镜头辅助开。
-- 包里有超级花生酱三明治（食谱 17）的材料：香蕉、花生酱、黄油。
-
-开始：`make start script=sv/egg`。配置在 `src/control_switch/games/sv/egg/config.py`，按键路线和等待时间不对的在这里调。
-
-| 步骤 | 做什么 |
-|---|---|
-| initialize | 读亲代的「最棒」项数，检查队伍第 4–6 格 |
-| picnic | 开野餐 |
-| sandwich | 做超级花生酱三明治 |
-| to_basket | 走到篮子前 |
-| collect | 隔一会儿查一次篮子领蛋，收够了或三明治快失效就收野餐 |
-| hatch_load | 在盒子里找蛋，三个一组放进队伍 |
-| hatch_walk | 骑坐骑绕圈孵蛋，遇到野生宝可梦就逃走 |
-| check | 看孵出来的：闪光推送并存档停下，个体好的换亲代，其余放生 |
-
-### 用单片机按键
+## 用单片机按键
 
 `CONTROLLER=serial` 时，按键由单片机（伊机控固件）发出，没破解的 Switch 也能按。取图、内存不变。
 
@@ -176,30 +160,78 @@ SERIAL_PORT=/dev/cu.usbserial-xxxx
 | `按键：单片机没有回应` | 串口打开了但单片机不回话：检查 TTL 的接线（TXD、RXD 有没有接反）、单片机有没有通电、波特率对不对 |
 | `单片机回 FE` | 单片机还在跑里面存的脚本。启动时会先发停止命令，运行中出现说明单片机重启过 |
 
+## 启动时的检查
+
+每个脚本在 `__init__.py` 的 `REQUIRES` 里写明要用取图、按键、内存里的哪几样，`TITLE_IDS` 写明能跑的游戏。`control-switch run` 和 `restart` 开始时先检查，没通过就打印报错、以非 0 退出，不发通知。报错开头是哪一类，就是哪一类设备没通过：
+
+| 报错开头 | 意思 |
+|---|---|
+| `取图、按键、内存：botbase（USB）连接失败` | 连不上 Switch，前面写的是用 botbase 的那几类，括号里是 USB 或 WiFi，后面是原来的报错 |
+| `内存：这个脚本要读内存` | 脚本要读内存，`.env` 的 `MEMORY` 不能是 `none`。连接之前就会报 |
+| `取图：` | 取不到画面、画面是空的、不是图片，或者宽高比不是 16:9（报错里有实际的宽高）。画面全黑不报错，只在终端打一条警告，可能是没有画面输出 |
+| `内存：` | 读不到前台游戏的 Title ID，或者没有游戏在运行，或者前台不是这个脚本的游戏（报错里有读到的 Title ID） |
+| `按键：` | 只有 `run` 检查：按一下 HOME，画面没有变化，按键可能没有送到，或者取图和按键接的不是同一台 Switch。检查会按两次 HOME，第一次让画面切到 HOME 或回到游戏，第二次切回来 |
+
+`restart` 不检查游戏，也不按 HOME：重启时游戏可能已经崩了。
+
 ## 目录
 
-| 目录 | 内容 |
-|---|---|
-| `src/control_switch/__main__.py` | 命令行入口：`control-switch run`、`control-switch restart` |
-| `src/control_switch/session.py` | `Session`：配置、当前步骤、这一局的截图、通知，以及取图、按键、读写内存的设备 |
-| `src/control_switch/settings.py` | `Settings`：集中读环境变量和 `.env`，其他地方不再读 |
-| `src/control_switch/device/factory.py` | `create_devices`：按 `SCREEN`、`CONTROLLER`、`MEMORY` 创建设备 |
-| `src/control_switch/device/capture_card.py` | `CaptureCard`、`open_capture_card`：用采集卡取图，`SCREEN=capture` 时用 |
-| `src/control_switch/device/serial_pad.py` | `SerialPad`、`open_serial_pad`：用单片机按键，`CONTROLLER=serial` 时用 |
-| `src/control_switch/device/check.py` | `check_requires`、`check_devices`：启动时检查设备 |
-| `src/control_switch/flow/check.py` | `check_controller_reaches_screen`：启动时按两次 HOME，确认按键送到了画面上的这台 Switch |
-| `src/control_switch/device/base.py` | 设备的三个接口：`Screen`（取图）、`Controller`（按键）、`Memory`（读写内存）；`botbase.py` 是它们的实现 |
-| `src/control_switch` | 所有游戏共用：连接 Switch（`device`）、看图（`vision`）、等画面、菜单、重启（`flow`）、日志、推送、PKHeX 请求、通用配置、类型 |
-| `src/control_switch/games/registry.py` | 脚本表。加脚本时要在脚本的 `__init__.py` 里写 `STEPS`、`START`、`SESSION`、`REQUIRES`、`TITLE_IDS`，再在脚本表里加一行 |
-| `src/control_switch/games/swsh` | 剑盾的脚本共用的东西：对战打分、宝可梦类型、PK8 读取 |
-| `src/control_switch/games/swsh/lair` | 极巨大冒险：步骤、配置、状态、数据加载和路线图 |
-| `src/control_switch/games/sv` | 朱紫的脚本共用的东西：指针、读写存档块（`blocks.py`）、存档和野餐的操作（`actions.py`） |
-| `src/control_switch/games/sv/outbreak` | 大量出现刷闪：步骤和配置 |
-| `src/control_switch/games/sv/egg` | 孵蛋刷闪：步骤、配置、画面判断（`screens.py`）、盒子里的操作（`box.py`） |
-| `scripts` | 不属于包的脚本：找 Switch、离线算 seed 和伤害表 |
-| `data/swsh` | 剑盾的宝可梦、招式、路线和图片数据 |
-| `run` | 极巨大冒险这一局的状态 `game.yaml`，用来断线恢复和 keep path |
-| `catches` | 闪光宝可梦的截图 |
-| `logs` | 日志和截图，每个脚本一个目录：`logs/swsh-lair/`、`logs/sv-outbreak/`、`logs/sv-egg/`。截图平时只放在内存里，程序出错时才把这一局的截图写进这个目录下的 `failed/`。极巨大冒险不是闪光的战果截图在 `logs/swsh-lair/results/` |
-| `docs` | 实测记录和待测试的事项 |
-| `docker` | PKHeX 服务的容器 |
+```
+src/control_switch/
+├── __main__.py        命令行入口：control-switch run、control-switch restart
+├── session.py         Session：步骤里的 sw，带着配置、当前步骤、这一局的截图、通知和三个设备
+├── settings.py        Settings：读 .env 和环境变量，其他地方不再读
+├── config.py          BaseConfig：所有脚本共用的配置（日志目录、重启、摇杆、等画面、启动检查），每个脚本的配置继承它
+├── log.py             日志：输出到终端和 runs/logs 下的文件，一局一个文件
+├── notifier.py        发 Discord 通知
+├── pkhex.py           调本机的 PKHeX 服务解析宝可梦数据
+├── types.py           共用的类型：区域 Rect、颜色 Hsv
+├── device/            和 Switch 打交道的硬件：取图、按键、读写内存
+│   ├── base.py            三个接口：Screen（取图）、Controller（按键）、Memory（读写内存）
+│   ├── botbase.py         用 Switch 上的 sys-botbase / usb-botbase 实现这三个接口
+│   ├── capture_card.py    用采集卡取图（SCREEN=capture）
+│   ├── serial_pad.py      用单片机当手柄按键（CONTROLLER=serial）
+│   ├── factory.py         按 .env 创建设备，用 botbase 的几样共用一个连接
+│   └── check.py           启动时检查设备齐不齐、能不能用、前台是不是这个脚本的游戏
+├── vision/            看截图，只判断不操作
+│   ├── image.py           ImageChecker：认字、算颜色占比、比对图片、判断光标选中哪一项
+│   └── text.py            认出来的文字和要找的文字做比较
+├── flow/              所有游戏通用的操作流程：一边按键一边看画面
+│   ├── wait.py            截图、等画面变化、一直按某个键直到画面变化，出错时把这一局的截图写进 failed/
+│   ├── menu.py            认出菜单选项，把光标移到目标选项
+│   ├── restart.py         关掉游戏重新打开，等到开场画面
+│   └── check.py           启动时按两次 HOME，确认按键送到了画面上的这台 Switch
+└── games/             各个游戏的脚本
+    ├── registry.py        脚本表：按「游戏/脚本」的名字找到脚本
+    ├── swsh/              《宝可梦 剑/盾》
+    │   ├── data/              宝可梦、招式、路线的数据和属性图标
+    │   ├── pokemon.py、field.py、scoring.py、pk8.py    剑盾脚本共用：宝可梦和对战类型、对战打分、读 PK8
+    │   └── lair/              极巨大冒险刷闪
+    │       ├── steps/             步骤：initialize、join、path、battle、catch、select_pokemon
+    │       ├── game_config.py     配置：路径、界面区域、游戏参数
+    │       ├── session.py         极巨大冒险的 Session，带着这一局的状态和游戏数据
+    │       ├── game_state.py      这一局的状态，存成 runs/state/game.yaml
+    │       └── 其余文件            按 seed 算对手、读路线图、给首发和路线打分
+    └── sv/                《宝可梦 朱/紫》
+        ├── data/              图片数据（fly_icon.png）
+        ├── config.py          朱紫脚本共用的配置：内存指针、存档块、按键后等多久
+        ├── blocks.py          在内存里找到存档块，解密读出、加密写回
+        ├── actions.py         存档、开野餐、收野餐
+        ├── outbreak/          大量出现刷闪：config、session、steps
+        └── egg/               孵蛋刷闪：config、session、steps，画面判断 screens.py，盒子里的操作 box.py，飞到闸口 fly.py
+
+runs/                  运行时生成，不进 git
+├── logs/              日志，每个脚本一个目录：swsh-lair/、sv-outbreak/、sv-egg/
+│                      出错时这一局的截图写进 failed/；极巨大冒险不是闪光的战果截图在 swsh-lair/results/
+├── shinys/            闪光宝可梦的截图
+└── state/             极巨大冒险这一局的状态 game.yaml，用来断线恢复和 keep path
+
+scripts/               不属于包的脚本：找 Switch、离线算 seed 和伤害表、路由器查询、测速
+tests/                 测试，目录结构和 src/control_switch 对应；images/ 是测试用的真机截图
+docs/                  实测记录和待测试的事项
+docker/                PKHeX 服务的容器
+```
+
+`control-switch run` 按名字在脚本表里找到脚本，从 `START` 开始一步一步跑，每一步返回下一步的名字。
+
+加脚本：在 `games/<游戏>/<脚本>/__init__.py` 里写 `STEPS`、`START`、`SESSION`、`REQUIRES`、`TITLE_IDS`，再在 `games/registry.py` 的脚本表里加一行。

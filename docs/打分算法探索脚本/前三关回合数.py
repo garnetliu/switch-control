@@ -5,7 +5,7 @@ from swsh.lair.game_data import GameData
 d = GameData(GameConfig()); T = d.rental_damages(); N = {a: {b: v[0] for b, v in row.items()} for a, row in T.items()}; M = {a: {b: v[1] for b, v in row.items()} for a, row in T.items()}
 zh = {d.pokemon_object(n).name("zh-Hans"): n for n in N}
 rows = []
-for f in sorted(glob.glob("logs/swsh-lair/start/*.log")):
+for f in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")):
     t = open(f, encoding="utf-8", errors="replace").read()
     r = re.search(r"\n路线：(.*)\n", t)
     if not r: continue

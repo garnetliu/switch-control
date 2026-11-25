@@ -44,7 +44,7 @@ def battle(sw: LairSession) -> str:
             return "select_pokemon"
         else:
             # 出招动画、战斗文字这些都不用处理，隔一会儿再看
-            time.sleep(sw.config.interval)
+            time.sleep(sw.config.wait.interval)
 
 
 class Messages:
@@ -169,7 +169,7 @@ def _choose_move(sw: LairSession, war: War) -> None:
         image = wait_for(
             sw,
             lambda screen: not _move_blocked(sw, screen) and _move_cursor(sw, screen) >= 0,
-            sw.config.timeout,
+            sw.config.wait.timeout,
             "回到招式列表",
         )
     war.use_move(best)
@@ -240,7 +240,7 @@ def _use_move(sw: LairSession) -> bool:
         lambda screen: cast(
             bool, _move_blocked(sw, screen) or _target_cursors(sw, screen) or used(screen)
         ),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "无法使出、选目标的界面或者出招",
     )
     if _move_blocked(sw, image):
@@ -289,7 +289,7 @@ def _target_blocked(sw: LairSession) -> bool:
         index = _target_cursor(sw, image)
         if index == -1 or _target_selectable(sw, image, index):
             return False
-        time.sleep(sw.config.interval)
+        time.sleep(sw.config.wait.interval)
     return True
 
 
@@ -310,11 +310,11 @@ def _move_target_cursor(sw: LairSession) -> None:
 
 def _dynamax(sw: LairSession) -> ImageChecker:
     """招式列表上把光标移到「极巨化」按钮上按 A，等列表换成极巨招式，返回换好后的画面。"""
-    sw.stick("LEFT", -sw.config.stick_max, 0, sw.config.stick_tick)
+    sw.stick("LEFT", -sw.config.stick.max, 0, sw.config.stick.tick)
     wait_for(
         sw,
         lambda screen: _marker_shown(sw, screen, sw.config.rects.dynamax_cursor),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "光标移到极巨化按钮上",
     )
     # 按键偶尔会丢：光标还停在极巨化按钮上就再按。光标一离开按钮就不能再按了，招式列表的光标要过一会儿才画出来，
@@ -329,7 +329,7 @@ def _dynamax(sw: LairSession) -> ImageChecker:
     image = wait_for(
         sw,
         lambda screen: _move_cursor(sw, screen) >= 0,
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "换成极巨招式",
     )
     logging.info("极巨化")
@@ -356,7 +356,7 @@ def _move_cursor_to(sw: LairSession, image: ImageChecker, target: int) -> None:
             return
         image = act_until(
             sw,
-            lambda: sw.stick("LEFT", 0, -sw.config.stick_max, sw.config.stick_tick),
+            lambda: sw.stick("LEFT", 0, -sw.config.stick.max, sw.config.stick.tick),
             lambda screen, before=current: _move_cursor(sw, screen) not in (before, -1),
             "招式光标移动",
         )
@@ -374,7 +374,7 @@ def _storm(sw: LairSession, war: War) -> bool:
     wait_for(
         sw,
         lambda screen: not screen.has_text(sw.config.rects.black_full_line1, "倒下了"),
-        sw.config.timeout,
+        sw.config.wait.timeout,
         "「倒下了」消失",
     )
     return lives <= 0

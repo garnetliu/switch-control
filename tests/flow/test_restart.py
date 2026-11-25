@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from control_switch.config import BaseConfig
+from control_switch.config import RestartConfig
 from control_switch.flow.restart import enter_game, restart, restart_to_title
 from control_switch.types import Hsv, Rect
 from control_switch.vision import ImageChecker
@@ -26,8 +26,7 @@ SessionFactory = Callable[..., Any]
 HOME_TEXT = "切换用户"
 CLOSE_TEXT = "将关闭软件"
 PICKER_TEXT = "由谁来游玩软件"
-COLORFUL_RATIO = BaseConfig.colorful_ratio
-TITLE_ID = "0100ABF008968000"
+COLORFUL_RATIO = RestartConfig.colorful_ratio
 
 
 class Script:
@@ -121,32 +120,22 @@ def test_restart_to_title_raises_timeout_when_user_picker_never_appears(
     assert controller.pressed.count("A") == 1
 
 
-def test_restart_to_title_returns_when_title_id_is_lowercase_with_whitespace(
+def test_restart_to_title_returns_when_color_ratio_equals_colorful_ratio(
     make_session: SessionFactory, controller: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """title_id() 是 game_title_ids 里那个值的小写、前后带空白的写法，color_ratio 刚好等于 colorful_ratio：正常返回。"""
+    """color_ratio 刚好等于 colorful_ratio：正常返回。"""
     install_checks(monkeypatch, ratio=[COLORFUL_RATIO])
-    sw = make_session([ROUTE], title_id=" 0100abf008968000\n")
+    sw = make_session([ROUTE])
     restart_to_title(sw)
     assert controller.pressed[-2:] == ["A", "A"]
-
-
-def test_restart_to_title_times_out_when_title_id_not_in_game_title_ids(
-    make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """title_id() 不在 game_title_ids 里：color_ratio 再高也一直等，抛 TimeoutError，有「开场的彩色画面」。"""
-    install_checks(monkeypatch, ratio=[1.0])
-    sw = make_session([ROUTE], title_id="0100000000000000")
-    with pytest.raises(TimeoutError, match="开场的彩色画面"):
-        restart_to_title(sw)
 
 
 def test_restart_to_title_times_out_when_color_ratio_stays_below_colorful_ratio(
     make_session: SessionFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """title_id() 对但 color_ratio 一直低于 colorful_ratio：同样抛 TimeoutError，有「开场的彩色画面」。"""
+    """color_ratio 一直低于 colorful_ratio：抛 TimeoutError，有「开场的彩色画面」。"""
     install_checks(monkeypatch, ratio=[COLORFUL_RATIO - 0.01])
-    sw = make_session([ROUTE], title_id=TITLE_ID)
+    sw = make_session([ROUTE])
     with pytest.raises(TimeoutError, match="开场的彩色画面"):
         restart_to_title(sw)
 

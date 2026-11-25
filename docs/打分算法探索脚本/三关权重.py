@@ -9,7 +9,7 @@ def env(boss, own, mate, tw, sw=(0.3, 0.2, 0.1)):
     c = GameConfig(); c.stage_weights = sw; c.lair_first_draw_top = TOP[boss]; c.own_boss_exponents = own; c.teammate_boss_exponents = mate; c.teammate_weight = tw
     d = GameData(c); return c, d, Planner(d, c, boss)
 games = []
-for f in sorted(glob.glob("logs/swsh-lair/start/*.log")):
+for f in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")):
     t = open(f, encoding="utf-8", errors="replace").read()
     m = re.search(r"读取到的 seed 是 (\d+)", t)
     rep = re.search(r"第 (\d+) 轮战报：\n(胜|负)[^，]*，倒下 (\d+) 次，([\d.]+) 分钟，抓到 (\d)/4\n路线：(.*)\n", t)

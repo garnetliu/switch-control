@@ -24,7 +24,7 @@ def _press_and_wait(sw: Session, want_home: bool, which: str) -> None:
         wait_for(
             sw,
             lambda screen: home_shown(sw, screen) == want_home,
-            sw.config.check_timeout,
+            sw.config.check.timeout,
             f"按键检查：{which}按 HOME 后画面变化",
         )
     except TimeoutError as error:

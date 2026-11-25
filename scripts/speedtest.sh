@@ -15,7 +15,7 @@ SPEEDTEST=$(command -v speedtest)
 SERVER_ARG=""
 [ "$1" = "-s" ] && [ -n "$2" ] && SERVER_ARG="-s $2"
 
-LOG_DIR="$(cd "$(dirname "$0")/.." && pwd)/logs/speedtest"
+LOG_DIR="$(cd "$(dirname "$0")/.." && pwd)/runs/logs/speedtest"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/$(date '+%Y%m%d_%H%M%S').log"
 

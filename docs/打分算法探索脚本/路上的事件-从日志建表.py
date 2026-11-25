@@ -1,4 +1,4 @@
-"""从日志里把每一局路上遇到的研究员、背包客、树果整理成 data/swsh/lair_event_LUT.json 的初始内容。
+"""从日志里把每一局路上遇到的研究员、背包客、树果整理成 src/control_switch/games/swsh/data/lair_event_LUT.json 的初始内容。
 
 用法：PYTHONPATH=src uv run python 这个脚本 [另外的日志文件...]。位置的写法见 GameData.lair_events。
 同一个位置前后记的不一样会打印出来，不写进表。
@@ -14,7 +14,7 @@ for boss, top in (("mewtwo", 24), ("tapu-bulu", 23)):
     c = GameConfig(); c.lair_first_draw_top = top; D[boss] = GameData(c)
 seen = collections.defaultdict(collections.Counter)   # (类型, 布局, 位置) -> {事件组合: 次数}
 rounds = 0
-for f in sorted(glob.glob("logs/swsh-lair/start/*.log")) + sys.argv[1:]:
+for f in sorted(glob.glob("runs/logs/swsh-lair/start/*.log")) + sys.argv[1:]:
     t = open(f, encoding="utf-8", errors="replace").read()
     for p in re.split(r"(?=读取到的 seed 是 \d+)", t)[1:]:
         seed = int(re.match(r"读取到的 seed 是 (\d+)", p)[1])
@@ -48,7 +48,7 @@ for (kind, layout, position), counter in sorted(seen.items()):
     if len(counter) > 1:
         conflicts += 1; print("不一致，不写:", kind, layout, position, dict(counter)); continue
     table.setdefault(kind, {}).setdefault(str(layout), {})[position] = list(next(iter(counter)))
-path = Path("data/swsh/lair_event_LUT.json")
+path = Path("src/control_switch/games/swsh/data/lair_event_LUT.json")
 path.write_text(json.dumps(table, indent=4, ensure_ascii=False, sort_keys=True), encoding="utf-8")
 total = sum(len(v) for layouts in table.values() for v in layouts.values())
 events = collections.Counter(e for layouts in table.values() for v in layouts.values() for ev in v.values() for e in ev)

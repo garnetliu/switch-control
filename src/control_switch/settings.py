@@ -1,6 +1,6 @@
 """集中读配置：环境变量只在这里读，其他地方用传进来的 Settings。
 
-先读仓库根目录的 .env（不覆盖已经有的环境变量），再读环境变量。
+先读仓库根目录的 .env（不覆盖已经有的环境变量），再读环境变量，最后用传进来的 overrides 盖上去。
 """
 
 import os
@@ -8,13 +8,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
-
-from control_switch.config import ROOT
-
-SCREENS = ("botbase", "capture")
-CONTROLLERS = ("botbase", "serial")
-MEMORIES = ("botbase", "none")
-CONNECTIONS = ("wifi", "usb")
 
 
 @dataclass(frozen=True)
@@ -81,16 +74,15 @@ def _capture_device(env: Mapping[str, str]) -> int:
     return value
 
 
-def load_settings(env: Mapping[str, str] | None = None) -> Settings:
-    """读配置。env 不传时读 .env 和 os.environ；传了只读传进来的字典。空字符串当作没写。"""
-    if env is None:
-        load_dotenv(ROOT / ".env")
-        env = os.environ
+def load_settings(overrides: Mapping[str, str] | None = None) -> Settings:
+    """读配置：.env 和 os.environ 里的值，overrides 里有的项盖掉它们。空字符串当作没写。"""
+    load_dotenv()
+    env = {**os.environ, **(overrides or {})}
     return Settings(
-        screen=_choice(env, "SCREEN", SCREENS),
-        controller=_choice(env, "CONTROLLER", CONTROLLERS),
-        memory=_choice(env, "MEMORY", MEMORIES),
-        switch_connection=_choice(env, "SWITCH_CONNECTION", CONNECTIONS),
+        screen=_choice(env, "SCREEN", ("botbase", "capture")),
+        controller=_choice(env, "CONTROLLER", ("botbase", "serial")),
+        memory=_choice(env, "MEMORY", ("botbase", "none")),
+        switch_connection=_choice(env, "SWITCH_CONNECTION", ("wifi", "usb")),
         switch_ip=env.get("SWITCH_IP") or None,
         switch_port=_port(env),
         serial_port=env.get("SERIAL_PORT") or None,

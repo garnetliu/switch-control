@@ -1,6 +1,6 @@
 """control_switch.games.swsh.pokemon：Pokemon、Move、Match。
 
-宝可梦用 data/swsh/ 里真实的 rhydon（钻角犀兽，65 级，努力值全 0，性格系数全 1）。
+宝可梦用 src/control_switch/games/swsh/data/ 里真实的 rhydon（钻角犀兽，65 级，努力值全 0，性格系数全 1）。
 期望值取自搬迁前 swsh.pokemon 的运行结果。
 """
 

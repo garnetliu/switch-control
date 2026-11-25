@@ -18,7 +18,7 @@ D = {}
 for boss, top in (("mewtwo", 24), ("tapu-bulu", 23)):
     c = GameConfig(); c.lair_first_draw_top = top; D[boss] = GameData(c)
 rows = []
-files = sorted(glob.glob("logs/swsh-lair/start/*.log")) + sys.argv[1:]
+files = sorted(glob.glob("runs/logs/swsh-lair/start/*.log")) + sys.argv[1:]
 for f in files:
     t = open(f, encoding="utf-8", errors="replace").read()
     for p in re.split(r"(?=读取到的 seed 是 \d+)", t)[1:]:
