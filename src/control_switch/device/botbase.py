@@ -1,6 +1,6 @@
 """和 Switch 上的 botbase 通信：Wi-Fi 用 sys-botbase（TCP），USB 用 usb-botbase。
 
-用哪种由配置的 SWITCH_CONNECTION 决定：usb，或者 wifi（默认，要配 SWITCH_IP、SWITCH_PORT）。
+用哪种由 runs/switches.toml 里这台机器的 connection 决定：usb，或者 wifi（默认，要写 ip、port）。
 两种连接对外的方法完全一样。connect_botbase(settings) 按配置建连接，返回 Botbase。
 """
 
@@ -17,8 +17,7 @@ import usb.util
 
 from control_switch.settings import Settings
 
-# 摇杆坐标的最大值
-STICK_MAX = 0x7FFF
+from .base import Controller, Memory, Screen
 
 
 def _exit_on_signal(signum: int, _frame):
@@ -46,7 +45,7 @@ class Connection(Protocol):
     def close(self) -> None: ...
 
 
-class _WifiConnection:
+class _WifiConnection(Connection):
     """sys-botbase：每条命令是一行文本，以 \\r\\n 结尾；有返回值的命令返回一行文本，以 \\n 结尾。"""
 
     # sys-botbase 回的是打印出来的十六进制数（大端）
@@ -90,7 +89,7 @@ class _WifiConnection:
             self.sock = None
 
 
-class _UsbConnection:
+class _UsbConnection(Connection):
     """usb-botbase（Koi-3088 维护的版本）。
 
     发命令：先发 4 字节小端的长度（命令长度加 2），再发命令本身，不加 \\r\\n。
@@ -236,7 +235,7 @@ class _UsbConnection:
         return f"{struct.unpack('<Q', data)[0]:016X}"
 
 
-class Botbase:
+class Botbase(Screen, Controller, Memory):
     """botbase 的实现：取图、按键、读写内存都走同一条连接。"""
 
     def __init__(self, connection: Connection):
@@ -352,9 +351,14 @@ def connect_botbase(settings: Settings) -> Botbase:
         connection = _UsbConnection()
     else:
         if settings.switch_ip is None:
-            raise ValueError("Wi-Fi 连接要写 SWITCH_IP，现在没写")
+            raise ValueError(
+                f"runs/switches.toml 的 [switch.{settings.switch}] 用 WiFi 连接，要写 ip，"
+                f"可以用 make find switch={settings.switch} 自动写入"
+            )
         if settings.switch_port is None:
-            raise ValueError("Wi-Fi 连接要写 SWITCH_PORT，现在没写")
+            raise ValueError(
+                f"runs/switches.toml 的 [switch.{settings.switch}] 用 WiFi 连接，要写 port，一般是 6000"
+            )
         connection = _WifiConnection(settings.switch_ip, settings.switch_port)
     botbase = Botbase(connection)
     atexit.register(botbase.close)

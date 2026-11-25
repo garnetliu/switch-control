@@ -5,9 +5,11 @@
 推送换成记录函数，闪光截图存到临时目录。
 """
 
+import importlib
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import cv2
@@ -15,7 +17,6 @@ import numpy as np
 import pytest
 
 from control_switch.games.sv.egg import STEPS
-from control_switch.games.sv.egg import steps as steps_module
 from control_switch.games.sv.egg.session import EggSession
 from control_switch.games.sv.egg.steps import (
     check,
@@ -29,6 +30,7 @@ from control_switch.games.sv.egg.steps import (
 )
 from control_switch.session import Frame
 
+check_module: ModuleType = importlib.import_module("control_switch.games.sv.egg.steps.check")
 WorldFactory = Callable[..., Any]
 EggFactory = Callable[[Callable[[], bytes]], EggSession]
 ImageLoader = Callable[[str], bytes]
@@ -993,7 +995,7 @@ def test_check_shiny_appearing_before_release_is_announced_not_released(
     不放生，走闪光流程：推送、返回 "done"；没有按 A、DDOWN×4、A 选放生。
     """
     readings = iter([False, True])
-    monkeypatch.setattr(steps_module, "read_shiny", lambda sw: next(readings))
+    monkeypatch.setattr(check_module, "read_shiny", lambda sw: next(readings))
     world = hatch_world(party=party_with(s3="parent3"), riding=True)
     sw = make_egg(world.render)
     sw.parent_best = 3

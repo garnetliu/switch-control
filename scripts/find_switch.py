@@ -1,15 +1,14 @@
-"""在局域网里按 MAC 地址找 Switch，把 ip 写进 .env。
+"""在局域网里按 MAC 地址找 Switch，把找到的 ip 打印到标准输出。
 
+由 control-switch find <机器> 调用：它从 runs/switches.toml 读这台的 mac 传进来，再把打印出的 ip 写回去。
 macOS 27 起，第三方程序（包括 uv 装的 Python）读到的 ARP 表是空的，只有系统自带的
-/usr/bin/python3 读得到。所以这个文件要用系统 Python 运行，只能用 Python 3.9 支持的语法和标准库，
-用到的 python-dotenv 要装在系统 Python 里（python3 -m pip install --user python-dotenv）。
+/usr/bin/python3 读得到。所以这个文件要用系统 Python 运行，只能用 Python 3.9 支持的语法和标准库。
 不要从 control_switch 包里导入模块，那些依赖装在 uv 的环境里。
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import re
 import socket
 import subprocess
@@ -18,7 +17,6 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ENV_FILE = ROOT / ".env"
 
 
 def _local_prefix() -> str:
@@ -41,14 +39,14 @@ def _normalize_mac(mac: str) -> str:
     return ":".join(x.zfill(2) for x in re.split(r"[:-]", mac.lower()))
 
 
-def find_switch(rounds: int = 3) -> str | None:
-    """在本机所在的 /24 网段里，按环境变量 SWITCH_MAC 查找 Switch，返回它的 ip，找不到返回 None。
+def find_switch(switch_mac: str, rounds: int = 3) -> str | None:
+    """在本机所在的 /24 网段里，按 MAC 地址查找 Switch，返回它的 ip，找不到返回 None。
 
     做法：给网段里每个地址发一个 UDP 包，让系统通过 ARP 解析出对方的 MAC，
     再读 ARP 表按 MAC 匹配。不会连接 Switch 的 6000 端口。
     Switch 的 WiFi 省电时回 ARP 很慢，一轮里可能漏掉，所以没找到就再扫，最多 rounds 轮。
     """
-    mac = _normalize_mac(os.environ["SWITCH_MAC"])
+    mac = _normalize_mac(switch_mac)
     prefix = _local_prefix()
 
     for _ in range(rounds):
@@ -93,7 +91,7 @@ def ping(ip: str, count: int = 4, timeout_ms: int = 1000) -> float | None:
 
 
 def _init_log() -> None:
-    """日志写到终端和 runs/logs/find/ 下带时间戳的文件。"""
+    """日志写到终端（标准错误）和 runs/logs/find/ 下带时间戳的文件，标准输出只留给 ip。"""
     directory = ROOT / "runs" / "logs" / "find"
     directory.mkdir(parents=True, exist_ok=True)
     formatter = logging.Formatter("%(asctime)s | %(levelname)s: %(message)s", "%H:%M:%S")
@@ -107,38 +105,32 @@ def _init_log() -> None:
         logger.addHandler(handler)
 
 
-def main():
-    """用系统自带的 Python 运行：/usr/bin/python3 scripts/find_switch.py
+def main(argv: list[str] | None = None) -> None:
+    """用系统自带的 Python 运行：/usr/bin/python3 scripts/find_switch.py aa:bb:cc:dd:ee:ff
 
-    找到后把 ip 写进 .env 的 SWITCH_IP，再 ping 一下这个 ip 并记录延迟。
-    ping 不通或延迟超过 150 ms 只记一条警告，不影响已经写入的 ip。
-    找不到 Switch 时以非 0 状态退出。
+    找到后把 ip 打印到标准输出，再 ping 一下这个 ip 并记录延迟。
+    ping 不通或延迟超过 150 ms 只记一条警告。MAC 不对或找不到 Switch 时以非 0 状态退出。
     """
-    from dotenv import load_dotenv, set_key
-
     # ping 平均延迟超过这个值（毫秒）就提示网络太差
     max_ping_ms = 150
 
+    args = sys.argv[1:] if argv is None else argv
     _init_log()
-    load_dotenv(ENV_FILE)
-    switch_mac = os.environ.get("SWITCH_MAC", "")
-    if not switch_mac:
-        logging.error(
-            "没有设置 SWITCH_MAC：在 .env 里填 Switch 的 MAC 地址，例如 SWITCH_MAC=aa:bb:cc:dd:ee:ff"
-        )
+    if len(args) != 1:
+        logging.error("要传 Switch 的 MAC 地址：find_switch.py aa:bb:cc:dd:ee:ff")
         sys.exit(1)
+    switch_mac = args[0]
     if not re.fullmatch(r"[0-9a-fA-F]{1,2}([:-][0-9a-fA-F]{1,2}){5}", switch_mac):
         logging.error(
-            f"SWITCH_MAC 格式不对：{switch_mac!r}，应该是 aa:bb:cc:dd:ee:ff 这样的 6 段十六进制"
+            f"mac 格式不对：{switch_mac!r}，应该是 aa:bb:cc:dd:ee:ff 这样的 6 段十六进制"
         )
         sys.exit(1)
     logging.info(f"正在查找 MAC 为 {switch_mac} 的 Switch ...")
-    ip = find_switch()
+    ip = find_switch(switch_mac)
     if ip is None:
         logging.error("找不到 Switch")
         sys.exit(1)
-    set_key(str(ENV_FILE), "SWITCH_IP", ip)
-    logging.info(f"找到 Switch: {ip}，已写入 .env")
+    logging.info(f"找到 Switch: {ip}")
 
     delay = ping(ip)
     if delay is None:
@@ -149,6 +141,7 @@ def main():
         )
     else:
         logging.info(f"ping 平均 {delay:.0f} ms")
+    print(ip)
 
 
 if __name__ == "__main__":

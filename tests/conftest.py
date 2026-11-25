@@ -14,9 +14,9 @@ from typing import Any
 import pytest
 
 from control_switch.config import BaseConfig
-from control_switch.device import Devices
+from control_switch.device import Controller, Devices
 from control_switch.session import Session
-from control_switch.settings import load_settings
+from control_switch.settings import build_settings
 
 DEFAULT_TITLE_ID = "0100ABF008968000"
 
@@ -55,7 +55,7 @@ class FakeScreen:
         self.close_calls += 1
 
 
-class FakeController:
+class FakeController(Controller):
     """假 Controller：记下按过的键和摇杆操作，不等待，记下 close() 调了几次。"""
 
     def __init__(self) -> None:
@@ -157,29 +157,13 @@ class FakeMemory:
         self.close_calls += 1
 
 
-SETTINGS_ENV_NAMES = (
-    "SCREEN",
-    "CONTROLLER",
-    "MEMORY",
-    "SWITCH_CONNECTION",
-    "SWITCH_IP",
-    "SWITCH_PORT",
-    "PKHEX_API_URL",
-    "DISCORD_WEBHOOK_URL",
-    "KEEP_PATH",
-    "SERIAL_PORT",
-    "SERIAL_BAUD",
-    "CAPTURE_DEVICE",
-)
-
-
 @pytest.fixture(autouse=True)
 def clean_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """load_dotenv 换成什么都不读，Settings 读的环境变量都清掉：
+    """load_dotenv 换成什么都不读，Settings 读的两个环境变量清掉：
     所有测试都不读仓库里真实的 .env，也不受终端里设过的环境变量影响。
     """
     monkeypatch.setattr("control_switch.settings.load_dotenv", lambda *args, **kwargs: False)
-    for name in SETTINGS_ENV_NAMES:
+    for name in ("PKHEX_API_URL", "DISCORD_WEBHOOK_URL"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -224,7 +208,7 @@ def make_session(
 
     def factory(images: Sequence[bytes], title_id: str = DEFAULT_TITLE_ID) -> Session:
         devices = Devices(make_screen(images), controller, make_memory(title_id))
-        return Session(FakeConfig(tmp_path), load_settings({}), devices)
+        return Session(FakeConfig(tmp_path), build_settings({}), devices)
 
     return factory
 

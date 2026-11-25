@@ -23,7 +23,7 @@ import pytest
 from control_switch.device import Devices
 from control_switch.games.sv.egg.config import EggConfig
 from control_switch.games.sv.egg.session import EggSession
-from control_switch.settings import load_settings
+from control_switch.settings import build_settings
 from control_switch.vision import ImageChecker
 
 IMAGE_DIR = Path(__file__).resolve().parents[3] / "images" / "sv" / "egg"
@@ -701,7 +701,7 @@ def make_egg(
 
     def factory(scene: Callable[[], bytes]) -> EggSession:
         devices = Devices(SceneScreen(scene), controller, None)
-        sw = EggSession(load_settings({}), devices)
+        sw = EggSession(build_settings({}), devices)
         sw.config.log_dir = tmp_path / "logs"
         sw.config.shiny_dir = tmp_path / "shinys"
         sw.config.shiny_dir.mkdir()

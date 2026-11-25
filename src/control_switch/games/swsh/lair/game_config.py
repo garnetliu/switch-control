@@ -555,6 +555,9 @@ class GameConfig(BaseConfig):
     stage_weights = (0.3, 0.2, 0.1)
     # 抓到之后自己不换时，新抓到的那只没有队友换的概率，其余平均分给三个队友。日志里实测约 15%
     no_swap_probability = 1 / 8
+    # 开不开 keep path：True 时一局没刷到闪光、打赢并且倒下次数和用时在下面的范围内，就重启游戏保留这张图。
+    # 重启要付极矿石，矿石不够时不要开
+    keep_path = False
     # 没锁定的图：打赢、倒下不超过 lock_max_faints 次、用时不超过 lock_max_minutes 分钟，就锁定这张图（keep path）
     lock_max_faints = 1
     lock_max_minutes = 10.0

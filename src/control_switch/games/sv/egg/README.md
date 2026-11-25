@@ -2,13 +2,17 @@
 
 自动开野餐、做三明治、从篮子收蛋、孵蛋、看孵出来的宝可梦，直到孵出闪光；闪光会推送到 Discord 并存档停下。不是闪光的放生，个体比队伍里亲代好的换掉亲代。只用取图和按键，不读内存，没破解的 Switch 也能跑。
 
-`.env` 这样写：
+跑孵蛋的机器在 `runs/switches.toml` 里这样写（没破解的机器）：
 
-```
-SCREEN=capture
-CONTROLLER=serial
-MEMORY=none
-SERIAL_PORT=/dev/cu.usbserial-xxxx
+```toml
+[switch.lite]
+screen = "capture"
+controller = "serial"
+serial_port = "/dev/cu.usbserial-xxxx"
+memory = "none"
+
+[scripts]
+"sv/egg" = "lite"
 ```
 
 游戏里要先准备好：

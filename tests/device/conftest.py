@@ -8,8 +8,10 @@ from collections.abc import Callable, Mapping, Sequence
 
 import pytest
 
+from control_switch.device.botbase import Connection
 
-class FakeConnection:
+
+class FakeConnection(Connection):
     """假连接：send 的命令记在 sent，request 的命令记在 requested，request 按命令返回给定的字节。"""
 
     def __init__(

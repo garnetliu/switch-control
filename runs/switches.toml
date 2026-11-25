@@ -1,0 +1,52 @@
+# 每台 Switch 用什么设备，每个脚本用哪台。各项的意思见 README「机器配置」。
+
+# 破解机，USB 连 botbase
+# [switch.living]
+# connection = "usb"
+# screen = "botbase"
+# controller = "botbase"
+# memory = "botbase"
+
+# 破解机，WiFi 连 botbase，ip 用 make find switch=living 写入
+# [switch.living]
+# connection = "wifi"
+# mac = "aa:bb:cc:dd:ee:ff"
+# ip = "192.168.1.100"
+# port = 6000
+# screen = "botbase"
+# controller = "botbase"
+# memory = "botbase"
+
+# 破解机，采集卡取图，USB 连 botbase 按键和读内存
+# [switch.living]
+# connection = "usb"
+# screen = "capture"
+# capture_device = 0
+# controller = "botbase"
+# memory = "botbase"
+
+# 破解机，采集卡取图，单片机按键，WiFi 连 botbase 读内存
+# [switch.living]
+# connection = "wifi"
+# mac = "aa:bb:cc:dd:ee:ff"
+# ip = "192.168.1.100"
+# port = 6000
+# screen = "capture"
+# capture_device = 0
+# controller = "serial"
+# serial_port = "/dev/cu.usbserial-xxxx"
+# memory = "botbase"
+
+# 没破解的机器，采集卡取图，单片机按键，不读内存
+# [switch.lite]
+# screen = "capture"
+# capture_device = 0
+# controller = "serial"
+# serial_port = "/dev/cu.usbserial-xxxx"
+# memory = "none"
+
+# 脚本用哪台机器
+# [scripts]
+# "swsh/lair" = "living"
+# "sv/outbreak" = "living"
+# "sv/egg" = "lite"

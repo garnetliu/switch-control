@@ -21,15 +21,6 @@ class RestartConfig:
     colorful_ratio = 0.3
 
 
-class StickConfig:
-    """摇杆。"""
-
-    # 坐标最大值
-    max = 0x7FFF
-    # 推一格保持的时间
-    tick = 0.08
-
-
 class CheckConfig:
     """启动时检查按键。"""
 
@@ -46,6 +37,8 @@ class WaitConfig:
     interval = 0.1
     # press_until 连续按键时两次按键之间的间隔。比游戏的反应快的话，画面还没变就又按了一次，会多按进下一个菜单
     press_interval = 0.3
+    # 推一下摇杆保持多久，光标正好移一格
+    stick_tick = 0.08
 
 
 class BaseConfig:
@@ -61,7 +54,6 @@ class BaseConfig:
     def __init__(self) -> None:
         # 每个 config 各建一份，改一个 config 的值不会影响别的
         self.restart = RestartConfig()
-        self.stick = StickConfig()
         self.check = CheckConfig()
         self.wait = WaitConfig()
 

@@ -10,11 +10,6 @@ from control_switch.settings import Settings
 
 from .check import DeviceCheckError
 
-_WIDTH = 1920
-_HEIGHT = 1080
-# 读不到画面时最多读几次
-_READ_ATTEMPTS = 3
-
 
 class VideoSource(Protocol):
     """cv2.VideoCapture 和测试里的假采集卡都符合。"""
@@ -33,7 +28,9 @@ class CaptureCard:
 
     def pixel_peek(self) -> bytes:
         """读一帧，编码成 JPEG 字节。读不到时再读，连续 3 次读不到抛 ConnectionError。"""
-        for _ in range(_READ_ATTEMPTS):
+        # 读不到画面时最多读几次
+        attempts = 3
+        for _ in range(attempts):
             ok, image = self._video.read()
             if ok and image is not None:
                 break
@@ -55,23 +52,25 @@ class CaptureCard:
 def open_capture_card(settings: Settings) -> CaptureCard:
     """打开 settings.capture_device 号采集卡，要求 1920×1080；打不开或读不到画面抛 DeviceCheckError。"""
     index = settings.capture_device
+    # 要的画面大小
+    width, height = 1920, 1080
     video = cv2.VideoCapture(index, cv2.CAP_AVFOUNDATION)
     if not video.isOpened():
         raise DeviceCheckError(
-            f"取图：采集卡打不开（CAPTURE_DEVICE={index}），检查采集卡有没有插好、序号对不对"
+            f"取图：采集卡打不开（capture_device = {index}），检查采集卡有没有插好、序号对不对"
         )
-    video.set(cv2.CAP_PROP_FRAME_WIDTH, _WIDTH)
-    video.set(cv2.CAP_PROP_FRAME_HEIGHT, _HEIGHT)
+    video.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    video.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     ok, image = video.read()
     if not ok or image is None:
         video.release()
         raise DeviceCheckError(
-            f"取图：采集卡打开了但读不到画面（CAPTURE_DEVICE={index}），检查终端有没有摄像头权限"
+            f"取图：采集卡打开了但读不到画面（capture_device = {index}），检查终端有没有摄像头权限"
         )
-    height, width = image.shape[:2]
-    if (width, height) != (_WIDTH, _HEIGHT):
+    actual_height, actual_width = image.shape[:2]
+    if (actual_width, actual_height) != (width, height):
         logging.warning(
-            f"取图：采集卡的画面是 {width}×{height}，不是 {_WIDTH}×{_HEIGHT}，"
-            f"可能 CAPTURE_DEVICE={index} 指到了别的摄像头"
+            f"取图：采集卡的画面是 {actual_width}×{actual_height}，不是 {width}×{height}，"
+            f"可能 capture_device = {index} 指到了别的摄像头"
         )
     return CaptureCard(video)

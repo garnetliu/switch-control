@@ -18,16 +18,8 @@ from control_switch.types import Rect
 from control_switch.vision import ImageChecker
 from control_switch.vision.text import contains
 
+
 # 每个分支在底部文字里要认的关键词
-_KEYWORDS = {
-    "battle": "出现了",
-    "backpacker": "遇到了背包客",
-    "scientist": "遇到了研究员",
-    "berry": "树果",
-    "fork": "要走哪条路",
-}
-
-
 def path(sw: LairSession) -> str:
     """一直处理路线上的分支，直到进入战斗，返回 "battle"。
 
@@ -126,14 +118,19 @@ def _match_state(sw: LairSession, image: ImageChecker, states: tuple[str, ...]) 
     """先读黑色中间面板的第一行，按 states 的顺序比背包客、研究员、树果、岔路口的关键词；
     都没有，再读黑色占满面板的第一行，看是不是「×××出现了」。
     """
+    keywords = {
+        "battle": "出现了",
+        "backpacker": "遇到了背包客",
+        "scientist": "遇到了研究员",
+        "berry": "树果",
+        "fork": "要走哪条路",
+    }
     rects = sw.config.rects
     found = image.read_text(rects.black_center_line1)
     for state in [s for s in states if s != "battle"]:
-        if contains(found, _KEYWORDS[state]):
+        if contains(found, keywords[state]):
             return state
-    if "battle" in states and contains(
-        image.read_text(rects.black_full_line1), _KEYWORDS["battle"]
-    ):
+    if "battle" in states and contains(image.read_text(rects.black_full_line1), keywords["battle"]):
         return "battle"
     return None
 
@@ -194,7 +191,7 @@ def _move_fork_cursor(sw: LairSession, cursors: dict[int, Rect], column: int) ->
         image = act_until(
             sw,
             lambda step=direction: sw.stick(
-                "LEFT", step * sw.config.stick.max, 0, sw.config.stick.tick
+                "LEFT", step * sw.controller.STICK_MAX, 0, sw.config.wait.stick_tick
             ),
             lambda screen, before=current: (
                 _path_cursor_index(sw, screen, rects) not in (before, -1)

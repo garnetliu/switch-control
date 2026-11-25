@@ -46,29 +46,30 @@ uv sync
 
 `uv sync` 会自己装好 Python 3.11 以上的版本和全部依赖。
 
-### 第 4 步：填写 .env
+### 第 4 步：写机器配置
+
+打开 `runs/switches.toml`，里面每种接法都有注释掉的例子。照自己的接法取消注释一节 `[switch.名字]`，名字自己起；再在最下面的 `[scripts]` 里写每个脚本用哪台。各项的意思见下面「机器配置」。
+
+```bash
+open -e runs/switches.toml
+```
+
+要收 Discord 通知的，再复制一份 `.env`，填 `DISCORD_WEBHOOK_URL`：
 
 ```bash
 cp .env.example .env
 open -e .env
 ```
 
-`.env.example` 里每一项都有说明，按你的连接方式改这几项：
-
-- USB 连接：`SWITCH_CONNECTION=usb`，其他不用改。
-- WiFi 连接：`SWITCH_CONNECTION=wifi`，`SWITCH_MAC` 填 Switch 的 MAC 地址（Switch 上「设置 → 互联网 → 互联网设置」里看）。ip 下一步自动找。
-- 要收通知：`DISCORD_WEBHOOK_URL` 填 Discord 频道的 Webhook URL。
-
 ### 第 5 步：找 Switch 的 ip（只有 WiFi 连接要做）
 
-`make find` 用系统自带的 Python 运行，要先给它装 python-dotenv：
+机器那一节写好 `mac` 之后：
 
 ```bash
-/usr/bin/python3 -m pip install --user python-dotenv
-make find
+make find switch=living
 ```
 
-找到后会把 ip 写进 `.env` 的 `SWITCH_IP`，再 ping 一下打印延迟。
+`switch=` 写机器的名字。找到后会把 ip 写进这台的 `ip`，再 ping 一下打印延迟。
 
 ### 第 6 步：启动 PKHeX 服务
 
@@ -78,7 +79,7 @@ make find
 docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 ```
 
-服务地址是 `http://127.0.0.1:8787`。服务在别的机器或端口上时，改 `.env` 里的 `PKHEX_API_URL`。接口说明见 `docker/pkhex-reader/API.md`。
+服务地址是 `http://127.0.0.1:8787`。服务在别的机器或端口上时，在 `.env` 里写 `PKHEX_API_URL`。接口说明见 `docker/pkhex-reader/API.md`。
 
 ### 第 7 步：开始运行
 
@@ -88,7 +89,7 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 make start script=swsh/lair
 ```
 
-`script=` 换成要跑的脚本：`swsh/lair`、`sv/outbreak`、`sv/egg`。启动时会先检查设备，没通过会打印报错并退出，报错的意思见「启动时的检查」。按 `Ctrl+C` 停止。
+`script=` 换成要跑的脚本：`swsh/lair`、`sv/outbreak`、`sv/egg`，跑在 `[scripts]` 里写的那台机器上。两个脚本用不同的机器时，开两个终端各跑一个，可以分别停止和启动。启动时会先检查设备，没通过会打印报错并退出，报错的意思见「启动时的检查」。按 `Ctrl+C` 停止。
 
 ## 命令
 
@@ -96,78 +97,85 @@ make start script=swsh/lair
 
 | 命令 | 作用 |
 |---|---|
-| `make find` | 查找 Switch 的 ip，写入 `.env` 的 `SWITCH_IP`，再 ping 一下检查延迟 |
-| `make start` | 开始自动刷，默认跑 `swsh/lair`。跑别的脚本写 `make start script=sv/outbreak` |
-| `make restart` | 重启游戏，回到游戏里可以操作为止，同样用 `script=` 指定脚本。极巨大冒险途中重启，下次和科学家说话要付极矿石罚款 |
+| `make find switch=…` | 按这台机器的 `mac` 找它的 ip，写回 `runs/switches.toml`，再 ping 一下检查延迟 |
+| `make start script=…` | 开始自动刷，`script=` 必须写，例如 `make start script=sv/egg` |
+| `make restart switch=…` | 重启这台机器上的游戏，回到游戏里可以操作为止。极巨大冒险途中重启，下次和科学家说话要付极矿石罚款 |
 | `make format` | 格式化代码 |
 | `make lint` | 检查代码 |
 | `make test` | 跑测试 |
 | `make typecheck` | 类型检查 |
 | `make coverage` | 跑测试并打印覆盖率 |
 
-## 环境变量
+## 机器配置
 
-写在 `.env` 里，`.env.example` 是模板。程序用的都在 `src/control_switch/settings.py` 里读；`SWITCH_MAC` 只有 `make find` 用。写了不在可选值里的值，启动时报错退出并说明可以写什么。
+写在 `runs/switches.toml`，在 `src/control_switch/settings.py` 里读。每台 Switch 一节 `[switch.名字]`，`[scripts]` 里写每个脚本用哪台。写了不在可选值里的值或者不认识的项，启动时报错退出并说明可以写什么。
 
-| 变量 | 可以写 | 不写时 | 作用 |
+| 项 | 可以写 | 不写时 | 作用 |
 |---|---|---|---|
-| `SCREEN` | `botbase`、`capture` | `botbase` | 用什么取图：botbase 或采集卡（见「采集卡」） |
-| `CONTROLLER` | `botbase`、`serial` | `botbase` | 用什么按键：botbase 或单片机（见「用单片机按键」） |
-| `MEMORY` | `botbase`、`none` | `botbase` | 用什么读写内存；`none` 是不读写，只能跑不读内存的脚本（`sv/egg`） |
-| `SWITCH_CONNECTION` | `usb`、`wifi` | `wifi` | botbase 用 USB（usb-botbase）还是 WiFi（sys-botbase）连 Switch。上面三项选了 `botbase` 的共用这一个连接 |
-| `SWITCH_IP` | ip 地址 | 无 | WiFi 连接时 Switch 的 ip，`make find` 自动写入。WiFi 连接没写会报错 |
-| `SWITCH_PORT` | 整数 | 无 | WiFi 连接时 sys-botbase 的端口，一般是 `6000`。WiFi 连接没写会报错 |
-| `SWITCH_MAC` | MAC 地址 | 无 | Switch 的 MAC 地址，`make find` 用它在局域网里找 ip |
-| `SERIAL_PORT` | 串口路径 | 无 | `CONTROLLER=serial` 时单片机的串口，例如 `/dev/cu.usbserial-xxxx`，这时必须写 |
-| `SERIAL_BAUD` | 整数 | `9600` | 单片机串口的波特率 |
-| `CAPTURE_DEVICE` | 不小于 0 的整数 | `0` | `SCREEN=capture` 时采集卡在 OpenCV 里的序号 |
-| `PKHEX_API_URL` | URL | `http://127.0.0.1:8787/api/v1/execute` | PKHeX 服务的地址，服务在别的机器或端口上才要改 |
-| `DISCORD_WEBHOOK_URL` | URL | 无，不发通知 | Discord 频道的 Webhook，发每局战报、超时和出错的通知 |
-| `KEEP_PATH` | `1` | 不开启 | 只有极巨大冒险用。设成 `1` 时，一局没刷到闪光、打赢并且倒下次数和用时都在范围内，就重启游戏保留这张图（keep path）。重启要付极矿石，矿石不够时不要开 |
+| `connection` | `usb`、`wifi` | `wifi` | botbase 用 USB（usb-botbase）还是 WiFi（sys-botbase）连 Switch。取图、按键、内存里写了 `botbase` 的共用这一个连接 |
+| `mac` | MAC 地址 | 无 | Switch 的 MAC 地址（Switch 上「设置 → 互联网 → 互联网设置」里看），`make find` 用它在局域网里找 ip |
+| `ip` | ip 地址 | 无 | WiFi 连接时 Switch 的 ip，`make find` 自动写入。WiFi 连接没写会报错 |
+| `port` | 整数 | 无 | WiFi 连接时 sys-botbase 的端口，一般是 `6000`。WiFi 连接没写会报错 |
+| `screen` | `botbase`、`capture` | `botbase` | 用什么取图：botbase 或采集卡（见「采集卡」） |
+| `controller` | `botbase`、`serial` | `botbase` | 用什么按键：botbase 或单片机（见「用单片机按键」） |
+| `memory` | `botbase`、`none` | `botbase` | 用什么读写内存；`none` 是不读写，只能跑不读内存的脚本（`sv/egg`） |
+| `capture_device` | 不小于 0 的整数 | `0` | `screen = "capture"` 时采集卡在 OpenCV 里的序号 |
+| `serial_port` | 串口路径 | 无 | `controller = "serial"` 时单片机的串口，例如 `/dev/cu.usbserial-xxxx`，这时必须写 |
+| `serial_baud` | 整数 | `9600` | 单片机串口的波特率 |
+
+同时跑两台时，最多只能有一台用 USB 连 botbase：usb-botbase 只会连第一个找到的 USB 设备。
+
+`.env` 里只有两项，`.env.example` 是模板：
+
+| 变量 | 不写时 | 作用 |
+|---|---|---|
+| `DISCORD_WEBHOOK_URL` | 不发通知 | Discord 频道的 Webhook，发每局战报、超时和出错的通知 |
+| `PKHEX_API_URL` | `http://127.0.0.1:8787/api/v1/execute` | PKHeX 服务的地址，服务在别的机器或端口上才要改 |
+
+极巨大冒险的 keep path 开关在 `src/control_switch/games/swsh/lair/game_config.py` 的 `keep_path`。
 
 ## 采集卡
 
-没破解的 Switch 也能用采集卡取图，画面原样 1920×1080，不缩小。接法：Switch 插在底座上，底座的 HDMI 接采集卡，采集卡的 USB 插电脑。`.env` 里写：
+没破解的 Switch 也能用采集卡取图，画面原样 1920×1080，不缩小。接法：Switch 插在底座上，底座的 HDMI 接采集卡，采集卡的 USB 插电脑。这台机器写：
 
-```
-SCREEN=capture
-# 采集卡的序号，不写是 0
-CAPTURE_DEVICE=0
+```toml
+screen = "capture"
+capture_device = 0   # 采集卡的序号，不写是 0
 ```
 
-序号由系统排，插着采集卡时一般是 0，有 OBS 虚拟摄像头之类的设备时可能会变，插拔设备后也可能变。要给终端摄像头权限（系统设置 → 隐私与安全性 → 摄像头）。按键、内存这一项不变，没破解的 Switch 连不了 botbase，要同时写 `CONTROLLER=serial`、`MEMORY=none`，这时不会去连 botbase。
+序号由系统排，插着采集卡时一般是 0，有 OBS 虚拟摄像头之类的设备时可能会变，插拔设备后也可能变。要给终端摄像头权限（系统设置 → 隐私与安全性 → 摄像头）。没破解的 Switch 连不了 botbase，要同时写 `controller = "serial"`、`memory = "none"`，这时不会去连 botbase。
 
 常见报错：
 
 | 报错 | 意思 |
 |---|---|
-| `取图：采集卡打不开` | 采集卡没插好，或者 `CAPTURE_DEVICE` 的序号不对 |
+| `取图：采集卡打不开` | 采集卡没插好，或者 `capture_device` 的序号不对 |
 | `取图：采集卡打开了但读不到画面` | 终端没有摄像头权限 |
-| 日志警告 `采集卡的画面是 … 不是 1920×1080` | 序号可能指到了别的摄像头，换个 `CAPTURE_DEVICE` |
+| 日志警告 `采集卡的画面是 … 不是 1920×1080` | 序号可能指到了别的摄像头，换个 `capture_device` |
 
 ## 用单片机按键
 
-`CONTROLLER=serial` 时，按键由单片机（伊机控固件）发出，没破解的 Switch 也能按。取图、内存不变。
+`controller = "serial"` 时，按键由单片机（伊机控固件）发出，没破解的 Switch 也能按。取图、内存不变。
 
 - 单片机的 USB 插 Switch 底座，系统会把它认成手柄。
 - TTL 的 TXD 接单片机 1 号口，RXD 接 0 号口，GND 接 GND，TTL 的 USB 插电脑。
-- `.env` 里写 `CONTROLLER=serial` 和 `SERIAL_PORT=/dev/cu.usbserial-xxxx`（`ls /dev/cu.usbserial-*` 查）。波特率不写是 9600，只有换了固件才要写 `SERIAL_BAUD`。
+- 这台机器写 `controller = "serial"` 和 `serial_port = "/dev/cu.usbserial-xxxx"`（`ls /dev/cu.usbserial-*` 查）。波特率不写是 9600，只有换了固件才要写 `serial_baud`。
 
 | 报错 | 意思 |
 |---|---|
-| `CONTROLLER=serial 时要在 .env 里写 SERIAL_PORT` | 没写串口路径 |
+| `… 的 controller 是 serial，要写 serial_port` | 没写串口路径 |
 | `按键：串口 … 打不开` | 路径写错、TTL 没插好，或者串口被别的程序占着 |
 | `按键：单片机没有回应` | 串口打开了但单片机不回话：检查 TTL 的接线（TXD、RXD 有没有接反）、单片机有没有通电、波特率对不对 |
 | `单片机回 FE` | 单片机还在跑里面存的脚本。启动时会先发停止命令，运行中出现说明单片机重启过 |
 
 ## 启动时的检查
 
-每个脚本在 `__init__.py` 的 `REQUIRES` 里写明要用取图、按键、内存里的哪几样，`TITLE_IDS` 写明能跑的游戏。`control-switch run` 和 `restart` 开始时先检查，没通过就打印报错、以非 0 退出，不发通知。报错开头是哪一类，就是哪一类设备没通过：
+每个脚本在 `__init__.py` 的 `REQUIRES` 里写明要用取图、按键、内存里的哪几样，`TITLE_IDS` 写明能跑的游戏。`control-switch run` 开始时先检查，`restart` 只检查取图，没通过就打印报错、以非 0 退出，不发通知。报错开头是哪一类，就是哪一类设备没通过：
 
 | 报错开头 | 意思 |
 |---|---|
 | `取图、按键、内存：botbase（USB）连接失败` | 连不上 Switch，前面写的是用 botbase 的那几类，括号里是 USB 或 WiFi，后面是原来的报错 |
-| `内存：这个脚本要读内存` | 脚本要读内存，`.env` 的 `MEMORY` 不能是 `none`。连接之前就会报 |
+| `内存：这个脚本要读内存` | 脚本要读内存，这台机器的 `memory` 不能是 `none`。连接之前就会报 |
 | `取图：` | 取不到画面、画面是空的、不是图片，或者宽高比不是 16:9（报错里有实际的宽高）。画面全黑不报错，只在终端打一条警告，可能是没有画面输出 |
 | `内存：` | 读不到前台游戏的 Title ID，或者没有游戏在运行，或者前台不是这个脚本的游戏（报错里有读到的 Title ID） |
 | `按键：` | 只有 `run` 检查：按一下 HOME，画面没有变化，按键可能没有送到，或者取图和按键接的不是同一台 Switch。检查会按两次 HOME，第一次让画面切到 HOME 或回到游戏，第二次切回来 |
@@ -180,7 +188,7 @@ CAPTURE_DEVICE=0
 src/control_switch/
 ├── __main__.py        命令行入口：control-switch run、control-switch restart
 ├── session.py         Session：步骤里的 sw，带着配置、当前步骤、这一局的截图、通知和三个设备
-├── settings.py        Settings：读 .env 和环境变量，其他地方不再读
+├── settings.py        Settings：读 runs/switches.toml 和 .env，其他地方不再读
 ├── config.py          BaseConfig：所有脚本共用的配置（日志目录、重启、摇杆、等画面、启动检查），每个脚本的配置继承它
 ├── log.py             日志：输出到终端和 runs/logs 下的文件，一局一个文件
 ├── notifier.py        发 Discord 通知
@@ -189,9 +197,9 @@ src/control_switch/
 ├── device/            和 Switch 打交道的硬件：取图、按键、读写内存
 │   ├── base.py            三个接口：Screen（取图）、Controller（按键）、Memory（读写内存）
 │   ├── botbase.py         用 Switch 上的 sys-botbase / usb-botbase 实现这三个接口
-│   ├── capture_card.py    用采集卡取图（SCREEN=capture）
-│   ├── serial_pad.py      用单片机当手柄按键（CONTROLLER=serial）
-│   ├── factory.py         按 .env 创建设备，用 botbase 的几样共用一个连接
+│   ├── capture_card.py    用采集卡取图（screen = "capture"）
+│   ├── serial_pad.py      用单片机当手柄按键（controller = "serial"）
+│   ├── factory.py         按机器配置创建设备，用 botbase 的几样共用一个连接
 │   └── check.py           启动时检查设备齐不齐、能不能用、前台是不是这个脚本的游戏
 ├── vision/            看截图，只判断不操作
 │   ├── image.py           ImageChecker：认字、算颜色占比、比对图片、判断光标选中哪一项
@@ -217,10 +225,11 @@ src/control_switch/
         ├── config.py          朱紫脚本共用的配置：内存指针、存档块、按键后等多久
         ├── blocks.py          在内存里找到存档块，解密读出、加密写回
         ├── actions.py         存档、开野餐、收野餐
-        ├── outbreak/          大量出现刷闪：config、session、steps
-        └── egg/               孵蛋刷闪：config、session、steps，画面判断 screens.py，盒子里的操作 box.py，飞到闸口 fly.py
+        ├── outbreak/          大量出现刷闪：config、session，steps/ 下每个步骤一个文件
+        └── egg/               孵蛋刷闪：config、session，steps/ 下每个步骤一个文件，画面判断 screens.py，盒子里的操作 box.py，飞到闸口 fly.py
 
-runs/                  运行时生成，不进 git
+runs/                  只有 switches.toml 进 git，其余是运行时生成的
+├── switches.toml      每台 Switch 用什么设备，每个脚本用哪台
 ├── logs/              日志，每个脚本一个目录：swsh-lair/、sv-outbreak/、sv-egg/
 │                      出错时这一局的截图写进 failed/；极巨大冒险不是闪光的战果截图在 swsh-lair/results/
 ├── shinys/            闪光宝可梦的截图

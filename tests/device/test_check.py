@@ -17,7 +17,7 @@ from control_switch.device import (
     check_devices,
     check_requires,
 )
-from control_switch.settings import load_settings
+from control_switch.settings import build_settings
 
 MemoryFactory = Callable[..., Any]
 ScreenFactory = Callable[[Sequence[bytes]], Any]
@@ -86,7 +86,7 @@ def test_check_devices_raises_with_memory_hint_when_memory_missing(
 ) -> None:
     """requires 有 memory，devices.memory 是 None：抛 DeviceCheckError，报错里有 MEMORY。"""
     devices = Devices(make_screen([lively_image()]), controller, None)
-    with pytest.raises(DeviceCheckError, match="MEMORY"):
+    with pytest.raises(DeviceCheckError, match="memory"):
         check_devices(devices, ALL, TITLE_IDS)
 
 
@@ -301,15 +301,15 @@ def test_check_devices_does_not_read_title_id_when_title_ids_is_none(
 
 def test_check_requires_raises_with_memory_hint_when_memory_is_none() -> None:
     """requires 有 memory，settings.memory 是 "none"：抛 DeviceCheckError，报错里有 MEMORY。"""
-    with pytest.raises(DeviceCheckError, match="MEMORY"):
-        check_requires(load_settings({"MEMORY": "none"}), ALL)
+    with pytest.raises(DeviceCheckError, match="memory"):
+        check_requires(build_settings({"memory": "none"}), ALL)
 
 
 def test_check_requires_passes_when_memory_is_botbase() -> None:
     """requires 有 memory，settings.memory 是 "botbase"：不抛。"""
-    check_requires(load_settings({"MEMORY": "botbase"}), ALL)
+    check_requires(build_settings({"memory": "botbase"}), ALL)
 
 
 def test_check_requires_passes_when_memory_not_required() -> None:
     """requires 没有 memory，settings.memory 是 "none"：不抛。"""
-    check_requires(load_settings({"MEMORY": "none"}), frozenset({"screen", "controller"}))
+    check_requires(build_settings({"memory": "none"}), frozenset({"screen", "controller"}))

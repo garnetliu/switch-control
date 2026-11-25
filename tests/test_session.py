@@ -9,13 +9,13 @@ from typing import Any
 import pytest
 
 from control_switch.config import BaseConfig
-from control_switch.device import Devices
+from control_switch.device import Controller, Devices, Memory, Screen
 from control_switch.notifier import Notifier
 from control_switch.session import Session
-from control_switch.settings import load_settings
+from control_switch.settings import build_settings
 
 
-class AllInOne:
+class AllInOne(Screen, Controller, Memory):
     """像 Botbase 那样一个对象同时当 Screen、Controller、Memory 用，记下 close() 调了几次。"""
 
     def __init__(self) -> None:
@@ -70,7 +70,7 @@ def test_click_is_forwarded_to_controller(
 ) -> None:
     """click("A", 0.5)：转给 controller，按键和 delay 都原样传过去。"""
     session = Session(
-        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
+        BaseConfig(), build_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
     )
     session.click("A", 0.5)
     assert controller.pressed == ["A"]
@@ -82,7 +82,7 @@ def test_stick_is_forwarded_to_controller(
 ) -> None:
     """stick("LEFT", 100, -200, 0.08)：转给 controller，四个参数原样传过去。"""
     session = Session(
-        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
+        BaseConfig(), build_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
     )
     session.stick("LEFT", 100, -200, 0.08)
     assert controller.sticks == [("LEFT", 100, -200, 0.08)]
@@ -93,7 +93,7 @@ def test_press_is_forwarded_to_controller(
 ) -> None:
     """press("A")：转给 controller，按键原样传过去。"""
     session = Session(
-        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
+        BaseConfig(), build_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
     )
     session.press("A")
     assert controller.events == [("press", "A")]
@@ -104,7 +104,7 @@ def test_release_is_forwarded_to_controller(
 ) -> None:
     """release("A")：转给 controller，按键原样传过去。"""
     session = Session(
-        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
+        BaseConfig(), build_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
     )
     session.release("A")
     assert controller.events == [("release", "A")]
@@ -115,7 +115,7 @@ def test_press_stick_is_forwarded_to_controller(
 ) -> None:
     """press_stick("RIGHT", 100, -200)：转给 controller，三个参数原样传过去。"""
     session = Session(
-        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
+        BaseConfig(), build_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
     )
     session.press_stick("RIGHT", 100, -200)
     assert controller.events == [("press_stick", "RIGHT", 100, -200)]
@@ -126,7 +126,7 @@ def test_release_stick_is_forwarded_to_controller(
 ) -> None:
     """release_stick("RIGHT")：转给 controller，side 原样传过去。"""
     session = Session(
-        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
+        BaseConfig(), build_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
     )
     session.release_stick("RIGHT")
     assert controller.events == [("release_stick", "RIGHT")]
@@ -138,7 +138,7 @@ def test_pixel_peek_returns_image_of_screen(
     """pixel_peek：返回假 Screen 给的图，按它给的顺序。"""
     session = Session(
         BaseConfig(),
-        load_settings({}),
+        build_settings({}),
         Devices(make_screen([b"first", b"second"]), controller, make_memory()),
     )
     assert session.pixel_peek() == b"first"
@@ -152,7 +152,7 @@ def test_attributes_are_what_was_passed_in(
     config = BaseConfig()
     screen = make_screen([b"img"])
     memory = make_memory()
-    session = Session(config, load_settings({}), Devices(screen, controller, memory))
+    session = Session(config, build_settings({}), Devices(screen, controller, memory))
     assert session.config is config
     assert session.screen is screen
     assert session.controller is controller
@@ -165,7 +165,7 @@ def test_step_starts_as_empty_string_and_frames_as_empty_list(
 ) -> None:
     """step 初始是空字符串，frames 初始是空列表。"""
     session = Session(
-        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
+        BaseConfig(), build_settings({}), Devices(make_screen([b"img"]), controller, make_memory())
     )
     assert session.step == ""
     assert session.frames == []
@@ -177,7 +177,7 @@ def test_memory_returns_the_memory_when_given(
     """memory 给了就能用：取 memory 拿到它，peek 读到假 Memory 给的字节。"""
     memory = make_memory(data={0x10: b"\x01\x02"})
     session = Session(
-        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, memory)
+        BaseConfig(), build_settings({}), Devices(make_screen([b"img"]), controller, memory)
     )
     assert session.memory.peek(0x10, 2) == b"\x01\x02"
 
@@ -185,7 +185,7 @@ def test_memory_returns_the_memory_when_given(
 def test_memory_raises_runtime_error_when_none(make_screen: ScreenFactory, controller: Any) -> None:
     """memory 给 None：取 memory 抛 RuntimeError。"""
     session = Session(
-        BaseConfig(), load_settings({}), Devices(make_screen([b"img"]), controller, None)
+        BaseConfig(), build_settings({}), Devices(make_screen([b"img"]), controller, None)
     )
     with pytest.raises(RuntimeError):
         _ = session.memory
@@ -194,7 +194,7 @@ def test_memory_raises_runtime_error_when_none(make_screen: ScreenFactory, contr
 def test_close_closes_shared_object_once() -> None:
     """三个设备是同一个对象：close() 只关一次。"""
     shared = AllInOne()
-    Session(BaseConfig(), load_settings({}), Devices(shared, shared, shared)).close()
+    Session(BaseConfig(), build_settings({}), Devices(shared, shared, shared)).close()
     assert shared.close_calls == 1
 
 
@@ -204,7 +204,7 @@ def test_close_closes_three_different_objects_once_each(
     """三个设备是三个不同的对象：各关一次。"""
     screen = make_screen([b"img"])
     memory = make_memory()
-    session = Session(BaseConfig(), load_settings({}), Devices(screen, controller, memory))
+    session = Session(BaseConfig(), build_settings({}), Devices(screen, controller, memory))
     session.close()
     assert (screen.close_calls, controller.close_calls, memory.close_calls) == (1, 1, 1)
 
@@ -215,7 +215,7 @@ def test_close_closes_object_shared_by_screen_and_controller_once_and_memory_onc
     """screen 和 controller 是同一个对象、memory 是另一个：两个对象各关一次。"""
     shared = AllInOne()
     memory = make_memory()
-    Session(BaseConfig(), load_settings({}), Devices(shared, shared, memory)).close()
+    Session(BaseConfig(), build_settings({}), Devices(shared, shared, memory)).close()
     assert shared.close_calls == 1
     assert memory.close_calls == 1
 
@@ -225,7 +225,7 @@ def test_close_with_none_memory_closes_the_other_two(
 ) -> None:
     """memory 是 None：close() 不出错，screen 和 controller 照常各关一次。"""
     screen = make_screen([b"img"])
-    session = Session(BaseConfig(), load_settings({}), Devices(screen, controller, None))
+    session = Session(BaseConfig(), build_settings({}), Devices(screen, controller, None))
     session.close()
     assert screen.close_calls == 1
     assert controller.close_calls == 1
@@ -245,7 +245,7 @@ def test_notifier_is_created_with_webhook_url_from_settings(
             received.append(webhook_url)
 
     monkeypatch.setattr("control_switch.session.Notifier", RecordingNotifier)
-    settings = load_settings({"DISCORD_WEBHOOK_URL": "http://hook.invalid/x"})
+    settings = build_settings({}, discord_webhook_url="http://hook.invalid/x")
     devices = Devices(make_screen([b"img"]), controller, make_memory())
     session = Session(BaseConfig(), settings, devices)
     assert received == ["http://hook.invalid/x"]

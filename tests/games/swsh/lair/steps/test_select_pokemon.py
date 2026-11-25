@@ -2,7 +2,7 @@
 
 没有带走宝可梦界面的截图（logs/keep 里没有），画面判断用假截图（conftest 的 fake_images）。
 战报里的极矿石和球的数量读假 Memory 的道具口袋（极矿石 37 个、究极球 25 个）。
-战果截图存进临时目录的 result_dir、shiny_dir。KEEP_PATH 不开（不锁定）；要锁定的用例创建 LairSession 时自己传 settings。
+战果截图存进临时目录的 result_dir、shiny_dir。keep_path 不开（不锁定）；要锁定的用例创建 LairSession 时传 keep_path=True。
 选好首发和路线之后的状态用 prepare_run 按 seed 算出来（基准 seed，路线 斧牙龙 → 龟足巨铠 → 狃拉，
 首领卡璞・蝶蝶，首发流氓熊猫）。期望值是改动前的代码跑出来的。
 """
@@ -18,10 +18,10 @@ from typing import Any
 
 import pytest
 
-from control_switch.config import StickConfig
+from control_switch.config import WaitConfig
+from control_switch.device import Controller
 from control_switch.games.swsh.lair.game_config import GameConfig
 from control_switch.games.swsh.lair.session import LairSession
-from control_switch.settings import load_settings
 
 module: ModuleType = importlib.import_module("control_switch.games.swsh.lair.steps.select_pokemon")
 select_pokemon = module.select_pokemon
@@ -36,7 +36,6 @@ TITLE_TEXT = "选1只要带回去的宝可梦"
 OPTION_RECT = ((0.75, 0.40), (0.85, 0.45))
 OPTIONS = [("选择", OPTION_RECT), ("查看能力", OPTION_RECT), ("取消", OPTION_RECT)]
 SHINY_RATIO = 0.2
-STICK_MAX = StickConfig.max
 
 
 def pouch(slots: int, item: int, count: int) -> bytes:
@@ -164,8 +163,8 @@ def test_select_pokemon_without_catch_restarts_game_when_path_stays_locked(
     prepare_run: PrepareRun,
     restarts: list[object],
 ) -> None:
-    """一只都没抓到、这张图已经锁定、KEEP_PATH=1、极矿石够：继续锁定，调了一次 restart，战报里有「重启游戏保留路线」。"""
-    sw = make_lair_session(data=MEMORY, settings=load_settings({"KEEP_PATH": "1"}))
+    """一只都没抓到、这张图已经锁定、keep_path 开着、极矿石够：继续锁定，调了一次 restart，战报里有「重启游戏保留路线」。"""
+    sw = make_lair_session(data=MEMORY, keep_path=True)
     finished_run(sw, prepare_run, [])
     sw.game.lock_path = True
     sw.game.path_results = [True]
@@ -265,7 +264,7 @@ def test_select_pokemon_several_shinies_notifies_everyone_and_exits(
 ) -> None:
     """抓到 2 只、两只都是闪光：战报照常发出，发 @全体 的通知（「这一局有 2 只闪光（第 1、2 只）…」），
     然后抛 SystemExit，不替人选，没有按 A 到黑屏。按过的键是 A（查看能力）、两只资料页各一次 CAPTURE、B（回到列表）、
-    两只列表各一次 CAPTURE；资料页往下翻两次、列表光标往下推一次（都是 -stick.max）。
+    两只列表各一次 CAPTURE；资料页往下翻两次、列表光标往下推一次（都是 -Controller.STICK_MAX）。
     """
     sw = make_lair_session(
         [
@@ -305,9 +304,9 @@ def test_select_pokemon_several_shinies_notifies_everyone_and_exits(
     assert "处理：有 2 只闪光（第 1、2 只），停下来等人选\n" in notifier_of(sw).sent[0][0]
     assert controller.pressed == ["A", "CAPTURE", "CAPTURE", "B", "CAPTURE", "CAPTURE"]
     assert controller.sticks == [
-        ("LEFT", 0, -STICK_MAX, StickConfig.tick),
-        ("LEFT", 0, -STICK_MAX, StickConfig.tick),
-        ("LEFT", 0, -STICK_MAX, StickConfig.tick),
+        ("LEFT", 0, -Controller.STICK_MAX, WaitConfig.stick_tick),
+        ("LEFT", 0, -Controller.STICK_MAX, WaitConfig.stick_tick),
+        ("LEFT", 0, -Controller.STICK_MAX, WaitConfig.stick_tick),
     ]
 
 
@@ -527,10 +526,10 @@ def test_decide_next_run_restarts_game_when_no_shiny_and_path_is_locked(
     controller: Any,
     restarts: list[object],
 ) -> None:
-    """没有闪光、打赢、倒下次数和用时都在范围内、KEEP_PATH=1、极矿石够：锁定这张图，调一次 restart，不按键；
+    """没有闪光、打赢、倒下次数和用时都在范围内、keep_path 开着、极矿石够：锁定这张图，调一次 restart，不按键；
     战报里有「锁定这张图」和「重启游戏保留路线」。
     """
-    sw = make_lair_session(data=MEMORY, settings=load_settings({"KEEP_PATH": "1"}))
+    sw = make_lair_session(data=MEMORY, keep_path=True)
     finished_run(sw, prepare_run, ["fraxure", "barbaracle", "sneasel", "tapu-lele"])
     sw.game.faints = [0, 0, 0, 0]
     sw.game.dynite_ore = 50
@@ -562,21 +561,21 @@ def test_take_exits_with_notification_when_more_than_one_shiny(
 def test_move_list_cursor_pushes_stick_up_when_target_is_above_cursor(
     make_lair_session: SessionFactory, prepare_run: PrepareRun, screens: Screens, controller: Any
 ) -> None:
-    """列表光标在第 2 只、要移到第 1 只：往上推（+stick.max），推一次光标就到了。"""
+    """列表光标在第 2 只、要移到第 1 只：往上推（+Controller.STICK_MAX），推一次光标就到了。"""
     sw = make_lair_session([screens.cursor(1), screens.cursor(1), screens.cursor(0)], data=MEMORY)
     finished_run(sw, prepare_run, ["fraxure", "barbaracle"])
     module._move_list_cursor(sw, 0)
-    assert controller.sticks == [("LEFT", 0, STICK_MAX, StickConfig.tick)]
+    assert controller.sticks == [("LEFT", 0, Controller.STICK_MAX, WaitConfig.stick_tick)]
 
 
 def test_move_list_cursor_pushes_stick_down_when_target_is_below_cursor(
     make_lair_session: SessionFactory, prepare_run: PrepareRun, screens: Screens, controller: Any
 ) -> None:
-    """列表光标在第 1 只、要移到第 2 只：往下推（-stick.max）。"""
+    """列表光标在第 1 只、要移到第 2 只：往下推（-Controller.STICK_MAX）。"""
     sw = make_lair_session([screens.cursor(0), screens.cursor(0), screens.cursor(1)], data=MEMORY)
     finished_run(sw, prepare_run, ["fraxure", "barbaracle"])
     module._move_list_cursor(sw, 1)
-    assert controller.sticks == [("LEFT", 0, -STICK_MAX, StickConfig.tick)]
+    assert controller.sticks == [("LEFT", 0, -Controller.STICK_MAX, WaitConfig.stick_tick)]
 
 
 # ---------------------------------------------------------------- _report
@@ -641,7 +640,7 @@ def test_report_for_overtime_loss_shows_stage_score_in_brackets(
         "         非闪（05.00 / 阈值 10）\n"
         "  第三关 超回合 狃拉（恶/冰）\n"
         "处理：不带走\n"
-        "锁定：没有开启 KEEP_PATH，不锁定\n"
+        "锁定：没有开启 keep_path，不锁定\n"
         "剩余：极矿石 37 个，究极球 25 个\n"
         "```"
     )

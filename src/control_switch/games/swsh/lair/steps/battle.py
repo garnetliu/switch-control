@@ -310,7 +310,7 @@ def _move_target_cursor(sw: LairSession) -> None:
 
 def _dynamax(sw: LairSession) -> ImageChecker:
     """招式列表上把光标移到「极巨化」按钮上按 A，等列表换成极巨招式，返回换好后的画面。"""
-    sw.stick("LEFT", -sw.config.stick.max, 0, sw.config.stick.tick)
+    sw.stick("LEFT", -sw.controller.STICK_MAX, 0, sw.config.wait.stick_tick)
     wait_for(
         sw,
         lambda screen: _marker_shown(sw, screen, sw.config.rects.dynamax_cursor),
@@ -356,7 +356,7 @@ def _move_cursor_to(sw: LairSession, image: ImageChecker, target: int) -> None:
             return
         image = act_until(
             sw,
-            lambda: sw.stick("LEFT", 0, -sw.config.stick.max, sw.config.stick.tick),
+            lambda: sw.stick("LEFT", 0, -sw.controller.STICK_MAX, sw.config.wait.stick_tick),
             lambda screen, before=current: _move_cursor(sw, screen) not in (before, -1),
             "招式光标移动",
         )

@@ -13,8 +13,8 @@ import pytest
 import serial
 
 from control_switch.device import Controller, DeviceCheckError
-from control_switch.device.serial_pad import PRESS_TIME, SerialPad, open_serial_pad
-from control_switch.settings import load_settings
+from control_switch.device.serial_pad import SerialPad, open_serial_pad
+from control_switch.settings import build_settings
 
 OK = b"\xff"
 BUSY = b"\xfe"
@@ -143,17 +143,12 @@ def test_click_home_packet_is_packed_from_home_bit(clock: Clock) -> None:
 
 
 def test_click_a_writes_a_packet_then_neutral_with_press_time_between(clock: Clock) -> None:
-    """click("A", 0)：先写 A 的报文，再写中立报文；两次之间 sleep 了 PRESS_TIME。"""
+    """click("A", 0)：先写 A 的报文，再写中立报文；两次之间 sleep 了 0.1 秒。"""
     pad, port = make_pad(clock)
     pad.click("A", 0)
     assert port.writes == [pack([0x00, 0x04, 8, 128, 128, 128, 128]), NEUTRAL]
     first, second = (i for i, e in enumerate(clock.events) if e[0] == "write")
-    assert clock.events[first + 1 : second] == [("sleep", PRESS_TIME)]
-
-
-def test_press_time_is_a_tenth_of_a_second() -> None:
-    """模块常量 PRESS_TIME 是 0.1 秒。"""
-    assert PRESS_TIME == 0.1
+    assert clock.events[first + 1 : second] == [("sleep", 0.1)]
 
 
 def test_click_waits_delay_after_neutral(clock: Clock) -> None:
@@ -470,11 +465,11 @@ def install_opener(
 def test_open_serial_pad_uses_port_and_baud_then_handshakes_and_stops_script(
     monkeypatch: pytest.MonkeyPatch, clock: Clock
 ) -> None:
-    """正常：用 SERIAL_PORT、SERIAL_BAUD 和 timeout=0.5 打开；先写 A5 A5 81、再写 A5 84；
+    """正常：用 serial_port、serial_baud 和 timeout=0.5 打开；先写 A5 A5 81、再写 A5 84；
     返回的是 SerialPad，串口没有被关。
     """
     opener = install_opener(monkeypatch, clock, [b"\x80", b"\x83"])
-    settings = load_settings({"SERIAL_PORT": "/dev/cu.usbserial-1", "SERIAL_BAUD": "115200"})
+    settings = build_settings({"serial_port": "/dev/cu.usbserial-1", "serial_baud": 115200})
     pad = open_serial_pad(settings)
     assert isinstance(pad, SerialPad)
     assert opener.calls == [(("/dev/cu.usbserial-1", 115200), {"timeout": 0.5})]
@@ -487,18 +482,18 @@ def test_open_serial_pad_uses_default_baud_9600(
 ) -> None:
     """SERIAL_BAUD 没写：用 9600 打开。"""
     opener = install_opener(monkeypatch, clock, [b"\x80", b"\x83"])
-    open_serial_pad(load_settings({"SERIAL_PORT": "/dev/cu.usbserial-1"}))
+    open_serial_pad(build_settings({"serial_port": "/dev/cu.usbserial-1"}))
     assert opener.calls[0][0] == ("/dev/cu.usbserial-1", 9600)
 
 
 def test_open_serial_pad_without_serial_port_raises_value_error_and_does_not_open(
     monkeypatch: pytest.MonkeyPatch, clock: Clock
 ) -> None:
-    """没有 SERIAL_PORT：抛 ValueError，报错里有 SERIAL_PORT，没有打开串口。"""
+    """没有 serial_port：抛 ValueError，报错里有 serial_port，没有打开串口。"""
     opener = install_opener(monkeypatch, clock, [])
     with pytest.raises(ValueError) as error:
-        open_serial_pad(load_settings({}))
-    assert "SERIAL_PORT" in str(error.value)
+        open_serial_pad(build_settings({}))
+    assert "serial_port" in str(error.value)
     assert opener.calls == []
 
 
@@ -508,7 +503,7 @@ def test_open_serial_pad_serial_exception_raises_device_check_error_with_port(
     """Serial 抛 serial.SerialException：抛 DeviceCheckError，报错以「按键」开头，里面有串口路径。"""
     install_opener(monkeypatch, clock, [], serial.SerialException("没有这个设备"))
     with pytest.raises(DeviceCheckError) as error:
-        open_serial_pad(load_settings({"SERIAL_PORT": "/dev/cu.usbserial-1"}))
+        open_serial_pad(build_settings({"serial_port": "/dev/cu.usbserial-1"}))
     message = str(error.value)
     assert message.startswith("按键")
     assert "/dev/cu.usbserial-1" in message
@@ -530,7 +525,7 @@ def test_open_serial_pad_bad_reply_raises_device_check_error_and_closes_port(
     """
     opener = install_opener(monkeypatch, clock, replies)
     with pytest.raises(DeviceCheckError) as error:
-        open_serial_pad(load_settings({"SERIAL_PORT": "/dev/cu.usbserial-1"}))
+        open_serial_pad(build_settings({"serial_port": "/dev/cu.usbserial-1"}))
     message = str(error.value)
     assert message.startswith("按键")
     assert "没有回应" in message
@@ -565,7 +560,7 @@ def test_open_serial_pad_os_error_during_handshake_raises_device_check_error_and
         "control_switch.device.serial_pad.serial.Serial", lambda *args, **kwargs: port
     )
     with pytest.raises(DeviceCheckError) as error:
-        open_serial_pad(load_settings({"SERIAL_PORT": "/dev/cu.usbserial-1"}))
+        open_serial_pad(build_settings({"serial_port": "/dev/cu.usbserial-1"}))
     message = str(error.value)
     assert message.startswith("按键")
     assert "没有回应" in message
@@ -589,7 +584,7 @@ def test_open_serial_pad_os_error_when_stopping_script_names_the_step(
         "control_switch.device.serial_pad.serial.Serial", lambda *args, **kwargs: port
     )
     with pytest.raises(DeviceCheckError) as error:
-        open_serial_pad(load_settings({"SERIAL_PORT": "/dev/cu.usbserial-1"}))
+        open_serial_pad(build_settings({"serial_port": "/dev/cu.usbserial-1"}))
     assert "停脚本" in str(error.value)
     assert port.close_calls == 1
 
@@ -645,7 +640,7 @@ def test_open_serial_pad_registers_pad_close_with_atexit(
         "control_switch.device.serial_pad.atexit.register", lambda func: registered.append(func)
     )
     opener = install_opener(monkeypatch, clock, [b"\x80", b"\x83", OK])
-    pad = open_serial_pad(load_settings({"SERIAL_PORT": "/dev/cu.usbserial-1"}))
+    pad = open_serial_pad(build_settings({"serial_port": "/dev/cu.usbserial-1"}))
     assert registered == [pad.close]
     registered[0]()
     assert opener.port.writes[-1] == NEUTRAL
@@ -669,7 +664,7 @@ def test_open_serial_pad_does_not_register_atexit_when_handshake_fails(
     )
     install_opener(monkeypatch, clock, replies)
     with pytest.raises(DeviceCheckError):
-        open_serial_pad(load_settings({"SERIAL_PORT": "/dev/cu.usbserial-1"}))
+        open_serial_pad(build_settings({"serial_port": "/dev/cu.usbserial-1"}))
     assert registered == []
 
 
@@ -683,7 +678,7 @@ def test_open_serial_pad_does_not_register_atexit_when_port_cannot_open(
     )
     install_opener(monkeypatch, clock, [], serial.SerialException("没有这个设备"))
     with pytest.raises(DeviceCheckError):
-        open_serial_pad(load_settings({"SERIAL_PORT": "/dev/cu.usbserial-1"}))
+        open_serial_pad(build_settings({"serial_port": "/dev/cu.usbserial-1"}))
     assert registered == []
 
 

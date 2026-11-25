@@ -17,7 +17,8 @@ from typing import Any, cast
 
 import pytest
 
-from control_switch.config import StickConfig, WaitConfig
+from control_switch.config import WaitConfig
+from control_switch.device import Controller
 from control_switch.games.swsh.lair.game_config import GameConfig
 from control_switch.games.swsh.lair.session import LairSession
 from control_switch.types import Rect
@@ -28,8 +29,7 @@ battle = module.battle
 
 RECTS = GameConfig.rects
 ADDRESSES = GameConfig.addresses
-STICK_MAX = StickConfig.max
-STICK_TICK = StickConfig.tick
+STICK_TICK = WaitConfig.stick_tick
 SessionFactory = Callable[..., LairSession]
 PrepareRun = Callable[..., Any]
 ImageFactory = Any
@@ -627,7 +627,7 @@ def test_choose_move_switches_to_another_move_when_first_one_is_blocked(
     module._choose_move(sw, war)
     assert calls == [(False, set()), (False, {1})]
     assert controller.pressed == ["A", "A"]
-    assert controller.sticks == [("LEFT", 0, -STICK_MAX, STICK_TICK)]
+    assert controller.sticks == [("LEFT", 0, -Controller.STICK_MAX, STICK_TICK)]
     assert war.own.pp[1] == 10
     assert war.own.pp[2] < 10
 
@@ -858,7 +858,7 @@ def test_move_cursor_to_pushes_stick_down_until_cursor_reaches_target_row(
     row2 = move_list(fake_images, 2, hint=False)
     sw = make_lair_session([row0, row1, row1, row2])
     module._move_cursor_to(sw, cast(ImageChecker, fake_images.image(row0)), 2)
-    assert controller.sticks == [("LEFT", 0, -STICK_MAX, STICK_TICK)] * 2
+    assert controller.sticks == [("LEFT", 0, -Controller.STICK_MAX, STICK_TICK)] * 2
 
 
 def test_move_cursor_to_does_not_push_stick_when_cursor_is_on_target_row(
@@ -919,7 +919,7 @@ def test_dynamax_retries_a_when_cursor_does_not_leave_button(
 
     sw = make_lair_session([fake_images.add(ratio_fn=ratio)])
     module._dynamax(sw)
-    assert controller.sticks == [("LEFT", -STICK_MAX, 0, STICK_TICK)]
+    assert controller.sticks == [("LEFT", -Controller.STICK_MAX, 0, STICK_TICK)]
     assert controller.pressed == ["A", "A"]
 
 

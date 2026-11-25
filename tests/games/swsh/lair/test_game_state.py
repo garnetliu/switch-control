@@ -334,7 +334,7 @@ def test_finish_run_with_shiny_does_not_lock(config: GameConfig) -> None:
 def test_finish_run_with_keep_path_false_does_not_lock(config: GameConfig) -> None:
     """finish_run：keep_path=False 时不锁定。"""
     state = finished_run(config, keep_path=False)
-    assert state.finish_run([]) == (False, "没有开启 KEEP_PATH，不锁定")
+    assert state.finish_run([]) == (False, "没有开启 keep_path，不锁定")
 
 
 def test_finish_run_without_keep_path_argument_does_not_lock(config: GameConfig) -> None:
@@ -343,7 +343,7 @@ def test_finish_run_without_keep_path_argument_does_not_lock(config: GameConfig)
     state.num_caught = 4
     state.dynite_ore = 50
     state.started = time.time() - 300
-    assert state.finish_run([]) == (False, "没有开启 KEEP_PATH，不锁定")
+    assert state.finish_run([]) == (False, "没有开启 keep_path，不锁定")
 
 
 def test_finish_run_with_ore_at_minimum_does_not_lock_and_unlocks(config: GameConfig) -> None:

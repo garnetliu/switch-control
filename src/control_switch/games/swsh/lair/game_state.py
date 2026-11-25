@@ -138,7 +138,7 @@ class GameState:
         """select_pokemon 结束时调用：记下这一局的胜负、抓到的数量和闪光，算锁定还是解锁，
         返回 (锁定, 写进战报的锁定情况)。shinies 是闪光的那几只在这一局抓到的顺序里的序号。
 
-        带走了闪光不锁定。配置 KEEP_PATH 没开时也不锁定（keep path 要重启游戏，
+        带走了闪光不锁定。配置 keep_path 没开时也不锁定（keep path 要重启游戏，
         下次和科学家说话要付极矿石）。极矿石不多于 lock_min_ore 个时也不锁定，已经锁定的解锁。
         锁定的图：只看锁定以来的胜负，见 _should_unlock；赢了的局不管用了多久、倒下几次都保持。
         没锁定的图：打赢、倒下次数和用时都在范围内，就锁定这张图。
@@ -163,7 +163,7 @@ class GameState:
             lock = "带走了闪光，不锁定"
         elif not self._keep_path:
             self.lock_path = False
-            lock = "没有开启 KEEP_PATH，不锁定"
+            lock = "没有开启 keep_path，不锁定"
         elif self.dynite_ore <= config.lock_min_ore:
             self.lock_path = False
             lock = f"极矿石只剩 {self.dynite_ore} 个，不锁定"

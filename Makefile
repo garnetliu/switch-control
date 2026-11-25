@@ -1,19 +1,19 @@
 .PHONY: find start restart format lint test typecheck coverage
 
-# 查找 Switch 的 ip 并写入 .env，再 ping 一下检查延迟。要用系统自带的 Python，uv 装的 Python 在 macOS 27 上读不到 ARP 表
+# 机器的名字是 runs/switches.toml 里 [switch.名字] 的名字。
+
+# 按这台机器的 mac 找它的 ip，写回 runs/switches.toml，再 ping 一下检查延迟。例如 make find switch=living
 find:
-	/usr/bin/python3 scripts/find_switch.py
+	uv run control-switch find $(switch)
 
-# 要跑的脚本，写成「游戏/脚本」：swsh/lair 是剑盾的极巨大冒险，sv/outbreak 是朱紫的大量出现。
-# 例如 make start script=sv/outbreak
-script ?= swsh/lair
-
+# 跑脚本，写成「游戏/脚本」：swsh/lair 是剑盾的极巨大冒险，sv/outbreak 是朱紫的大量出现，sv/egg 是朱紫孵蛋。
+# 跑在哪台机器上看 runs/switches.toml 的 [script."游戏/脚本"]。例如 make start script=sv/egg
 start:
 	uv run control-switch run $(script)
 
-# 重启游戏，回到游戏里可以操作为止。极巨大冒险途中重启下次要付极矿石罚款
+# 重启这台机器上的游戏，回到游戏里可以操作为止。极巨大冒险途中重启下次要付极矿石罚款。例如 make restart switch=living
 restart:
-	uv run control-switch restart $(script)
+	uv run control-switch restart $(switch)
 
 format:
 	uv run ruff format .

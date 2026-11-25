@@ -1,6 +1,6 @@
 """设备的接口：取图、按键、读写内存各一个。具体用什么硬件实现，由 device 下的其他模块决定。"""
 
-from typing import Protocol, runtime_checkable
+from typing import ClassVar, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -16,7 +16,10 @@ class Screen(Protocol):
 
 @runtime_checkable
 class Controller(Protocol):
-    """按键和摇杆。"""
+    """按键和摇杆。实现它的类要显式继承，STICK_MAX 从这里继承下来。"""
+
+    # 摇杆坐标的范围是 -STICK_MAX 到 STICK_MAX
+    STICK_MAX: ClassVar[int] = 0x7FFF
 
     def click(self, button: str, delay: float = 0.15) -> None:
         """按一下按键（按下再松开），然后等 delay 秒。"""

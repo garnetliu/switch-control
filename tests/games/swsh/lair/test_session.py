@@ -14,7 +14,7 @@ import pytest
 from control_switch.device import Devices
 from control_switch.games.swsh.lair.game_config import GameConfig
 from control_switch.games.swsh.lair.session import LairSession, _scramble
-from control_switch.settings import load_settings
+from control_switch.settings import build_settings
 
 ADDRESSES = GameConfig.addresses
 ITEM_POUCH = ADDRESSES.items + ADDRESSES.item_pouch_offset
@@ -249,7 +249,7 @@ def test_pkhex_is_created_with_api_url_from_settings(
             received.append(api_url)
 
     monkeypatch.setattr("control_switch.games.swsh.lair.session.Pkhex", RecordingPkhex)
-    make_lair_session(settings=load_settings({"PKHEX_API_URL": "http://x"}))
+    make_lair_session(settings=build_settings({}, pkhex_api_url="http://x"))
     assert received == ["http://x"]
 
 
@@ -259,13 +259,7 @@ def test_pkhex_is_created_with_api_url_from_settings(
 def test_memory_none_error_names_memory_setting(
     lair_root: Path, make_screen: Callable[..., Any], controller: Any
 ) -> None:
-    """MEMORY=none 时建 LairSession：报错里要写出 MEMORY，使用者才知道是哪一项配置让它跑不了。
-
-    防的是：MEMORY 的 none 是这次新开放、.env.example 里列为可以写的值，但极巨大冒险要读内存，
-    写了 none 后 create_devices 照常连上 Switch，建 LairSession 时抛
-    RuntimeError("这个脚本要读写内存，但没有配置内存设备")，报错里没有 MEMORY，
-    而且使用者明明写了 MEMORY=none，报错却说「没有配置」。这次任务带进来的。
-    """
+    """机器的 memory 是 none 时建 LairSession：报错里要写出 memory，使用者才知道是哪一项配置让它跑不了。"""
     devices = Devices(make_screen([b"img"]), controller, None)
-    with pytest.raises(RuntimeError, match="MEMORY"):
-        LairSession(load_settings({"MEMORY": "none"}), devices)
+    with pytest.raises(RuntimeError, match="memory"):
+        LairSession(build_settings({"memory": "none"}), devices)

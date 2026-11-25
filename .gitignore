@@ -8,4 +8,6 @@ state/
 .mcp.json
 .codex/
 .coverage
-runs/
+# runs 下只有 switches.toml 进 git，日志、截图、运行状态都不进
+runs/*
+!runs/switches.toml

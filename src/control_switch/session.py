@@ -44,7 +44,9 @@ class Session:
     def memory(self) -> Memory:
         """读写内存的设备。这个脚本没有配置时抛 RuntimeError。"""
         if self._memory is None:
-            raise RuntimeError("这个脚本要读写内存，.env 的 MEMORY 不能是 none")
+            raise RuntimeError(
+                "这个脚本要读写内存，runs/switches.toml 里这台机器的 memory 不能是 none"
+            )
         return self._memory
 
     def click(self, button: str, delay: float = 0.15) -> None:

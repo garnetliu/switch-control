@@ -16,7 +16,7 @@ from numpy.typing import NDArray
 
 from control_switch.device import DeviceCheckError, Screen
 from control_switch.device.capture_card import CaptureCard, open_capture_card
-from control_switch.settings import load_settings
+from control_switch.settings import build_settings
 
 Frame = NDArray[np.uint8]
 Reading = tuple[bool, Frame | None]
@@ -148,12 +148,12 @@ def test_capture_card_is_a_screen() -> None:
 def test_open_uses_capture_device_index_avfoundation_and_sets_1920x1080(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """正常打开：cv2.VideoCapture 收到 CAPTURE_DEVICE 的序号和 cv2.CAP_AVFOUNDATION，
+    """正常打开：cv2.VideoCapture 收到 capture_device 的序号和 cv2.CAP_AVFOUNDATION，
     设了宽 1920、高 1080，返回 CaptureCard。
     """
     video = FakeVideo([(True, make_frame(1920, 1080))])
     fake = install(monkeypatch, video)
-    card = open_capture_card(load_settings({"CAPTURE_DEVICE": "2"}))
+    card = open_capture_card(build_settings({"capture_device": 2}))
     assert isinstance(card, CaptureCard)
     assert fake.args == [(2, cv2.CAP_AVFOUNDATION)]
     assert video.properties[cv2.CAP_PROP_FRAME_WIDTH] == 1920
@@ -167,7 +167,7 @@ def test_open_raises_device_check_error_with_index_when_not_opened(
     """isOpened() 是 False：抛 DeviceCheckError，报错以「取图」开头，里面有序号。"""
     install(monkeypatch, FakeVideo([(True, make_frame(1920, 1080))], opened=False))
     with pytest.raises(DeviceCheckError) as error:
-        open_capture_card(load_settings({"CAPTURE_DEVICE": "9"}))
+        open_capture_card(build_settings({"capture_device": 9}))
     message = str(error.value)
     assert message.startswith("取图")
     assert "9" in message
@@ -180,7 +180,7 @@ def test_open_raises_device_check_error_and_releases_when_first_frame_unreadable
     video = FakeVideo([(False, None)])
     install(monkeypatch, video)
     with pytest.raises(DeviceCheckError) as error:
-        open_capture_card(load_settings({}))
+        open_capture_card(build_settings({}))
     message = str(error.value)
     assert message.startswith("取图")
     assert "摄像头权限" in message
@@ -194,7 +194,7 @@ def test_open_releases_when_first_frame_is_none_with_ok_true(
     video = FakeVideo([(True, None)])
     install(monkeypatch, video)
     with pytest.raises(DeviceCheckError):
-        open_capture_card(load_settings({}))
+        open_capture_card(build_settings({}))
     assert video.release_calls == 1
 
 
@@ -205,7 +205,7 @@ def test_open_warns_with_actual_size_when_first_frame_is_1280x720(
     video = FakeVideo([(True, make_frame(1280, 720))])
     install(monkeypatch, video)
     with caplog.at_level(logging.WARNING):
-        card = open_capture_card(load_settings({}))
+        card = open_capture_card(build_settings({}))
     assert isinstance(card, CaptureCard)
     warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
     assert len(warnings) == 1
@@ -219,7 +219,7 @@ def test_open_does_not_warn_when_first_frame_is_1920x1080(
     """第一帧是 1920x1080：没有 WARNING 日志。"""
     install(monkeypatch, FakeVideo([(True, make_frame(1920, 1080))]))
     with caplog.at_level(logging.WARNING):
-        open_capture_card(load_settings({}))
+        open_capture_card(build_settings({}))
     assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
 
 

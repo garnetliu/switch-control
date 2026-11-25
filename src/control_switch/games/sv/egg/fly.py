@@ -90,8 +90,8 @@ def fly_to_gate(sw: Session) -> None:
             probes += 1
             sw.stick(
                 "LEFT",
-                round(config.stick.max * config.map_probe_tilt * px),
-                round(config.stick.max * config.map_probe_tilt * py),
+                round(sw.controller.STICK_MAX * config.map_probe_tilt * px),
+                round(sw.controller.STICK_MAX * config.map_probe_tilt * py),
                 config.map_probe_time,
             )
             time.sleep(config.map_move_wait)
@@ -102,7 +102,7 @@ def fly_to_gate(sw: Session) -> None:
         dx, dy = target[0] - cx, target[1] - cy
         distance = math.hypot(dx, dy)
         seconds = min(max(distance / config.map_cursor_speed, config.map_move_min), 1.0)
-        stick = config.stick.max
+        stick = sw.controller.STICK_MAX
         sw.stick("LEFT", round(stick * dx / distance), round(-stick * dy / distance), seconds)
         time.sleep(config.map_move_wait)
         image = capture(sw, "地图上找零区闸口")

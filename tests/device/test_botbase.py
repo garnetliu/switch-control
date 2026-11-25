@@ -15,7 +15,7 @@ from typing import Any, ClassVar
 import pytest
 
 from control_switch.device.botbase import Botbase, connect_botbase
-from control_switch.settings import load_settings
+from control_switch.settings import build_settings
 
 botbase_module: ModuleType = importlib.import_module("control_switch.device.botbase")
 
@@ -225,7 +225,7 @@ def registrations(monkeypatch: pytest.MonkeyPatch) -> Registrations:
 
 def test_connect_botbase_with_usb_creates_usb_connection(registrations: Registrations) -> None:
     """switch_connection 是 usb：建了一个 USB 连接，没有建 WiFi 连接，返回 Botbase。"""
-    botbase = connect_botbase(load_settings({"SWITCH_CONNECTION": "usb"}))
+    botbase = connect_botbase(build_settings({"connection": "usb"}))
     assert isinstance(botbase, Botbase)
     assert len(FakeUsb.created) == 1
     assert FakeWifi.created == []
@@ -236,10 +236,10 @@ def test_connect_botbase_with_wifi_creates_wifi_connection_from_ip_and_port(
     registrations: Registrations, connection: str | None
 ) -> None:
     """switch_connection 没写或是 wifi：建 WiFi 连接，用的是 switch_ip、switch_port（整数）。"""
-    env = {"SWITCH_IP": "192.168.1.50", "SWITCH_PORT": "6001"}
+    machine: dict[str, Any] = {"ip": "192.168.1.50", "port": 6001}
     if connection is not None:
-        env["SWITCH_CONNECTION"] = connection
-    botbase = connect_botbase(load_settings(env))
+        machine["connection"] = connection
+    botbase = connect_botbase(build_settings(machine))
     assert isinstance(botbase, Botbase)
     assert len(FakeWifi.created) == 1
     assert (FakeWifi.created[0].host, FakeWifi.created[0].port) == ("192.168.1.50", 6001)
@@ -250,7 +250,7 @@ def test_connect_botbase_registers_exit_function_that_closes_the_botbase(
     registrations: Registrations,
 ) -> None:
     """connect_botbase：用 atexit 注册了一个退出时调用的函数，调用它会关掉返回的 Botbase（连接的 close 被调了）。"""
-    botbase = connect_botbase(load_settings({"SWITCH_CONNECTION": "usb"}))
+    botbase = connect_botbase(build_settings({"connection": "usb"}))
     assert isinstance(botbase, Botbase)
     assert len(registrations.atexit) == 1
     func, args, kwargs = registrations.atexit[0]
@@ -264,7 +264,7 @@ def test_connect_botbase_registers_signal_handler_that_exits_with_128_plus_signa
     registrations: Registrations, sig: signal.Signals
 ) -> None:
     """SIGTERM、SIGHUP 都注册了处理函数；调用处理函数抛 SystemExit，退出码是 128 加信号值。"""
-    connect_botbase(load_settings({"SWITCH_CONNECTION": "usb"}))
+    connect_botbase(build_settings({"connection": "usb"}))
     assert sig in registrations.signals
     with pytest.raises(SystemExit) as error:
         registrations.signals[sig](sig, None)
@@ -274,10 +274,10 @@ def test_connect_botbase_registers_signal_handler_that_exits_with_128_plus_signa
 def test_connect_botbase_wifi_without_ip_raises_value_error_naming_switch_ip(
     registrations: Registrations,
 ) -> None:
-    """WiFi 连接、有端口没有 ip（SWITCH_PORT=6000）：抛 ValueError，报错里有 SWITCH_IP，两个连接类都没有被调用。"""
+    """WiFi 连接、有端口没有 ip（port = 6000）：抛 ValueError，报错里有 ip，两个连接类都没有被调用。"""
     with pytest.raises(ValueError) as error:
-        connect_botbase(load_settings({"SWITCH_PORT": "6000"}))
-    assert "SWITCH_IP" in str(error.value)
+        connect_botbase(build_settings({"port": 6000}))
+    assert "要写 ip" in str(error.value)
     assert FakeWifi.created == []
     assert FakeUsb.created == []
 
@@ -285,9 +285,9 @@ def test_connect_botbase_wifi_without_ip_raises_value_error_naming_switch_ip(
 def test_connect_botbase_wifi_without_port_raises_value_error_naming_switch_port(
     registrations: Registrations,
 ) -> None:
-    """WiFi 连接、有 ip 没有端口（SWITCH_IP=192.168.1.2）：抛 ValueError，报错里有 SWITCH_PORT，两个连接类都没有被调用。"""
+    """WiFi 连接、有 ip 没有端口（ip = 192.168.1.2）：抛 ValueError，报错里有 port，两个连接类都没有被调用。"""
     with pytest.raises(ValueError) as error:
-        connect_botbase(load_settings({"SWITCH_IP": "192.168.1.2"}))
-    assert "SWITCH_PORT" in str(error.value)
+        connect_botbase(build_settings({"ip": "192.168.1.2"}))
+    assert "要写 port" in str(error.value)
     assert FakeWifi.created == []
     assert FakeUsb.created == []

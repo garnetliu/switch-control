@@ -1,14 +1,17 @@
-"""命令行入口：control-switch run <游戏/脚本>、control-switch restart <游戏/脚本>。
+"""命令行入口：control-switch run <游戏/脚本>、restart <机器>、find <机器>。
 
-run 按名字找到脚本，创建连接，一步一步跑。
-restart 重启游戏，回到游戏里可以操作为止，极巨大冒险途中重启下次要付极矿石罚款。
-脚本名不写时是 swsh/lair。
+run 按名字找到脚本，按 runs/switches.toml 找到它用的机器，创建连接，一步一步跑。
+restart 重启这台机器上的游戏，回到游戏里可以操作为止，极巨大冒险途中重启下次要付极矿石罚款。
+find 按这台机器的 mac 在局域网里找 ip，写回 runs/switches.toml。
 """
 
 import logging
+import subprocess
 import sys
 from collections.abc import Callable
+from typing import TypeVar
 
+from control_switch.config import BaseConfig
 from control_switch.device import (
     DeviceCheckError,
     Devices,
@@ -20,17 +23,24 @@ from control_switch.flow import restart, save_frames
 from control_switch.flow.check import check_controller_reaches_screen
 from control_switch.games.registry import load_script
 from control_switch.log import init_console, init_log
-from control_switch.settings import Settings, load_settings
+from control_switch.session import Session
+from control_switch.settings import (
+    Settings,
+    SettingsError,
+    load_script_settings,
+    load_switch_settings,
+    set_switch_ip,
+    switch_mac,
+)
 
-DEFAULT_SCRIPT = "swsh/lair"
-USAGE = "用法：control-switch run|restart [游戏/脚本]，脚本不写时是 swsh/lair"
+T = TypeVar("T")
 
 
-def _load_settings() -> Settings:
-    """读配置，配置写错时打印报错退出。"""
+def _load_settings(load: Callable[[], T]) -> T:
+    """读 runs/switches.toml，写错时打印报错退出。"""
     try:
-        return load_settings()
-    except ValueError as error:
+        return load()
+    except SettingsError as error:
         sys.exit(str(error))
 
 
@@ -54,7 +64,7 @@ def run(name: str) -> None:
     """跑脚本：从脚本的起点开始一步一步跑，每一步返回下一步的名字。"""
     init_console()
     script = load_script(name)
-    settings = _load_settings()
+    settings = _load_settings(lambda: load_script_settings(name))
     _check(lambda: check_requires(settings, script.REQUIRES))
     devices = _create_devices(settings)
     _check(lambda: check_devices(devices, script.REQUIRES, script.TITLE_IDS))
@@ -77,16 +87,15 @@ def run(name: str) -> None:
         raise
 
 
-def restart_game(name: str) -> None:
-    """重启游戏，回到游戏里可以操作为止。"""
+def restart_game(switch: str) -> None:
+    """重启这台机器上的游戏，回到游戏里可以操作为止。只用取图和按键，不看是哪个游戏。"""
     init_console()
-    script = load_script(name)
-    settings = _load_settings()
-    _check(lambda: check_requires(settings, script.REQUIRES))
+    settings = _load_settings(lambda: load_switch_settings(switch))
+    requires = frozenset({"screen", "controller"})
     devices = _create_devices(settings)
     # 重启时游戏可能已经崩了，不检查游戏
-    _check(lambda: check_devices(devices, script.REQUIRES, None))
-    sw = script.SESSION(settings, devices)
+    _check(lambda: check_devices(devices, requires, None))
+    sw = Session(BaseConfig(), settings, devices)
     init_log(sw, "restart")
     try:
         restart(sw)
@@ -94,13 +103,35 @@ def restart_game(name: str) -> None:
         sw.close()
 
 
+def find(switch: str) -> None:
+    """按这台机器的 mac 在局域网里找 ip，写回 runs/switches.toml 这台的 ip。
+
+    macOS 上只有系统自带的 /usr/bin/python3 读得到 ARP 表，扫网络交给 scripts/find_switch.py，
+    它找到后把 ip 打印到标准输出。
+    """
+    mac = _load_settings(lambda: switch_mac(switch))
+    script = BaseConfig.root / "scripts" / "find_switch.py"
+    result = subprocess.run(
+        ["/usr/bin/python3", str(script), mac], stdout=subprocess.PIPE, text=True, check=False
+    )
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+    ip = result.stdout.strip()
+    set_switch_ip(switch, ip)
+    print(f"已写入 runs/switches.toml 的 [switch.{switch}]：ip = {ip}")
+
+
 def main(argv: list[str] | None = None) -> None:
     args = sys.argv[1:] if argv is None else argv
-    commands = {"run": run, "restart": restart_game}
-    if not args or args[0] not in commands:
-        print(USAGE)
+    commands = {"run": run, "restart": restart_game, "find": find}
+    if len(args) != 2 or args[0] not in commands:
+        print(
+            "用法：control-switch run 游戏/脚本 | restart 机器 | find 机器\n"
+            "例如 control-switch run sv/egg、control-switch restart living，"
+            "机器是 runs/switches.toml 里 [switch.名字] 的名字"
+        )
         raise SystemExit(2)
-    commands[args[0]](args[1] if len(args) > 1 else DEFAULT_SCRIPT)
+    commands[args[0]](args[1])
 
 
 if __name__ == "__main__":

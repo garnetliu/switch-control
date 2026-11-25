@@ -18,7 +18,7 @@ from control_switch.games.swsh.lair.game_config import GameConfig
 from control_switch.games.swsh.lair.game_data import GameData
 from control_switch.games.swsh.lair.lair import Lair
 from control_switch.games.swsh.lair.session import LairSession
-from control_switch.settings import Settings, load_settings
+from control_switch.settings import Settings, build_settings
 from control_switch.types import Hsv, Rect
 from control_switch.vision import ImageChecker
 from control_switch.vision.text import contains
@@ -231,7 +231,7 @@ def make_lair_session(
     """返回一个函数：用假设备建 LairSession，notifier 换成 RecordingNotifier。
 
     参数：images 是假 Screen 依次给的图片字节（不给就是一张空白）；title_id、data（地址对应的字节）、
-    pointers 给假 Memory；settings 不给就是 load_settings({})（KEEP_PATH 不开）。假 Controller 就是 controller 这个 fixture；假 Screen 和假 Memory
+    pointers 给假 Memory；settings 不给就是 build_settings({})；keep_path 设到 GameConfig.keep_path，不给是 False。假 Controller 就是 controller 这个 fixture；假 Screen 和假 Memory
     可以通过 session.screen、session.memory 取到。
     """
 
@@ -242,14 +242,16 @@ def make_lair_session(
         data: Mapping[int, bytes] | None = None,
         pointers: Mapping[tuple[int, ...], int] | None = None,
         settings: Settings | None = None,
+        keep_path: bool = False,
     ) -> LairSession:
+        monkeypatch.setattr(GameConfig, "keep_path", keep_path)
         memory = (
             make_memory(data=data, pointers=pointers)
             if title_id is None
             else make_memory(title_id, data, pointers)
         )
         devices = Devices(make_screen(images), controller, memory)
-        session = LairSession(settings or load_settings({}), devices)
+        session = LairSession(settings or build_settings({}), devices)
         monkeypatch.setattr(session, "notifier", RecordingNotifier())
         return session
 

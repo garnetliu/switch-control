@@ -11,7 +11,7 @@ import usb.core
 
 from control_switch.device import DeviceCheckError
 from control_switch.device.factory import Devices, create_devices
-from control_switch.settings import load_settings
+from control_switch.settings import build_settings
 
 MemoryFactory = Callable[..., Any]
 
@@ -38,7 +38,7 @@ def connects(monkeypatch: pytest.MonkeyPatch, make_memory: MemoryFactory) -> Con
 
 def test_all_botbase_connects_once_and_shares_one_object(connects: Connects) -> None:
     """三项都是 botbase：只连接一次，screen、controller、memory 是同一个对象。"""
-    devices = create_devices(load_settings({}))
+    devices = create_devices(build_settings({}))
     assert isinstance(devices, Devices)
     assert connects.calls == 1
     assert devices.screen is connects.botbase
@@ -48,7 +48,7 @@ def test_all_botbase_connects_once_and_shares_one_object(connects: Connects) -> 
 
 def test_memory_none_gives_none_memory_and_shares_the_other_two(connects: Connects) -> None:
     """MEMORY=none：memory 是 None，screen 和 controller 是同一个对象，只连接一次。"""
-    devices = create_devices(load_settings({"MEMORY": "none"}))
+    devices = create_devices(build_settings({"memory": "none"}))
     assert devices.memory is None
     assert devices.screen is connects.botbase
     assert devices.controller is devices.screen
@@ -109,7 +109,7 @@ def test_controller_serial_uses_pad_for_controller_and_botbase_for_the_rest(
     """CONTROLLER=serial：controller 是 open_serial_pad 返回的对象，
     screen、memory 是 botbase 的同一个对象，botbase 只连一次。
     """
-    devices = create_devices(load_settings({"CONTROLLER": "serial"}))
+    devices = create_devices(build_settings({"controller": "serial"}))
     assert opens.calls == 1
     assert devices.controller is opens.pad
     assert devices.screen is connects.botbase
@@ -121,7 +121,7 @@ def test_controller_serial_with_memory_none_gives_none_memory(
     connects: Connects, opens: Opens
 ) -> None:
     """CONTROLLER=serial 加 MEMORY=none：memory 是 None，controller 仍是单片机。"""
-    devices = create_devices(load_settings({"CONTROLLER": "serial", "MEMORY": "none"}))
+    devices = create_devices(build_settings({"controller": "serial", "memory": "none"}))
     assert devices.memory is None
     assert devices.controller is opens.pad
     assert devices.screen is connects.botbase
@@ -133,7 +133,7 @@ def test_screen_capture_with_controller_serial_uses_capture_pad_and_botbase_memo
     """SCREEN=capture 加 CONTROLLER=serial：screen 是 open_capture_card 返回的对象，
     controller 是 open_serial_pad 返回的对象，memory 是 botbase，各打开一次。
     """
-    devices = create_devices(load_settings({"SCREEN": "capture", "CONTROLLER": "serial"}))
+    devices = create_devices(build_settings({"screen": "capture", "controller": "serial"}))
     assert devices.screen is captures.card
     assert devices.controller is opens.pad
     assert devices.memory is connects.botbase
@@ -147,7 +147,7 @@ def test_open_serial_pad_device_check_error_is_raised_as_is_without_connecting(
     original = DeviceCheckError("按键：串口 /dev/x 打不开")
     monkeypatch.setattr("control_switch.device.factory.open_serial_pad", Opens(None, original))
     with pytest.raises(DeviceCheckError) as error:
-        create_devices(load_settings({"CONTROLLER": "serial"}))
+        create_devices(build_settings({"controller": "serial"}))
     assert error.value is original
     assert connects.calls == 0
 
@@ -164,7 +164,7 @@ def test_botbase_failure_closes_opened_pad_once_and_raises_device_check_error(
 
     monkeypatch.setattr("control_switch.device.factory.connect_botbase", refuse)
     with pytest.raises(DeviceCheckError):
-        create_devices(load_settings({"CONTROLLER": "serial"}))
+        create_devices(build_settings({"controller": "serial"}))
     assert controller.close_calls == 1
 
 
@@ -181,20 +181,20 @@ def test_connect_failure_raises_device_check_error_naming_botbase_and_connection
 
     monkeypatch.setattr("control_switch.device.factory.connect_botbase", refuse)
     with pytest.raises(DeviceCheckError) as error:
-        create_devices(load_settings({"SWITCH_CONNECTION": connection}))
+        create_devices(build_settings({"connection": connection}))
     message = str(error.value)
     assert "botbase" in message
     assert label in message
 
 
 def test_botbase_value_error_still_closes_opened_pad(opens: Opens, controller: Any) -> None:
-    """防止：CONTROLLER=serial、SWITCH_CONNECTION=wifi 但没写 SWITCH_IP 时，
+    """防止：controller 是 serial、connection 是 wifi 但没写 ip 时，
     真的 connect_botbase 在建 socket 之前就抛 ValueError，已经打开的单片机没被关。
 
     约定：「连 botbase 失败时，先把已经打开的单片机关掉再抛错」，没有限定异常类型。
     这里不替换 connect_botbase，它在联网之前就抛错，不会真的去连。
     """
-    settings = load_settings({"CONTROLLER": "serial", "SWITCH_CONNECTION": "wifi"})
+    settings = build_settings({"controller": "serial", "connection": "wifi"})
     with pytest.raises(ValueError):
         create_devices(settings)
     assert opens.calls == 1
@@ -213,7 +213,7 @@ def test_botbase_no_usb_backend_still_closes_opened_pad(
 
     monkeypatch.setattr("control_switch.device.factory.connect_botbase", no_backend)
     with pytest.raises(ValueError):
-        create_devices(load_settings({"CONTROLLER": "serial", "SWITCH_CONNECTION": "usb"}))
+        create_devices(build_settings({"controller": "serial", "connection": "usb"}))
     assert controller.close_calls == 1
 
 
@@ -227,7 +227,7 @@ def test_botbase_failure_with_serial_names_only_screen_and_memory(
 
     monkeypatch.setattr("control_switch.device.factory.connect_botbase", refuse)
     with pytest.raises(DeviceCheckError) as error:
-        create_devices(load_settings({"CONTROLLER": "serial"}))
+        create_devices(build_settings({"controller": "serial"}))
     assert str(error.value).startswith("取图、内存：")
 
 
@@ -235,7 +235,7 @@ def test_screen_capture_returns_the_opened_card_as_screen(
     connects: Connects, captures: Captures
 ) -> None:
     """SCREEN=capture：screen 是 open_capture_card 返回的对象，且只打开一次。"""
-    devices = create_devices(load_settings({"SCREEN": "capture"}))
+    devices = create_devices(build_settings({"screen": "capture"}))
     assert devices.screen is captures.card
     assert captures.calls == 1
 
@@ -244,7 +244,7 @@ def test_screen_capture_with_botbase_controller_and_memory_shares_one_botbase(
     connects: Connects, captures: Captures
 ) -> None:
     """SCREEN=capture，按键、内存是 botbase：controller、memory 是同一个 botbase 对象，只连一次。"""
-    devices = create_devices(load_settings({"SCREEN": "capture"}))
+    devices = create_devices(build_settings({"screen": "capture"}))
     assert devices.controller is connects.botbase
     assert devices.memory is connects.botbase
     assert connects.calls == 1
@@ -255,7 +255,7 @@ def test_screen_capture_serial_memory_none_does_not_connect_botbase(
 ) -> None:
     """SCREEN=capture、CONTROLLER=serial、MEMORY=none：connect_botbase 没被调，memory 是 None。"""
     devices = create_devices(
-        load_settings({"SCREEN": "capture", "CONTROLLER": "serial", "MEMORY": "none"})
+        build_settings({"screen": "capture", "controller": "serial", "memory": "none"})
     )
     assert connects.calls == 0
     assert devices.memory is None
@@ -269,10 +269,10 @@ def test_open_capture_card_device_check_error_is_raised_as_is_without_opening_pa
     """open_capture_card 抛 DeviceCheckError：原样抛出（同一个对象），
     open_serial_pad、connect_botbase 都没被调。
     """
-    original = DeviceCheckError("取图：采集卡打不开（CAPTURE_DEVICE=0）")
+    original = DeviceCheckError("取图：采集卡打不开（capture_device = 0）")
     monkeypatch.setattr("control_switch.device.factory.open_capture_card", Captures(None, original))
     with pytest.raises(DeviceCheckError) as error:
-        create_devices(load_settings({"SCREEN": "capture", "CONTROLLER": "serial"}))
+        create_devices(build_settings({"screen": "capture", "controller": "serial"}))
     assert error.value is original
     assert opens.calls == 0
     assert connects.calls == 0
@@ -287,7 +287,7 @@ def test_open_serial_pad_failure_closes_capture_card_once_without_connecting(
     original = DeviceCheckError("按键：串口 /dev/x 打不开")
     monkeypatch.setattr("control_switch.device.factory.open_serial_pad", Opens(None, original))
     with pytest.raises(DeviceCheckError) as error:
-        create_devices(load_settings({"SCREEN": "capture", "CONTROLLER": "serial"}))
+        create_devices(build_settings({"screen": "capture", "controller": "serial"}))
     assert error.value is original
     assert captures.card.close_calls == 1
     assert connects.calls == 0
@@ -310,6 +310,6 @@ def test_botbase_failure_closes_capture_card_and_pad_once_each(
 
     monkeypatch.setattr("control_switch.device.factory.connect_botbase", refuse)
     with pytest.raises(DeviceCheckError):
-        create_devices(load_settings({"SCREEN": "capture", "CONTROLLER": controller_kind}))
+        create_devices(build_settings({"screen": "capture", "controller": controller_kind}))
     assert captures.card.close_calls == 1
     assert controller.close_calls == (1 if controller_kind == "serial" else 0)

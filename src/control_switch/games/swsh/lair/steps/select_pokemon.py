@@ -263,11 +263,11 @@ def _move_list_cursor(sw: LairSession, index: int) -> None:
     """把带走列表的光标移到第 index 只（按抓到的顺序，从 0 开始）。"""
     rows = list(sw.config.rects.result_rows[: sw.game.num_caught])
     current = capture(sw, "带走列表的光标").selected(rows)
-    # 往上推是 +stick.max，往下推是 -stick.max
+    # 往上推是 +STICK_MAX，往下推是 -STICK_MAX
     direction = 1 if index < current else -1
     act_until(
         sw,
-        lambda: sw.stick("LEFT", 0, direction * sw.config.stick.max, sw.config.stick.tick),
+        lambda: sw.stick("LEFT", 0, direction * sw.controller.STICK_MAX, sw.config.wait.stick_tick),
         lambda screen: screen.selected(rows) == index,
         f"列表光标移到第 {index + 1} 只",
     )
@@ -330,7 +330,7 @@ def _find_shiny(sw: LairSession) -> list[float]:
             break
         act_until(
             sw,
-            lambda: sw.stick("LEFT", 0, -sw.config.stick.max, sw.config.stick.tick),
+            lambda: sw.stick("LEFT", 0, -sw.controller.STICK_MAX, sw.config.wait.stick_tick),
             lambda screen, before=shown: _summary_name(sw, screen) not in ("", before),
             "资料页换到下一只",
         )

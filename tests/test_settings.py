@@ -1,157 +1,219 @@
-"""control_switch.settings：从环境变量读配置。
+"""control_switch.settings：从 runs/switches.toml 读机器和脚本用哪台，从 .env 读 webhook 和 PKHeX 地址。
 
-conftest 的 clean_settings_env 把 .env 和相关环境变量清掉了，这里传进去的字典就是全部配置。
+build_settings 直接传一台机器的配置；load_* 读 tmp_path 下写好的 toml 文件。
+conftest 的 clean_settings_env 把 .env 和相关环境变量清掉了。
 """
 
+from pathlib import Path
+
 import pytest
+import tomlkit
 
-from control_switch.settings import load_settings
+from control_switch.settings import (
+    SettingsError,
+    build_settings,
+    load_script_settings,
+    load_switch_settings,
+    set_switch_ip,
+    switch_mac,
+    switches_file,
+)
+
+SWITCHES = """\
+# 机器
+[switch.living]
+connection = "wifi"
+mac = "aa:bb:cc:dd:ee:ff"
+port = 6000
+
+[switch.lite]
+screen = "capture"
+controller = "serial"
+serial_port = "/dev/cu.usbserial-1"
+memory = "none"
+
+# 脚本用哪台
+[scripts]
+"swsh/lair" = "living"
+"sv/egg" = "lite"
+"""
 
 
-def test_empty_env_gives_defaults() -> None:
-    """空字典：三项设备都是 botbase，switch_connection 是 wifi，keep_path 是 False，其余是 None。"""
-    settings = load_settings({})
+@pytest.fixture
+def switches(tmp_path: Path) -> Path:
+    """tmp_path 下写好的 switches.toml：两台机器，两个脚本。"""
+    path = tmp_path / "switches.toml"
+    path.write_text(SWITCHES, encoding="utf-8")
+    return path
+
+
+# ---------- build_settings ----------
+
+
+def test_empty_machine_gives_defaults() -> None:
+    """空的机器配置：三项设备都是 botbase，connection 是 wifi，其余是默认值或 None。"""
+    settings = build_settings({})
     assert settings.screen == "botbase"
     assert settings.controller == "botbase"
     assert settings.memory == "botbase"
     assert settings.switch_connection == "wifi"
     assert settings.switch_ip is None
     assert settings.switch_port is None
+    assert settings.serial_port is None
+    assert settings.serial_baud == 9600
+    assert settings.capture_device == 0
     assert settings.pkhex_api_url is None
     assert settings.discord_webhook_url is None
-    assert settings.keep_path is False
 
 
-def test_screen_value_is_case_insensitive() -> None:
-    """SCREEN=Capture：得到小写的 capture。"""
-    assert load_settings({"SCREEN": "Capture"}).screen == "capture"
+def test_choice_value_is_case_insensitive() -> None:
+    """screen = "Capture"：得到小写的 capture。"""
+    assert build_settings({"screen": "Capture"}).screen == "capture"
 
 
 @pytest.mark.parametrize(
-    ("name", "value", "allowed"),
+    ("key", "value", "allowed"),
     [
-        ("SCREEN", "hdmi", ("botbase", "capture")),
-        ("CONTROLLER", "usb", ("botbase", "serial")),
-        ("MEMORY", "yes", ("botbase", "none")),
-        ("SWITCH_CONNECTION", "bt", ("wifi", "usb")),
+        ("screen", "hdmi", ("botbase", "capture")),
+        ("controller", "usb", ("botbase", "serial")),
+        ("memory", "yes", ("botbase", "none")),
+        ("connection", "bt", ("wifi", "usb")),
     ],
 )
-def test_unknown_choice_raises_value_error_naming_variable_and_allowed_values(
-    name: str, value: str, allowed: tuple[str, ...]
+def test_unknown_choice_raises_naming_machine_key_and_allowed_values(
+    key: str, value: str, allowed: tuple[str, ...]
 ) -> None:
-    """SCREEN=hdmi、CONTROLLER=usb、MEMORY=yes、SWITCH_CONNECTION=bt：抛 ValueError，报错里有环境变量名、写的值和可以写的值。"""
-    with pytest.raises(ValueError) as error:
-        load_settings({name: value})
+    """可选值写错：抛 SettingsError，报错里有机器名、项名、写的值和可以写的值。"""
+    with pytest.raises(SettingsError) as error:
+        build_settings({key: value}, switch="living")
     message = str(error.value)
-    assert name in message
+    assert "[switch.living]" in message
+    assert key in message
     assert value in message
     for option in allowed:
         assert option in message
 
 
-def test_switch_port_is_converted_to_int() -> None:
-    """SWITCH_PORT=6000：得到整数 6000。"""
-    port = load_settings({"SWITCH_PORT": "6000"}).switch_port
-    assert port == 6000
-    assert isinstance(port, int)
+def test_unknown_key_raises_naming_it() -> None:
+    """写了不认识的项（拼错的 contoller）：抛 SettingsError，报错里有这一项。"""
+    with pytest.raises(SettingsError, match="contoller"):
+        build_settings({"contoller": "serial"})
 
 
-def test_non_numeric_switch_port_raises_value_error_naming_switch_port() -> None:
-    """SWITCH_PORT=abc：抛 ValueError，报错里有 SWITCH_PORT。"""
-    with pytest.raises(ValueError) as error:
-        load_settings({"SWITCH_PORT": "abc"})
-    assert "SWITCH_PORT" in str(error.value)
+def test_integer_values_are_kept() -> None:
+    """port、serial_baud、capture_device 写了整数：原样得到。"""
+    settings = build_settings({"port": 6001, "serial_baud": 115200, "capture_device": 2})
+    assert settings.switch_port == 6001
+    assert settings.serial_baud == 115200
+    assert settings.capture_device == 2
 
 
-def test_keep_path_is_true_only_for_exactly_one() -> None:
-    """KEEP_PATH=1：True。"""
-    assert load_settings({"KEEP_PATH": "1"}).keep_path is True
+@pytest.mark.parametrize("key", ["port", "serial_baud", "capture_device"])
+@pytest.mark.parametrize("value", ["6000", -1, True])
+def test_invalid_integer_raises_naming_key(key: str, value: object) -> None:
+    """整数项写成文字、负数或 true：抛 SettingsError，报错里有这一项。"""
+    with pytest.raises(SettingsError, match=key):
+        build_settings({key: value})
 
 
-@pytest.mark.parametrize("value", ["0", "true"])
-def test_keep_path_other_than_one_is_false(value: str) -> None:
-    """KEEP_PATH=0、KEEP_PATH=true：False。"""
-    assert load_settings({"KEEP_PATH": value}).keep_path is False
-
-
-def test_optional_string_values_are_passed_through() -> None:
-    """SWITCH_IP、PKHEX_API_URL、DISCORD_WEBHOOK_URL 写了值：原样得到。"""
-    settings = load_settings(
-        {
-            "SWITCH_IP": "192.168.1.2",
-            "PKHEX_API_URL": "http://x",
-            "DISCORD_WEBHOOK_URL": "http://hook",
-        }
-    )
+def test_text_values_are_kept_and_empty_is_none() -> None:
+    """ip、serial_port 写了值：原样得到；写空字符串和没写一样是 None。"""
+    settings = build_settings({"ip": "192.168.1.2", "serial_port": "/dev/cu.usbserial-1"})
     assert settings.switch_ip == "192.168.1.2"
-    assert settings.pkhex_api_url == "http://x"
+    assert settings.serial_port == "/dev/cu.usbserial-1"
+    assert build_settings({"ip": ""}).switch_ip is None
+
+
+def test_text_value_that_is_not_string_raises() -> None:
+    """ip 写成数字：抛 SettingsError，报错里有 ip。"""
+    with pytest.raises(SettingsError, match="ip"):
+        build_settings({"ip": 192})
+
+
+# ---------- 读文件 ----------
+
+
+def test_load_script_settings_uses_machine_of_script(switches: Path) -> None:
+    """sv/egg 用 lite：得到 lite 的设备配置，switch 是 lite。"""
+    settings = load_script_settings("sv/egg", switches)
+    assert settings.switch == "lite"
+    assert (settings.screen, settings.controller, settings.memory) == ("capture", "serial", "none")
+    assert settings.serial_port == "/dev/cu.usbserial-1"
+
+
+def test_load_script_settings_without_script_entry_raises_naming_script(switches: Path) -> None:
+    """[scripts] 里没写 sv/outbreak：抛 SettingsError，报错里有这个脚本名。"""
+    with pytest.raises(SettingsError, match="sv/outbreak"):
+        load_script_settings("sv/outbreak", switches)
+
+
+def test_load_script_settings_with_missing_machine_raises_listing_machines(tmp_path: Path) -> None:
+    """脚本写的机器没有那一节：抛 SettingsError，报错里有这台机器和已经写了的机器。"""
+    path = tmp_path / "switches.toml"
+    path.write_text('[switch.living]\n\n[scripts]\n"sv/egg" = "lite"\n', encoding="utf-8")
+    with pytest.raises(SettingsError) as error:
+        load_script_settings("sv/egg", path)
+    message = str(error.value)
+    assert "[switch.lite]" in message
+    assert "living" in message
+
+
+def test_load_switch_settings_reads_machine_by_name(switches: Path) -> None:
+    """按机器名读 living：connection 是 wifi，port 是 6000。"""
+    settings = load_switch_settings("living", switches)
+    assert settings.switch == "living"
+    assert settings.switch_connection == "wifi"
+    assert settings.switch_port == 6000
+
+
+def test_missing_file_raises(tmp_path: Path) -> None:
+    """文件不存在：抛 SettingsError。"""
+    with pytest.raises(SettingsError):
+        load_switch_settings("living", tmp_path / "switches.toml")
+
+
+def test_broken_toml_raises(tmp_path: Path) -> None:
+    """文件不是合法的 TOML：抛 SettingsError，报错里说格式不对。"""
+    path = tmp_path / "switches.toml"
+    path.write_text("[switch.living\n", encoding="utf-8")
+    with pytest.raises(SettingsError, match="格式不对"):
+        load_switch_settings("living", path)
+
+
+def test_webhook_and_pkhex_url_come_from_environment(
+    switches: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DISCORD_WEBHOOK_URL、PKHEX_API_URL 从环境变量（.env）读。"""
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "http://hook")
+    monkeypatch.setenv("PKHEX_API_URL", "http://pkhex")
+    settings = load_switch_settings("living", switches)
     assert settings.discord_webhook_url == "http://hook"
+    assert settings.pkhex_api_url == "http://pkhex"
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "SCREEN",
-        "CONTROLLER",
-        "MEMORY",
-        "SWITCH_CONNECTION",
-        "SWITCH_IP",
-        "SWITCH_PORT",
-        "PKHEX_API_URL",
-        "DISCORD_WEBHOOK_URL",
-        "KEEP_PATH",
-        "SERIAL_PORT",
-        "SERIAL_BAUD",
-        "CAPTURE_DEVICE",
-    ],
-)
-def test_empty_string_is_same_as_not_set(name: str) -> None:
-    """值是空字符串：和没写一样，得到的设置和空字典相同。"""
-    assert load_settings({name: ""}) == load_settings({})
+def test_switch_mac_reads_mac(switches: Path) -> None:
+    """living 写了 mac：返回它；lite 没写：抛 SettingsError，报错里有 mac。"""
+    assert switch_mac("living", switches) == "aa:bb:cc:dd:ee:ff"
+    with pytest.raises(SettingsError, match="mac"):
+        switch_mac("lite", switches)
 
 
-def test_serial_port_is_passed_through_unchanged() -> None:
-    """SERIAL_PORT 写了路径：原样得到；不写是 None。"""
-    assert load_settings({"SERIAL_PORT": "/dev/cu.usbserial-2021230"}).serial_port == (
-        "/dev/cu.usbserial-2021230"
-    )
-    assert load_settings({}).serial_port is None
+def test_set_switch_ip_writes_ip_and_keeps_comments(switches: Path) -> None:
+    """把 ip 写进 living：读回来是这个 ip，文件里的注释和别的机器不变。"""
+    set_switch_ip("living", "192.168.1.50", switches)
+    assert load_switch_settings("living", switches).switch_ip == "192.168.1.50"
+    text = switches.read_text(encoding="utf-8")
+    assert "# 机器" in text
+    assert "# 脚本用哪台" in text
+    assert load_switch_settings("lite", switches).serial_port == "/dev/cu.usbserial-1"
 
 
-def test_serial_baud_defaults_to_9600() -> None:
-    """SERIAL_BAUD 不写：得到整数 9600。"""
-    assert load_settings({}).serial_baud == 9600
+def test_set_switch_ip_for_unknown_machine_raises(switches: Path) -> None:
+    """机器名没有那一节：抛 SettingsError。"""
+    with pytest.raises(SettingsError):
+        set_switch_ip("bedroom", "192.168.1.50", switches)
 
 
-def test_serial_baud_is_converted_to_int() -> None:
-    """SERIAL_BAUD=115200：得到整数 115200。"""
-    baud = load_settings({"SERIAL_BAUD": "115200"}).serial_baud
-    assert baud == 115200
-    assert isinstance(baud, int)
-
-
-def test_non_numeric_serial_baud_raises_value_error_naming_serial_baud() -> None:
-    """SERIAL_BAUD=abc：抛 ValueError，报错里有 SERIAL_BAUD。"""
-    with pytest.raises(ValueError) as error:
-        load_settings({"SERIAL_BAUD": "abc"})
-    assert "SERIAL_BAUD" in str(error.value)
-
-
-def test_capture_device_defaults_to_0() -> None:
-    """CAPTURE_DEVICE 不写：得到整数 0。"""
-    assert load_settings({}).capture_device == 0
-
-
-def test_capture_device_is_converted_to_int() -> None:
-    """CAPTURE_DEVICE=2：得到整数 2。"""
-    device = load_settings({"CAPTURE_DEVICE": "2"}).capture_device
-    assert device == 2
-    assert isinstance(device, int)
-
-
-@pytest.mark.parametrize("text", ["abc", "-1"])
-def test_invalid_capture_device_raises_value_error_naming_capture_device(text: str) -> None:
-    """CAPTURE_DEVICE=abc（不是整数）或 -1（负数）：抛 ValueError，报错里有 CAPTURE_DEVICE。"""
-    with pytest.raises(ValueError) as error:
-        load_settings({"CAPTURE_DEVICE": text})
-    assert "CAPTURE_DEVICE" in str(error.value)
+def test_repository_switches_file_is_valid_toml() -> None:
+    """仓库里的 runs/switches.toml 是合法的 TOML（例子都注释掉了，读出来不报错）。"""
+    tomlkit.parse(switches_file().read_text(encoding="utf-8"))
