@@ -4,13 +4,13 @@ import time
 from collections.abc import Sequence
 
 from control_switch.device import Devices
-from control_switch.session import Session
+from control_switch.games.sv.session import SvSession
 from control_switch.settings import Settings
 
 from .config import EggConfig, Press, Push
 
 
-class EggSession(Session):
+class EggSession(SvSession):
     """步骤里用 sw.config、sw.parent_best 等取。"""
 
     config: EggConfig
@@ -25,6 +25,9 @@ class EggSession(Session):
         self.judge_unlocked = False
         # 放蛋的盒子编号：第一次打开盒子时读出开着的是哪个，放蛋的是它后面那个
         self.egg_box: int | None = None
+        # 现在有几个蛋，initialize 数出来：拿蛋时是放蛋的盒子里的蛋（还差 max_eggs 减它），
+        # 孵蛋时是放蛋的盒子和队伍里的蛋（就是还要孵的数）
+        self.eggs = 0
         # 队伍里要孵的蛋数，换成孵蛋队伍时数出来
         self.eggs_in_party = 0
         # 这一盒有没有留下过东西（闪光、换下来的旧亲代）：没留下就重启游戏回档，留下了要放生整盒再存档

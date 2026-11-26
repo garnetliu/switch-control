@@ -13,10 +13,11 @@ import time
 import cv2
 import numpy as np
 
-from control_switch.flow import act_until, capture
+from control_switch.flow import capture, press_until
+from control_switch.games.sv import actions
 from control_switch.vision import ImageChecker
 
-from . import box, screens
+from . import screens
 from .config import EggConfig
 from .session import EggSession
 
@@ -55,20 +56,20 @@ def _menu_options(image: ImageChecker, config: EggConfig) -> list[str]:
 def open_map(sw: EggSession) -> ImageChecker:
     """在野外按 Y 打开地图，没反应就再按。"""
     config = sw.config
-    return act_until(
+    return press_until(
         sw,
         lambda: sw.click("Y", 0),
         lambda s: is_map(s, config),
+        config.wait.timeout,
         "地图",
         interval=config.map_retry,
-        timeout=config.wait.timeout,
     )
 
 
 def fly_to_gate(sw: EggSession) -> None:
     """飞到零区闸口，回到野外为止。"""
     config = sw.config
-    box.exit_to_overworld(sw)
+    actions.exit_to_overworld(sw)
     image = open_map(sw)
     probes = 0
     for _ in range(config.map_moves):
@@ -103,41 +104,41 @@ def fly_to_gate(sw: EggSession) -> None:
     else:
         raise RuntimeError(f"地图光标移了 {config.map_moves} 次，还是没对准「{config.gate_name}」")
     # A 出菜单（飞翔、设置为目的地、取消），光标不在飞行点上时没有「飞翔」
-    menu = act_until(
+    menu = press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda s: any(config.cancel_text in text for text in _menu_options(s, config)),
+        config.wait.timeout,
         "地图上的菜单",
         interval=config.map_retry,
-        timeout=config.wait.timeout,
     )
     options = _menu_options(menu, config)
     if not any(config.fly_text in text for text in options):
         sw.click("B", config.map_move_wait)
         raise RuntimeError(f"地图光标不在飞行点上，菜单里是 {options}，没有「{config.fly_text}」")
     # A 选「飞翔」，出「要使用飞翔移动至这个地方吗？」，再 A 选「是」
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda s: screens.is_prompt(s, config),
+        config.wait.timeout,
         "飞翔的确认",
         interval=config.map_retry,
-        timeout=config.wait.timeout,
     )
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda s: not is_map(s, config) and not screens.is_prompt(s, config),
+        config.wait.timeout,
         "飞走",
         interval=config.map_retry,
-        timeout=config.wait.timeout,
     )
-    act_until(
+    press_until(
         sw,
         lambda: None,
         lambda s: screens.is_overworld(s, config),
+        config.fly_timeout,
         "飞到零区闸口",
         interval=config.map_retry,
-        timeout=config.fly_timeout,
     )
     logging.info(f"飞到了{config.gate_name}")

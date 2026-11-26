@@ -1,0 +1,4 @@
+#!/bin/sh
+# 提交前跑 make lint，没通过就不让提交。
+# 启用：git config core.hooksPath .githooks
+exec make lint

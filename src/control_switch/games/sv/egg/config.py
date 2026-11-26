@@ -215,16 +215,20 @@ class EggConfig(SvConfig):
     restart_settle_wait = 2.0
 
     # ---- 盒子 ----
-    # 打开盒子最多等几秒，打开之后等几秒；盒子编号读几次、每次间隔几秒；转盒子最多几轮、每按一下等几秒
-    open_box_timeout = 180.0
-    box_open_wait = 0.4
-    box_title_tries = 10
-    box_rounds = 5
-    box_turn_wait = 1.2
-    box_title_area: Rect = ((0.34, 0.11), (0.56, 0.165))
-    # 退出盒子最多按几次 B，每次之后等几秒
-    exit_presses = 10
-    exit_wait = 1.5
+    # 转盒子：按一下 L、R 之后最多看几秒盒子编号，没变就再按
+    box_turn_wait = 0.5
+    # 读盒子编号、面板上的名字、有没有宝可梦、闪光：连着几帧读到一样的才算（光标刚移过去时面板还没换）
+    stable_frames = 3
+    # 带队的宝可梦的特性；面板能力页上特性的值、「特性」这个标签的位置（切到评定页时这里是「性格」）
+    flame_body = "火焰之躯"
+    ability_area: Rect = ((0.76, 0.53), (0.95, 0.585))
+    ability_label_area: Rect = ((0.655, 0.53), (0.74, 0.585))
+    ability_label = "特性"
+    # 盒子第 0 行第 0 列的格子；蛋的模板（从 1080p 截图裁的蛋身中间一块），格子里匹配度超过 egg_score 是蛋
+    box_cell: Rect = ((0.234, 0.183), (0.2965, 0.294))
+    egg_template = Path(str(_DATA / "box_egg.png"))
+    egg_template_height = 1080
+    egg_score = 0.9
     # 光标：格子上方的箭头黄绿色那一段是个扁的方块（面积至少多少个 1080p 的像素、宽高比范围），
     # 中心在这个范围里；队伍第 0 行、盒子第 0 行第 0 列的箭头中心；两格之间的间距；横坐标小于 party_limit 是队伍
     # 色相下限比渐变箭头的高一点：1080p 采集卡的画面上，格子的黄色和箭头黄绿色那一段色相接近，低了会连成一块
@@ -235,9 +239,8 @@ class EggConfig(SvConfig):
     cursor_origin = (0.265, 0.186)
     cell_step = (0.0656, 0.1167)
     party_limit = 0.20
-    # 按一下方向键之后等光标变化最多几秒；到位后等几秒让面板刷新；最多按几下
-    cursor_wait = 2.0
-    cursor_settle_wait = 0.3
+    # 按一下方向键之后最多看几秒光标，没动就再按；最多按几下
+    cursor_wait = 0.3
     cursor_max_presses = 30
     # 右边面板：名字栏的黄色（有宝可梦）、名字、闪光的星星、六项能力
     panel_header: Rect = ((0.70, 0.01), (0.99, 0.06))
@@ -254,14 +257,12 @@ class EggConfig(SvConfig):
         ((0.70, 0.405), (0.78, 0.45)),
         ((0.70, 0.305), (0.78, 0.35)),
     )
-    # 读面板：连续两帧一样才算，每帧之间隔几秒，最多读几次
-    read_gap = 0.2
-    read_tries = 5
-    # 评定页：六项能力读到判定词的至少 judge_min 项，不是的话按 PLUS 切换，最多切 judge_tries 次，每次之后等几秒
+    # 评定页：六项能力读到判定词的至少 judge_min 项。不是的话按 PLUS 切换，按一下之后最多看几秒，
+    # 按了 judge_timeout 秒还切不到说明评定功能没解锁
     judge_words = ("最棒", "了不起", "非常好", "相当好", "一般般", "也许不行")
     judge_min = 4
-    judge_tries = 3
-    judge_wait = 1.0
+    judge_wait = 0.3
+    judge_timeout = 3.0
     # 队伍里每一格的范围、名字的范围（第 0 行）；格子里内容少于 empty_slot_std 是空格
     party_cell: Rect = ((0.021, 0.185), (0.208, 0.296))
     party_name: Rect = ((0.03, 0.235), (0.17, 0.29))
@@ -270,13 +271,8 @@ class EggConfig(SvConfig):
     bar_area: Rect = ((0.391, 0.939), (0.791, 0.986))
     bar_white: tuple[Hsv, Hsv] = ((0, 0, 200), (180, 40, 255))
     bar_ratio = 0.01
-    # 拿起、放下：按减号、Y 之后几秒没进选择模式就再按；一列往下按几下、每下之后等几秒；
-    # 按 A 拿起之前等几秒、按完等几秒；移不过去最多重来几次
+    # 拿起、放下：按减号、Y、A 之后最多看几秒选择模式，没变就再按；拿着一列移不过去最多重来几次
     hold_retry = 2.0
-    column_downs = 15
-    column_down_wait = 0.1
-    hold_settle_wait = 0.48
-    hold_press_wait = 0.72
     column_attempts = 10
     # 放生：盒子里按 A 出来的操作菜单（移动、查看能力、携带持有物、标记、放生、取消）：
     # 找选中行的箭头的范围、箭头黄绿色那一段的宽高比上限、第 0 行的中心、行高、行数、「放生」是第几行
@@ -286,11 +282,10 @@ class EggConfig(SvConfig):
     operation_step = 0.0556
     operation_rows = 6
     release_row = 4
+    # 放生确认框里「是」那一行箭头的位置（光标默认在下面的「否」）
+    release_yes_area: Rect = ((0.71, 0.59), (0.78, 0.65))
+    # 操作菜单、确认框里按一下之后最多看几秒，没变就再按；过「再见」的对话每按一下 A 最多看几秒
     operation_interval = 1.5
-    operation_settle_wait = 1.0
-    release_down_wait = 0.6
-    release_confirm_wait = 0.5
-    release_check_wait = 0.5
     dialog_retry = 1.5
 
     # ---- 飞到零区闸口（fly.py） ----

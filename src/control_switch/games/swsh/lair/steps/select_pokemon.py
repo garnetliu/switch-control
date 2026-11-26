@@ -5,7 +5,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-from control_switch.flow import act_until, capture, move_menu_option, press_until, restart, wait_for
+from control_switch.flow import capture, move_menu_option, press_until, restart, wait_until
 from control_switch.games.swsh.lair.session import LairSession
 from control_switch.vision import ImageChecker
 
@@ -37,7 +37,7 @@ def _check_shiny(sw: LairSession) -> tuple[list[int], list[float]]:
 
     返回 (闪光的那几只的序号，没有闪光是空列表；每只闪光框的占比，写进战报)。
     """
-    wait_for(
+    wait_until(
         sw,
         lambda screen: screen.has_text(sw.config.rects.result_title, "选1只要带回去的宝可梦"),
         sw.config.wait.timeout,
@@ -46,10 +46,11 @@ def _check_shiny(sw: LairSession) -> tuple[list[int], list[float]]:
     values = _find_shiny(sw)
     results = [_is_shiny(sw, value) for value in values]
     # 从资料页退回带走宝可梦的列表
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("B", 0),
         lambda screen: screen.has_text(sw.config.rects.result_title, "选1只要带回去的宝可梦"),
+        sw.config.wait.timeout,
         "回到带走宝可梦的界面",
     )
     _save_list_screenshots(sw, results)
@@ -67,7 +68,7 @@ def _save_list_screenshots(sw: LairSession, results: list[bool]) -> None:
     for index, shiny in enumerate(results):
         if shiny or index == last:
             # 左边的预览要晚一点才画出来，等它出来再截图
-            image = wait_for(
+            image = wait_until(
                 sw,
                 lambda screen: (
                     1
@@ -265,10 +266,11 @@ def _move_list_cursor(sw: LairSession, index: int) -> None:
     current = capture(sw, "带走列表的光标").selected(rows)
     # 往上推是 +STICK_MAX，往下推是 -STICK_MAX
     direction = 1 if index < current else -1
-    act_until(
+    press_until(
         sw,
         lambda: sw.stick("LEFT", 0, direction * sw.controller.STICK_MAX, sw.config.wait.stick_tick),
         lambda screen: screen.selected(rows) == index,
+        sw.config.wait.timeout,
         f"列表光标移到第 {index + 1} 只",
     )
 
@@ -277,10 +279,11 @@ def _find_shiny(sw: LairSession) -> list[float]:
     """从第一只开始，按顺序打开资料页查闪光，返回每只闪光框的占比，用 _is_shiny 判断是不是闪光。"""
     rects = sw.config.rects
     # 光标在列表第一只上，按 A 弹出菜单，菜单的位置是固定的
-    image = act_until(
+    image = press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda screen: screen.has_text(rects.result_view_ability, "查看能力"),
+        sw.config.wait.timeout,
         "「选择 / 查看能力 / 取消」",
     )
     move_menu_option(
@@ -291,17 +294,18 @@ def _find_shiny(sw: LairSession) -> list[float]:
         "战果菜单",
         rects.result_option_menu,
     )
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not screen.has_text(rects.result_view_ability, "查看能力"),
+        sw.config.wait.timeout,
         "进资料页",
     )
     # 日志里的名字按抓到的顺序从这一局的记录里取；数据里的中文名可能和游戏里不一样，不拿来比画面
     names = [sw.data.pokemon_object(name_id).name(sw.config.language) for name_id in sw.game.caught]
     results = []
     for index, name in enumerate(names):
-        image = wait_for(
+        image = wait_until(
             sw,
             lambda screen: bool(_summary_name(sw, screen)),
             sw.config.wait.timeout,
@@ -312,7 +316,7 @@ def _find_shiny(sw: LairSession) -> list[float]:
         if _is_shiny(sw, value):
             logging.warning(f"闪光！第 {index + 1} 只 {name}")
             # 资料页右边的宝可梦要晚一点才画出来，等它出来再截图
-            image = wait_for(
+            image = wait_until(
                 sw,
                 lambda screen: (
                     screen.edge_ratio(rects.summary_sprite) > sw.config.summary_sprite_edge
@@ -328,10 +332,11 @@ def _find_shiny(sw: LairSession) -> list[float]:
         # 只抓到 1 只时翻页名字不会变，会一直等到超时；多只时最后一只还要翻一次绕回第一只
         if len(names) == 1:
             break
-        act_until(
+        press_until(
             sw,
             lambda: sw.stick("LEFT", 0, -sw.controller.STICK_MAX, sw.config.wait.stick_tick),
             lambda screen, before=shown: _summary_name(sw, screen) not in ("", before),
+            sw.config.wait.timeout,
             "资料页换到下一只",
         )
     return results
@@ -349,12 +354,14 @@ def _back_to_scientist(sw: LairSession) -> None:
     """一直按 B，直到出现「不带宝可梦回去了，你确定吗？」的是 / 否。"""
     press_until(
         sw,
+        lambda: sw.click("B", 0),
         lambda screen: (
             screen.has_text(sw.config.rects.white_center_line1, "不带宝可梦回去")
             and screen.selected(list(sw.config.rects.yes_no)) >= 0
         ),
+        sw.config.wait.timeout,
         "不带走的确认",
-        button="B",
+        interval=sw.config.wait.press_interval,
     )
 
 
@@ -384,5 +391,10 @@ def _press_until_black(sw: LairSession) -> None:
     （打赢了有时还会写下位置记录），这里不再等结束语，后面的对话交给 initialize。
     """
     press_until(
-        sw, lambda screen: screen.is_black(), "转场黑屏", timeout=sw.config.wait.timeout * 2
+        sw,
+        lambda: sw.click("A", 0),
+        lambda screen: screen.is_black(),
+        sw.config.wait.timeout * 2,
+        "转场黑屏",
+        interval=sw.config.wait.press_interval,
     )

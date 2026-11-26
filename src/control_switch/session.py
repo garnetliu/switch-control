@@ -6,6 +6,7 @@ from control_switch.config import BaseConfig
 from control_switch.device import Controller, Devices, Memory, Screen
 from control_switch.notifier import Notifier
 from control_switch.settings import Settings
+from control_switch.types import Picture
 
 
 class Frame(NamedTuple):
@@ -16,8 +17,8 @@ class Frame(NamedTuple):
     # 截图时在哪一步、在看什么
     step: str
     what: str
-    # 截图的 JPEG 字节
-    data: bytes
+    # 截图：JPEG 字节，或者采集卡的 BGR 数组（存文件时才编码）
+    data: Picture
 
 
 class Session:
@@ -69,7 +70,7 @@ class Session:
     def release_stick(self, side: str) -> None:
         self.controller.release_stick(side)
 
-    def pixel_peek(self) -> bytes:
+    def pixel_peek(self) -> Picture:
         return self.screen.pixel_peek()
 
     def close(self) -> None:

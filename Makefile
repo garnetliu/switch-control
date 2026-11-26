@@ -7,8 +7,7 @@ find:
 	uv run control-switch find $(switch)
 
 # 跑脚本，写成「游戏/脚本」：swsh/lair 是剑盾的极巨大冒险，sv/outbreak 是朱紫的大量出现，sv/egg 是朱紫孵蛋。
-# 跑在哪台机器上看 runs/switches.toml 的 [scripts]，也可以用 switch 指定。
-# 例如 make start script=sv/egg、make start script=sv/egg switch=living
+# switch 是在哪台机器上跑，必须写。例如 make start script=sv/egg switch=lite
 start:
 	uv run control-switch run $(script) $(switch)
 

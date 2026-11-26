@@ -1,4 +1,4 @@
-# 每台 Switch 用什么设备，每个脚本用哪台。各项的意思见 README「机器配置」。
+# 每台 Switch 用什么设备。各项的意思见 README「机器配置」。
 
 # 破解机，USB 连 botbase
 # [switch.living]
@@ -45,12 +45,6 @@
 # serial_port = "/dev/cu.usbserial-xxxx"
 # memory = "none"
 
-# 脚本用哪台机器
-# [scripts]
-# "swsh/lair" = "living"
-# "sv/outbreak" = "living"
-# "sv/egg" = "lite"
-
 [switch.lite]
 screen = "capture"
 capture_device = 0
@@ -63,6 +57,3 @@ connection = "usb"
 screen = "botbase"
 controller = "botbase"
 memory = "botbase"
-
-[scripts]
-"sv/egg" = "lite"

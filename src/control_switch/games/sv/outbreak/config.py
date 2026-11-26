@@ -6,6 +6,8 @@ from control_switch.games.sv.config import SvConfig
 class OutbreakConfig(SvConfig):
     """大量出现刷闪的配置。"""
 
+    # 存档块表的指针链：main+... → ...，照 Eppin/Sysbot.NET（朱紫 4.0.0）的 PokeDataOffsetsSV
+    block_key_pointer = (0x47350D8, 0xD8, 0x0, 0x0, 0x30, 0x0)
     # 日志和出错时的截图
     log_dir = SvConfig.root / "runs" / "logs" / "sv-outbreak"
     # 要找的宝可梦，写简体中文名，比如 ("伊布", "拉鲁拉丝")。空着就是任何闪光都停

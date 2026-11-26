@@ -5,11 +5,13 @@
 """
 
 import logging
-import time
-from typing import NamedTuple
+from collections.abc import Callable
+from typing import NamedTuple, TypeVar
 
-from control_switch.flow import act_until, capture, wait_for
+from control_switch.flow import capture, press_until, wait_until
 from control_switch.games.sv import actions
+from control_switch.games.sv import screens as sv_screens
+from control_switch.vision import ImageChecker
 
 from . import screens
 from .screens import Cursor
@@ -17,6 +19,8 @@ from .session import EggSession
 
 # 盒子里的一格：("party", 队伍第几行, 0) 或 ("slots", 行, 列)。队伍第 0 行是带队的
 Slot = tuple[str, int, int]
+
+T = TypeVar("T")
 
 
 class Mon(NamedTuple):
@@ -32,82 +36,42 @@ class Mon(NamedTuple):
 
 
 def open_box(sw: EggSession) -> None:
-    """从野外打开盒子（主菜单第 2 项），再把盒子转到放蛋的那个。
+    """从野外打开盒子。
 
-    第一次打开时开着的是放亲代和带队宝可梦的盒子，放蛋的是它后面那个，记在 sw.egg_box。
+    第一次打开时开着的是放亲代和带队宝可梦的盒子，放蛋的是它后面那个，记在 sw.egg_box，往右转一个盒子。
+    之后再打开，游戏停在上次看的盒子，就是放蛋的盒子。
     """
     config = sw.config
-    deadline = time.monotonic() + config.open_box_timeout
-    while True:
-        image = capture(sw, "开盒子")
-        if screens.box_cursor(image, config) is not None or screens.box_title(image, config):
-            break
-        if screens.is_overworld(image, config):
-            actions.open_menu(sw)
-        elif screens.is_main_menu(image, config):
-            actions.menu_to_row(sw, config.menu_box_row)
-        else:
-            time.sleep(config.wait.interval)
-        if time.monotonic() >= deadline:
-            raise TimeoutError(f"等了 {config.open_box_timeout} 秒，还是没打开盒子")
-    time.sleep(config.box_open_wait)
+    actions.open_box(sw)
     if sw.egg_box is None:
-        number = _read_title(sw)
-        if number is None:
-            raise RuntimeError("读不出盒子编号，不知道哪个是放蛋的盒子，不敢往下做")
+        number = read_title(sw)
         sw.egg_box = number % config.box_count + 1
         logging.info(f"开始时是盒子 {number}，蛋放在盒子 {sw.egg_box}")
-    _turn_to_egg_box(sw)
+        turn_box(sw, "R")
 
 
-def _read_title(sw: EggSession) -> int | None:
-    """读盒子编号，连续两次一样才算；读不出返回 None。"""
-    config = sw.config
-    previous: int | None = None
-    for _ in range(config.box_title_tries):
-        title = screens.box_title(capture(sw, "盒子编号"), config)
-        if title is not None and title == previous:
-            return title
-        previous = title
-        time.sleep(config.read_gap)
-    return None
+def _read_stable(sw: EggSession, read: Callable[[ImageChecker], T | None], what: str) -> T:
+    """一直截图读，直到连着 stable_frames 帧读到一样的、不是 None 的结果，返回它。"""
+    values: list[T | None] = []
+
+    def stable(image: ImageChecker) -> bool:
+        values.append(read(image))
+        last = values[-sw.config.stable_frames :]
+        return (
+            len(last) == sw.config.stable_frames
+            and last[0] is not None
+            and all(value == last[0] for value in last)
+        )
+
+    wait_until(sw, stable, sw.config.wait.timeout, what)
+    value = values[-1]
+    assert value is not None
+    return value
 
 
-def _turn_to_egg_box(sw: EggSession) -> None:
-    """用 L、R 把盒子转到放蛋的那个（sw.egg_box），往近的方向转。读不出盒子编号抛 RuntimeError，转了 box_rounds 轮还没到也抛。"""
-    config = sw.config
-    egg_box = sw.egg_box
-    assert egg_box is not None
-    for _ in range(config.box_rounds):
-        number = _read_title(sw)
-        if number is None:
-            raise RuntimeError("读不出盒子编号，不知道开着的是不是放蛋的盒子，不敢往下做")
-        if number == egg_box:
-            return
-        forward = (egg_box - number) % config.box_count
-        backward = config.box_count - forward
-        button, count = ("R", forward) if forward <= backward else ("L", backward)
-        logging.info(f"现在是盒子 {number}，转到盒子 {egg_box}")
-        for _ in range(count):
-            sw.click(button, config.box_turn_wait)
-    raise RuntimeError(f"转了 {config.box_rounds} 轮，还是没转到盒子 {egg_box}")
-
-
-def exit_to_overworld(sw: EggSession) -> None:
-    """按 B 退出盒子或菜单，直到回到野外；在野餐里就先收起野餐。"""
-    config = sw.config
-    presses = 0
-    while True:
-        image = capture(sw, "退出到野外")
-        if screens.is_overworld(image, config):
-            return
-        if screens.is_picnic(image, config):
-            actions.close_picnic(sw)
-            continue
-        if presses >= config.exit_presses:
-            raise RuntimeError(f"按了 {config.exit_presses} 次 B，还是回不到野外")
-        sw.click("B", config.exit_wait)
-        presses += 1
+def read_title(sw: EggSession) -> int:
+    """读盒子编号，连着几帧一样才算。"""
+    return _read_stable(sw, lambda s: sv_screens.box_title(s, sw.config), "盒子编号")
 
 
 # ---- 光标 ----
@@ -129,98 +93,114 @@ def _next_button(current: Cursor, target: Cursor) -> str:
     return "DDOWN" if target_row > current_row else "DUP"
 
 
-def _wait_cursor_change(sw: EggSession, current: Cursor | None) -> Cursor | None:
-    """等光标变化，最多 cursor_wait 秒；没变返回原来的。光标在格子外面时返回 None。"""
-    config = sw.config
-    deadline = time.monotonic() + config.cursor_wait
-    while True:
-        cursor = screens.box_cursor(capture(sw, "盒子的光标"), config)
-        if cursor != current:
-            return cursor
-        if time.monotonic() >= deadline:
-            return cursor
-        time.sleep(config.wait.interval)
-
-
 def move_cursor(sw: EggSession, place: str, row: int, col: int) -> None:
-    """盒子画面里把光标移到队伍或盒子的某一格，最多按 cursor_max_presses 下。place 是 "party" 或 "slots"。"""
+    """盒子画面里把光标移到队伍或盒子的某一格，最多按 cursor_max_presses 下。place 是 "party" 或 "slots"。
+
+    每按一下方向键都看光标动了没有，没动就再按；光标在格子外面（盒子名、「一览」「搜寻」）时按 DUP 回来。
+    """
     config = sw.config
     target: Cursor = (place, row, col)
-    # 光标可能停在格子外面（盒子名、「一览」「搜寻」），认不出格子时按 DUP 回来
-    image = act_until(
-        sw,
-        lambda: sw.click("DUP", 0),
-        lambda s: screens.box_cursor(s, config) is not None,
-        "盒子的光标",
-        interval=config.cursor_wait,
-    )
-    current = screens.box_cursor(image, config)
+    current = screens.box_cursor(capture(sw, "盒子的光标"), config)
     for _ in range(config.cursor_max_presses):
         if current == target:
-            time.sleep(config.cursor_settle_wait)
             return
-        if current is None:
-            sw.click("DUP", 0)
-            current = _wait_cursor_change(sw, None)
-            continue
-        sw.click(_next_button(current, target), 0)
-        current = _wait_cursor_change(sw, current)
-    if current == target:
-        time.sleep(config.cursor_settle_wait)
-        return
-    raise RuntimeError(
-        f"光标按了 {config.cursor_max_presses} 下，还是没到 {target}，现在在 {current}"
-    )
+        button = "DUP" if current is None else _next_button(current, target)
+        image = press_until(
+            sw,
+            lambda key=button: sw.click(key, 0),
+            lambda s, last=current: screens.box_cursor(s, config) != last,
+            config.wait.timeout,
+            "盒子的光标移一格",
+            interval=config.cursor_wait,
+        )
+        current = screens.box_cursor(image, config)
+    if current != target:
+        raise RuntimeError(
+            f"光标按了 {config.cursor_max_presses} 下，还是没到 {target}，现在在 {current}"
+        )
 
 
 def slot_has_pokemon(sw: EggSession) -> bool:
-    """光标所在的格子里有没有宝可梦（右边的面板上有没有名字栏）。"""
+    """光标所在的格子里有没有宝可梦（右边的面板上有没有名字栏），连着几帧一样才算（光标刚到时面板还没换）。"""
     config = sw.config
-    return screens.panel_present(capture(sw, "格子里有没有宝可梦"), config)
+    return _read_stable(sw, lambda s: screens.panel_present(s, config), "格子里有没有宝可梦")
 
 
 # ---- 读宝可梦 ----
 
 
-def _read_name(sw: EggSession) -> str:
-    """读面板上的名字，连续两帧一样才算，最多读 read_tries 次。"""
+def read_name(sw: EggSession) -> str:
+    """读面板上的名字，连着几帧一样、不是空的才算。"""
     config = sw.config
-    previous = screens.panel_name(capture(sw, "面板的名字"), config)
-    for _ in range(config.read_tries):
-        time.sleep(config.read_gap)
-        name = screens.panel_name(capture(sw, "面板的名字"), config)
-        if name == previous:
-            return name
-        previous = name
-    return previous
+    return _read_stable(sw, lambda s: screens.panel_name(s, config) or None, "面板的名字")
 
 
 def _read_shiny(sw: EggSession) -> bool:
-    """面板上有没有闪光的星星：连续两帧里任何一帧有就算。"""
+    """面板上有没有闪光的星星，连着几帧一样才算。"""
     config = sw.config
-    first = screens.panel_shiny(capture(sw, "闪光的星星"), config)
-    time.sleep(config.read_gap)
-    second = screens.panel_shiny(capture(sw, "闪光的星星"), config)
-    return first or second
+    return _read_stable(sw, lambda s: screens.panel_shiny(s, config), "闪光的星星")
 
 
 def _read_best(sw: EggSession) -> int | None:
-    """切到评定页读「最棒」的项数；按 PLUS 切了 judge_tries 次也不是评定页，说明评定功能没解锁，返回 None。"""
+    """切到评定页读「最棒」的项数：不在评定页就按 PLUS 切过去。
+
+    按了 judge_timeout 秒还切不到评定页，说明游戏里评定功能没解锁，返回 None。
+    """
     config = sw.config
-    for _ in range(config.judge_tries):
-        texts = screens.panel_stats(capture(sw, "评定页"), config)
-        if (
-            sum(any(word in text for word in config.judge_words) for text in texts)
-            >= config.judge_min
-        ):
-            return sum("最棒" in text for text in texts)
-        sw.click("PLUS", config.judge_wait)
-    return None
+    image = capture(sw, "评定页")
+    if not screens.is_judge_page(image, config):
+        try:
+            image = press_until(
+                sw,
+                lambda: sw.click("PLUS", 0),
+                lambda s: screens.is_judge_page(s, config),
+                config.judge_timeout,
+                "评定页",
+                interval=config.judge_wait,
+            )
+        except TimeoutError:
+            return None
+    return sum("最棒" in text for text in screens.panel_stats(image, config))
+
+
+def read_ability(sw: EggSession) -> str:
+    """读光标所在格子里宝可梦的特性：面板不在能力页就按 PLUS 切过去。"""
+    config = sw.config
+    image = capture(sw, "面板的特性")
+    if not screens.is_stats_page(image, config):
+        image = press_until(
+            sw,
+            lambda: sw.click("PLUS", 0),
+            lambda s: screens.is_stats_page(s, config),
+            config.wait.timeout,
+            "面板的能力页",
+            interval=config.judge_wait,
+        )
+    return screens.panel_ability(image, config)
+
+
+def count_box_eggs(sw: EggSession) -> int:
+    """当前盒子里有几个蛋：每一格和蛋的图片比。
+
+    光标停着的格子里的蛋被压扁了，和图片比不出来，这一格看右边面板上的名字是不是「蛋」。
+    """
+    config = sw.config
+    image = capture(sw, "盒子里的蛋")
+    eggs = screens.box_eggs(image, config)
+    cursor = screens.box_cursor(image, config)
+    if (
+        cursor is not None
+        and cursor[0] == "slots"
+        and (cursor[1], cursor[2]) not in eggs
+        and screens.panel_name(image, config).startswith("蛋")
+    ):
+        return len(eggs) + 1
+    return len(eggs)
 
 
 def read_mon(sw: EggSession) -> Mon:
     """读光标所在格子里的宝可梦：名字、「最棒」的项数、是不是闪光。"""
-    name = _read_name(sw)
+    name = read_name(sw)
     shiny = _read_shiny(sw)
     best = None if name.startswith("蛋") else _read_best(sw)
     return Mon(name, best, shiny)
@@ -254,10 +234,11 @@ def count_party_eggs(sw: EggSession) -> int:
 def _hold(sw: EggSession, button: str) -> None:
     """按 button（MINUS 或 Y）直到进了选择模式；没反应就隔一会儿再按。"""
     config = sw.config
-    act_until(
+    press_until(
         sw,
         lambda: sw.click(button, 0),
         lambda s: screens.is_box_selecting(s, config),
+        sw.config.wait.timeout,
         "盒子的选择模式",
         interval=config.hold_retry,
     )
@@ -266,10 +247,11 @@ def _hold(sw: EggSession, button: str) -> None:
 def _drop(sw: EggSession) -> None:
     """拿着宝可梦时按 A 放下，直到退出选择模式。"""
     config = sw.config
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda s: not screens.is_box_selecting(s, config),
+        sw.config.wait.timeout,
         "放下宝可梦",
         interval=config.hold_retry,
     )
@@ -278,25 +260,36 @@ def _drop(sw: EggSession) -> None:
 def _cancel(sw: EggSession) -> None:
     """按 B 取消选择，直到退出选择模式。"""
     config = sw.config
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("B", 0),
         lambda s: not screens.is_box_selecting(s, config),
+        sw.config.wait.timeout,
         "取消选择",
         interval=config.hold_retry,
     )
 
 
-def _hold_column(sw: EggSession) -> None:
-    """光标在一列的最上面，把一整列拿起来：按减号进选择模式，往下按够多下选满一列，按 A 拿起。"""
+def _hold_column(sw: EggSession, source: Slot) -> None:
+    """光标在一列的最上面（source），把一整列拿起来：按减号进选择模式，按 DDOWN 直到光标到这一列最下面，按 A 拿起。"""
     config = sw.config
+    place, _, col = source
+    bottom: Cursor = (
+        place,
+        config.party_rows - 1 if place == "party" else config.box_rows - 1,
+        col,
+    )
     _hold(sw, "MINUS")
-    # 多按几下，防止游戏吞键；已经选到底了再按没有影响
-    for _ in range(config.column_downs):
-        sw.click("DDOWN", config.column_down_wait)
-    time.sleep(config.hold_settle_wait)
-    # 这一下 A 拿没拿起来看不出来，只能直接往下走
-    sw.click("A", config.hold_press_wait)
+    press_until(
+        sw,
+        lambda: sw.click("DDOWN", 0),
+        lambda s: screens.box_cursor(s, config) == bottom,
+        config.wait.timeout,
+        "选到一列的最下面",
+        interval=config.cursor_wait,
+    )
+    # 这一下 A 拿没拿起来看不出来，后面移光标时移不过去会取消再来
+    sw.click("A", 0)
 
 
 def _move_column(sw: EggSession, source: Slot, target: Slot) -> None:
@@ -304,7 +297,7 @@ def _move_column(sw: EggSession, source: Slot, target: Slot) -> None:
     config = sw.config
     for _ in range(config.column_attempts):
         move_cursor(sw, *source)
-        _hold_column(sw)
+        _hold_column(sw, source)
         try:
             move_cursor(sw, *target)
         except RuntimeError:
@@ -339,14 +332,21 @@ def swap_slots(sw: EggSession, source: Slot, target: Slot) -> None:
     _drop(sw)
 
 
-def to_left_box(sw: EggSession) -> None:
-    """往左转一个盒子。看不到画面，只能按一下。"""
-    sw.click("L", sw.config.box_turn_wait)
-
-
-def to_right_box(sw: EggSession) -> None:
-    """往右转一个盒子。看不到画面，只能按一下。"""
-    sw.click("R", sw.config.box_turn_wait)
+def turn_box(sw: EggSession, button: str) -> int:
+    """按 L 或 R 转一个盒子，一直按到盒子编号变成旁边那个，返回新的编号。"""
+    config = sw.config
+    current = read_title(sw)
+    step = 1 if button == "R" else -1
+    target = (current - 1 + step) % config.box_count + 1
+    press_until(
+        sw,
+        lambda: sw.click(button, 0),
+        lambda s: sv_screens.box_title(s, config) == target,
+        config.wait.timeout,
+        f"转到盒子 {target}",
+        interval=config.box_turn_wait,
+    )
+    return target
 
 
 # ---- 换队伍 ----
@@ -359,23 +359,23 @@ def to_hatch_party(sw: EggSession) -> int:
     回到放蛋的盒子，把第 0 列的蛋装进队伍，数队伍里的蛋，退出盒子。返回蛋数。
     """
     open_box(sw)
-    to_left_box(sw)
+    turn_box(sw, "L")
     swap_slots(sw, ("slots", 0, 0), ("party", 0, 0))
     unload_column(sw, 1)
-    to_right_box(sw)
+    turn_box(sw, "R")
     load_column(sw, 0)
     move_cursor(sw, "party", 0, 0)
     eggs = count_party_eggs(sw)
-    exit_to_overworld(sw)
+    actions.exit_to_overworld(sw)
     return eggs
 
 
 def to_picnic_party(sw: EggSession) -> None:
     """在盒子里（当前是放蛋的盒子）把孵蛋队伍换回野餐队伍：队伍第一格和左边盒子第一格交换，第 1 列装进队伍。"""
-    to_left_box(sw)
+    turn_box(sw, "L")
     swap_slots(sw, ("party", 0, 0), ("slots", 0, 0))
     load_column(sw, 1)
-    to_right_box(sw)
+    turn_box(sw, "R")
 
 
 # ---- 放生 ----
@@ -389,40 +389,74 @@ def release_one(sw: EggSession) -> None:
     config = sw.config
     if not slot_has_pokemon(sw):
         return
-    name = _read_name(sw)
+    name = read_name(sw)
     # 按 A 出操作菜单（底下有「要拿……怎么办？」的对话框），没出来就再按
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda s: screens.has_dialog_box(s, config),
+        sw.config.wait.timeout,
         "盒子的操作菜单",
         interval=config.operation_interval,
     )
-    # 菜单刚出来时按键会被吞，等一会儿；往下移到「放生」，每按一下读一次选中的是哪行，所以不按固定次数
-    time.sleep(config.operation_settle_wait)
-    for _ in range(config.operation_rows * 2):
-        row = screens.operation_row(capture(sw, "操作菜单选中的一项"), config)
-        if row == config.release_row:
-            break
-        sw.click("DDOWN" if row < config.release_row else "DUP", config.release_down_wait)
-    else:
-        raise RuntimeError("操作菜单的光标移不到「放生」")
-    sw.click("A", config.release_confirm_wait)
-    wait_for(sw, lambda s: screens.is_prompt(s, config), config.wait.timeout, "放生确认")
+    # 往下移到「放生」：每按一下看选中的行变了没有，没变（菜单刚出来时按键会被吞）就再按
+    image = wait_until(
+        sw,
+        lambda s: screens.operation_row(s, config) != -1,
+        config.wait.timeout,
+        "操作菜单选中的一项",
+    )
+    current = screens.operation_row(image, config)
+    while current != config.release_row:
+        button = "DDOWN" if current < config.release_row else "DUP"
+        image = press_until(
+            sw,
+            lambda key=button: sw.click(key, 0),
+            lambda s, last=current: screens.operation_row(s, config) not in (last, -1),
+            config.wait.timeout,
+            "操作菜单的光标移一格",
+            interval=config.operation_interval,
+        )
+        current = screens.operation_row(image, config)
+    press_until(
+        sw,
+        lambda: sw.click("A", 0),
+        lambda s: screens.is_prompt(s, config),
+        config.wait.timeout,
+        "放生确认",
+        interval=config.operation_interval,
+    )
     # 确认框的光标默认在「否」，往上一格选「是」
-    sw.click("DUP", config.release_down_wait)
-    sw.click("A", config.release_confirm_wait)
-    wait_for(sw, lambda s: screens.has_dialog_box(s, config), config.wait.timeout, "放生后的对话")
-    act_until(
+    press_until(
+        sw,
+        lambda: sw.click("DUP", 0),
+        lambda s: screens.gradient_arrow(s, config.release_yes_area, config),
+        config.wait.timeout,
+        "放生确认选中「是」",
+        interval=config.operation_interval,
+    )
+    press_until(
+        sw,
+        lambda: sw.click("A", 0),
+        lambda s: not screens.is_prompt(s, config),
+        config.wait.timeout,
+        "放生后的对话",
+        interval=config.operation_interval,
+    )
+    press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda s: not screens.has_dialog_box(s, config),
+        sw.config.wait.timeout,
         "放生后的盒子",
         interval=config.dialog_retry,
     )
-    time.sleep(config.release_check_wait)
-    if slot_has_pokemon(sw):
-        raise RuntimeError(f"放生{name}之后格子里还有宝可梦，没放生成功")
+    wait_until(
+        sw,
+        lambda s: not screens.panel_present(s, config),
+        config.wait.timeout,
+        f"放生{name}之后格子空了",
+    )
     logging.info(f"放生了{name}")
 
 

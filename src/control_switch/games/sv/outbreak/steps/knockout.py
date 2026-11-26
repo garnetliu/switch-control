@@ -5,7 +5,7 @@ import time
 
 from control_switch.flow import enter_game, restart_to_title
 from control_switch.games.sv.actions import save_game
-from control_switch.games.sv.blocks import OUTBREAK_ACTIVE, OUTBREAK_KO, OUTBREAK_TOTAL
+from control_switch.games.sv.outbreak.blocks import OUTBREAK_ACTIVE, OUTBREAK_KO, OUTBREAK_TOTAL
 
 from ..session import OutbreakSession
 

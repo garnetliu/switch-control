@@ -117,7 +117,7 @@ class Stage:
             self.replace(screens, name, _ignore_image(function))
 
     def set_sv_screens(self, **functions: Callable[[], Any]) -> None:
-        """同 set_screens，换的是 control_switch.games.sv.screens（几个脚本共用的识别函数，actions.py 用的是它）。"""
+        """同 set_screens，换的是 control_switch.games.sv.screens（几个脚本共用的识别函数，actions/ 用的是它）。"""
         screens = importlib.import_module("control_switch.games.sv.screens")
         for name, function in functions.items():
             self.replace(screens, name, _ignore_image(function))

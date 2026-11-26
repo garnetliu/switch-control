@@ -150,11 +150,11 @@ def test_is_main_menu_false_elsewhere(name: str) -> None:
 
 
 def test_gradient_arrow_true_on_choice_box_area() -> None:
-    """gradient_arrow：选择框的区域（prompt_area）里有选中的渐变箭头：篮子-要领走蛋吗.jpg 是 True。"""
-    area = SvConfig().prompt_area
+    """gradient_arrow：选择框的区域（dialog.prompt_area）里有选中的渐变箭头：篮子-要领走蛋吗.jpg 是 True。"""
+    area = SvConfig().dialog.prompt_area
     assert screens.gradient_arrow(load("篮子-要领走蛋吗.jpg"), area) is True
 
 
 def test_gradient_arrow_false_on_dialog_without_choice_box() -> None:
     """gradient_arrow：只有普通对话、没有选择框的画面，选择框的区域里没有箭头，是 False。"""
-    assert screens.gradient_arrow(load("篮子-还有蛋.jpg"), SvConfig().prompt_area) is False
+    assert screens.gradient_arrow(load("篮子-还有蛋.jpg"), SvConfig().dialog.prompt_area) is False

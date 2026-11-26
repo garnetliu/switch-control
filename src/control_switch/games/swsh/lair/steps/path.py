@@ -3,11 +3,7 @@
 import logging
 from typing import cast
 
-from control_switch.flow import (
-    act_until,
-    press_until,
-    wait_for,
-)
+from control_switch.flow import press_until, wait_until
 from control_switch.games.swsh.lair import upstream
 from control_switch.games.swsh.lair.lair import Lair
 from control_switch.games.swsh.lair.next_columns import next_columns
@@ -48,7 +44,7 @@ def path(sw: LairSession) -> str:
         return _match_state(sw, screen, active) is not None
 
     while True:
-        image = wait_for(
+        image = wait_until(
             sw,
             lambda screen, active=states: found(screen, active),
             sw.config.wait.timeout,
@@ -139,9 +135,11 @@ def _handle_berry(sw: LairSession) -> None:
     """按 A 推进树果对话，直到文字框里不再有「树果」。"""
     press_until(
         sw,
+        lambda: sw.click("A", 0),
         lambda screen: not screen.has_text(sw.config.rects.black_center_line1, "树果"),
+        sw.config.wait.timeout,
         "树果的对话结束",
-        timeout=sw.config.wait.timeout,
+        interval=sw.config.wait.press_interval,
     )
 
 
@@ -170,12 +168,12 @@ def _move_fork_cursor(sw: LairSession, cursors: dict[int, Rect], column: int) ->
     """把岔路口光标移到第 column 列。cursors 是能走到的几列的光标区域：{列号: 区域}。
 
     先用每个光标区域里的白色占比判断当前列，再按 column 在左还是右推左摇杆；
-    每次推完都重新读一帧，输入被吞掉时 act_until 会重推。
+    每次推完都重新读一帧，输入被吞掉时 press_until 会重推。
     """
     columns = sorted(cursors)
     rects = tuple(cursors[c] for c in columns)
     target = columns.index(column)
-    image = wait_for(
+    image = wait_until(
         sw,
         lambda screen: _path_cursor_index(sw, screen, rects) != -1,
         sw.config.wait.timeout,
@@ -188,7 +186,7 @@ def _move_fork_cursor(sw: LairSession, cursors: dict[int, Rect], column: int) ->
             logging.info(f"岔路口光标从第 {columns[start] + 1} 列移到第 {column + 1} 列")
             return
         direction = 1 if target > current else -1
-        image = act_until(
+        image = press_until(
             sw,
             lambda step=direction: sw.stick(
                 "LEFT", step * sw.controller.STICK_MAX, 0, sw.config.wait.stick_tick
@@ -196,6 +194,7 @@ def _move_fork_cursor(sw: LairSession, cursors: dict[int, Rect], column: int) ->
             lambda screen, before=current: (
                 _path_cursor_index(sw, screen, rects) not in (before, -1)
             ),
+            sw.config.wait.timeout,
             "岔路口光标移动",
         )
     raise RuntimeError(f"岔路口光标移了 {len(rects)} 次，还是没到第 {column + 1} 列")
@@ -214,7 +213,7 @@ def _path_cursor_index(sw: LairSession, image: ImageChecker, rects: tuple[Rect, 
 def _handle_backpacker(sw: LairSession) -> None:
     """等背包客的蓝色道具面板出来，读一下道具名，拿默认道具，再等面板消失。"""
     # 「遇到了背包客」之后对话自己翻页，道具面板才出来
-    image = wait_for(
+    image = wait_until(
         sw,
         lambda screen: _backpacker_shown(sw, screen),
         sw.config.wait.timeout,
@@ -223,7 +222,7 @@ def _handle_backpacker(sw: LairSession) -> None:
     items = [image.read_text(rect).strip() for rect in sw.config.rects.backpacker_items]
     logging.info(f"背包客的道具: {items}")
     sw.click("A", 0)
-    wait_for(
+    wait_until(
         sw,
         lambda screen: not _backpacker_shown(sw, screen),
         sw.config.wait.timeout,
@@ -250,7 +249,7 @@ def _handle_scientist(sw: LairSession) -> None:
             logging.warning("路线上没记着这个研究员，按不换（后面按 seed 推的队伍会错位）")
             found = None
 
-    image = wait_for(
+    image = wait_until(
         sw,
         lambda screen: screen.has_text(sw.config.rects.black_center_line1, "希望交换成"),
         sw.config.wait.timeout,
@@ -269,7 +268,7 @@ def _handle_scientist(sw: LairSession) -> None:
         f"研究员：给的是 {give}（画面上「{offered}」），{'换' if take else '不换'}，现在是 {own}"
     )
     sw.click("A" if take else "B", 0)
-    wait_for(
+    wait_until(
         sw,
         lambda screen: not screen.has_text(sw.config.rects.black_center_line1, "希望交换成"),
         sw.config.wait.timeout,

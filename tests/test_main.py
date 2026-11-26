@@ -2,7 +2,7 @@
 
 不连 Switch：load_script 换成返回假脚本的函数，init_log、init_console 换成不做事（或只记下调用）的函数，
 check_controller_reaches_screen 换成什么都不做的函数。runs/switches.toml 换成 tmp_path 下的文件，
-里面一台机器 test，三个脚本都用它；不读仓库里真实的 .env，由 conftest 的 clean_settings_env 做。create_devices 换成不连接、
+里面一台机器 test；不读仓库里真实的 .env，由 conftest 的 clean_settings_env 做。create_devices 换成不连接、
 直接返回一个假 Devices 的函数，这个假 Devices 先交给 check_devices 检查（假 Screen 给的是真机截图，
 假 Memory 的 title_id 和假脚本的 TITLE_IDS 对得上），再传给假脚本的 SESSION，不会放进 Session。
 假脚本的 SESSION 接收 (settings, devices)，不管传进来什么，
@@ -64,12 +64,7 @@ class Calls:
 SWITCHES = """\
 [switch.test]
 connection = "usb"
-{machine}
-[scripts]
-"swsh/lair" = "test"
-"sv/outbreak" = "test"
-"sv/egg" = "test"
-"""
+{machine}"""
 
 
 @pytest.fixture(autouse=True)
@@ -197,16 +192,16 @@ def failed_files(connection: Any) -> list[Path]:
 
 
 def test_run_with_unknown_script_exits() -> None:
-    """main(["run", "没有/这个"])：抛 SystemExit，报错里有可以用的名字，不连接 Switch。"""
+    """main(["run", "没有/这个", "test"])：抛 SystemExit，报错里有可以用的名字，不连接 Switch。"""
     with pytest.raises(SystemExit) as error:
-        main(["run", "没有/这个"])
+        main(["run", "没有/这个", "test"])
     assert "swsh/lair" in str(error.value)
 
 
 def test_run_with_unknown_script_does_not_call_create_devices(calls: Calls) -> None:
-    """main(["run", "没有/这个"])：抛 SystemExit，create_devices 一次都没被调用。"""
+    """main(["run", "没有/这个", "test"])：抛 SystemExit，create_devices 一次都没被调用。"""
     with pytest.raises(SystemExit):
-        main(["run", "没有/这个"])
+        main(["run", "没有/这个", "test"])
     assert calls.create_devices == 0
 
 
@@ -226,13 +221,15 @@ def test_no_command_prints_usage_and_exits_nonzero(
     assert capsys.readouterr().out != ""
 
 
-@pytest.mark.parametrize("command", ["run", "restart"])
-def test_command_without_script_name_prints_usage_and_exits_nonzero(
-    command: str, calls: Calls, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    "args", [["run"], ["run", "swsh/lair"], ["restart"], ["run", "swsh/lair", "test", "多的"]]
+)
+def test_command_with_wrong_argument_count_prints_usage_and_exits_nonzero(
+    args: list[str], calls: Calls, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """main(["run", "swsh/lair"])、main(["restart", "swsh/lair"])：没写脚本名，打印用法，退出码不是 0，不加载脚本。"""
+    """run 没写脚本名或机器名、restart 没写机器名、参数多了：打印用法，退出码不是 0，不加载脚本。"""
     with pytest.raises(SystemExit) as error:
-        main([command])
+        main(args)
     assert error.value.code not in (0, None)
     assert capsys.readouterr().out != ""
     assert calls.load_script == []
@@ -241,18 +238,18 @@ def test_command_without_script_name_prints_usage_and_exits_nonzero(
 def test_run_passes_script_name_to_load_script(
     install: Callable[..., SimpleNamespace], calls: Calls
 ) -> None:
-    """main(["run", "sv/outbreak"])：load_script 收到的名字就是命令行里写的。"""
+    """main(["run", "sv/outbreak", "test"])：load_script 收到的名字就是命令行里写的。"""
     install({}, "start")
-    main(["run", "sv/outbreak"])
+    main(["run", "sv/outbreak", "test"])
     assert calls.load_script == ["sv/outbreak"]
 
 
 def test_run_uses_command_line_arguments_when_argv_is_none(
     install: Callable[..., SimpleNamespace], calls: Calls, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """main() 不传 argv：用 sys.argv[1:]，这里是 run sv/outbreak。"""
+    """main() 不传 argv：用 sys.argv[1:]，这里是 run sv/outbreak test。"""
     install({}, "start")
-    monkeypatch.setattr(sys, "argv", ["control-switch", "run", "sv/outbreak"])
+    monkeypatch.setattr(sys, "argv", ["control-switch", "run", "sv/outbreak", "test"])
     main()
     assert calls.load_script == ["sv/outbreak"]
 
@@ -262,7 +259,7 @@ def test_run_initializes_log_in_start_directory(
 ) -> None:
     """run：日志目录的名字是 "start"。"""
     install({}, "start")
-    main(["run", "swsh/lair"])
+    main(["run", "swsh/lair", "test"])
     assert calls.init_log == ["start"]
 
 
@@ -281,7 +278,7 @@ def test_run_runs_steps_in_order_until_name_not_in_steps(
         return "finished"
 
     install({"first": first, "second": second}, "first")
-    assert main(["run", "swsh/lair"]) is None
+    assert main(["run", "swsh/lair", "test"]) is None
     assert order == [("first", "first"), ("second", "second")]
 
 
@@ -300,7 +297,7 @@ def test_run_sets_sw_step_before_each_step_is_called(
         return ""
 
     install({"first": first, "second": second}, "first")
-    main(["run", "swsh/lair"])
+    main(["run", "swsh/lair", "test"])
     assert seen == ["first", "second"]
     assert connection.step == "second"
 
@@ -318,7 +315,7 @@ def test_run_starts_from_script_start_step(install: Callable[..., SimpleNamespac
         return ""
 
     install({"a": a, "b": b}, "b")
-    main(["run", "swsh/lair"])
+    main(["run", "swsh/lair", "test"])
     assert order == ["b"]
 
 
@@ -337,7 +334,7 @@ def test_run_error_reraises_saves_screenshot_and_notifies(
 
     install({"first": first}, "first")
     with pytest.raises(RuntimeError) as raised:
-        main(["run", "swsh/lair"])
+        main(["run", "swsh/lair", "test"])
     assert raised.value is error
 
     files = failed_files(connection)
@@ -366,7 +363,7 @@ def test_run_error_in_later_step_reports_that_step(
 
     install({"first": first, "second": second}, "first")
     with pytest.raises(RuntimeError):
-        main(["run", "swsh/lair"])
+        main(["run", "swsh/lair", "test"])
     text = connection.notifier.sent[0][0]
     assert "步骤：second" in text
 
@@ -385,7 +382,7 @@ def test_run_system_exit_passes_through_without_screenshot_or_notification(
 
     install({"first": first}, "first")
     with pytest.raises(SystemExit) as raised:
-        main(["run", "swsh/lair"])
+        main(["run", "swsh/lair", "test"])
     assert called == ["first"]
     assert raised.value.code == 3
     assert raised.value is exit_request
@@ -475,7 +472,7 @@ def test_run_exits_nonzero_without_creating_session_when_game_is_wrong(
     memory: Any = fake_devices.memory
     monkeypatch.setattr(memory, "title", OTHER_TITLE_ID)
     with pytest.raises(SystemExit) as error:
-        main(["run", "swsh/lair"])
+        main(["run", "swsh/lair", "test"])
     assert error.value.code not in (0, None)
 
 
@@ -497,7 +494,7 @@ def test_run_calls_init_console_before_create_devices(
     monkeypatch.setattr("control_switch.__main__.init_console", init_console)
     monkeypatch.setattr("control_switch.__main__.create_devices", create_devices)
     with pytest.raises(SystemExit) as error:
-        main(["run", "swsh/lair"])
+        main(["run", "swsh/lair", "test"])
     assert error.value.code not in (0, None)
     assert events == ["init_console", "create_devices"]
 
@@ -508,7 +505,7 @@ def test_run_with_memory_none_exits_before_create_devices_for_script_needing_mem
     """run sv/outbreak，机器的 memory 是 none：main 以非 0 退出，报错里有 memory，create_devices 没有被调。"""
     write_machine(memory="none")
     with pytest.raises(SystemExit) as error:
-        main(["run", "sv/outbreak"])
+        main(["run", "sv/outbreak", "test"])
     assert error.value.code not in (0, None)
     assert "memory" in str(error.value.code)
     assert calls.create_devices == 0
@@ -524,7 +521,7 @@ def test_run_exits_nonzero_when_create_devices_raises_device_check_error(
 
     monkeypatch.setattr("control_switch.__main__.create_devices", create_devices)
     with pytest.raises(SystemExit) as error:
-        main(["run", "swsh/lair"])
+        main(["run", "swsh/lair", "test"])
     assert error.value.code not in (0, None)
 
 
@@ -536,7 +533,7 @@ def test_run_exits_with_message_and_no_value_error_when_setting_is_unknown(
     """
     write_machine(screen="hdmi")
     with pytest.raises(SystemExit) as error:
-        main(["run", "swsh/lair"])
+        main(["run", "swsh/lair", "test"])
     assert error.value.code not in (0, None)
     assert calls.create_devices == 0
 
@@ -552,7 +549,7 @@ def test_run_exits_nonzero_when_create_devices_raises_value_or_not_implemented_e
 
     monkeypatch.setattr("control_switch.__main__.create_devices", create_devices)
     with pytest.raises(SystemExit) as error:
-        main(["run", "swsh/lair"])
+        main(["run", "swsh/lair", "test"])
     assert error.value.code not in (0, None)
 
 
@@ -594,7 +591,7 @@ def test_run_with_controller_serial_and_no_serial_port_exits_without_connecting_
     monkeypatch: pytest.MonkeyPatch, write_machine: Callable[..., Path]
 ) -> None:
     """机器的 controller 是 serial、serial_port 没写，用真的 create_devices：
-    main(["run", "swsh/lair"]) 抛 SystemExit，退出码不是 0，报错里有 serial_port，没有连 botbase。
+    main(["run", "swsh/lair", "test"]) 抛 SystemExit，退出码不是 0，报错里有 serial_port，没有连 botbase。
     """
     botbase_connects: list[object] = []
 
@@ -606,7 +603,7 @@ def test_run_with_controller_serial_and_no_serial_port_exits_without_connecting_
     monkeypatch.setattr("control_switch.device.factory.connect_botbase", connect_botbase)
     write_machine(controller="serial")
     with pytest.raises(SystemExit) as error:
-        main(["run", "swsh/lair"])
+        main(["run", "swsh/lair", "test"])
     assert error.value.code not in (0, None)
     assert "serial_port" in str(error.value.code)
     assert botbase_connects == []
@@ -616,7 +613,7 @@ def test_run_with_screen_capture_exits_with_message_when_card_cannot_open_withou
     monkeypatch: pytest.MonkeyPatch, write_machine: Callable[..., Path]
 ) -> None:
     """机器的 screen 是 capture，用真的 create_devices，open_capture_card 抛 DeviceCheckError：
-    main(["run", "swsh/lair"]) 抛 SystemExit，退出码不是 0，报错里有「取图」，没有连 botbase。
+    main(["run", "swsh/lair", "test"]) 抛 SystemExit，退出码不是 0，报错里有「取图」，没有连 botbase。
     """
     botbase_connects: list[object] = []
 
@@ -634,7 +631,7 @@ def test_run_with_screen_capture_exits_with_message_when_card_cannot_open_withou
     monkeypatch.setattr("control_switch.device.factory.open_capture_card", open_capture_card)
     write_machine(screen="capture")
     with pytest.raises(SystemExit) as error:
-        main(["run", "swsh/lair"])
+        main(["run", "swsh/lair", "test"])
     assert error.value.code not in (0, None)
     assert "取图" in str(error.value.code)
     assert botbase_connects == []

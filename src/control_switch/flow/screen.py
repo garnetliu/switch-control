@@ -1,9 +1,11 @@
-"""等画面：截图和按键都用传进来的 switch。"""
+"""看画面：截图、出错时存图、等到画面出现、一直按到画面出现。"""
 
 import logging
 import time
 from collections.abc import Callable
 from pathlib import Path
+
+import cv2
 
 from control_switch.session import Frame, Session
 from control_switch.vision import ImageChecker
@@ -23,7 +25,7 @@ def capture(sw: Session, what: str) -> ImageChecker:
 def save_frames(sw: Session) -> list[Path]:
     """把内存里这一局的截图按顺序写进 failed_dir/这一次的时间/，返回写下的文件。
 
-    文件名是「序号-时分秒-步骤-在看什么」。
+    文件名是「序号-时分秒-步骤-在看什么」。JPEG 字节原样写，采集卡的帧到这里才编码。
     """
     directory = sw.config.failed_dir / time.strftime("%Y%m%d-%H%M%S")
     directory.mkdir(parents=True, exist_ok=True)
@@ -32,25 +34,28 @@ def save_frames(sw: Session) -> list[Path]:
         stamp = time.strftime("%H%M%S", time.localtime(frame.time))
         what = frame.what.replace("/", "_")
         path = directory / f"{index:04d}-{stamp}-{frame.step}-{what}.jpg"
-        path.write_bytes(frame.data)
+        if isinstance(frame.data, bytes):
+            path.write_bytes(frame.data)
+        elif not cv2.imwrite(str(path), frame.data):
+            raise OSError(f"无法写入图片：{path}")
         paths.append(path)
     logging.warning(f"这一局的 {len(paths)} 张截图存在 {directory}")
     return paths
 
 
-def wait_for(
+def wait_until(
     sw: Session,
     condition: Callable[[ImageChecker], bool],
     timeout: float,
     what: str,
-    interval: float | None = None,
+    interval: float = 0.0,
 ) -> ImageChecker:
-    """不停截图，直到 condition 对截图返回 True，返回那张截图。
+    """一直截图，直到 condition(截图) 为真，返回那张截图。
 
     timeout: 最多等几秒，超时抛 TimeoutError。
     what: 在等什么，写进超时的报错里。
+    interval: 两次截图之间等几秒。
     """
-    interval = sw.config.wait.interval if interval is None else interval
     deadline = time.monotonic() + timeout
     while True:
         image = capture(sw, what)
@@ -63,61 +68,29 @@ def wait_for(
 
 def press_until(
     sw: Session,
-    done: Callable[[ImageChecker], bool],
-    what: str,
-    button: str = "A",
-    timeout: float | None = None,
-) -> ImageChecker:
-    """一直按 button，直到 done(截图) 为真，返回那张截图。
-
-    每次按之前都先判定，已经满足就不再按，不会按在要等的菜单上。
-    超过 timeout 秒还没满足，抛 TimeoutError。
-    what: 在等什么，写进日志和报错里。
-    """
-    return act_until(
-        sw,
-        lambda: sw.click(button, 0),
-        done,
-        what,
-        interval=sw.config.wait.press_interval,
-        timeout=sw.config.wait.timeout if timeout is None else timeout,
-    )
-
-
-def act_until(
-    sw: Session,
     action: Callable[[], None],
     condition: Callable[[ImageChecker], bool],
+    timeout: float,
     what: str,
-    interval: float = 1.0,
-    timeout: float | None = None,
+    interval: float = 0.0,
 ) -> ImageChecker:
-    """一直做 action，直到 condition(截图) 为真，返回那张截图。
+    """一直做 action（按键、推摇杆），直到 condition(截图) 为真，返回那张截图。
 
-    每做一次之后 interval 秒里一直看画面，满足就返回；没满足就再做一次。
-    超过 timeout 秒还没满足，抛 TimeoutError。
+    先做一次再看画面；做完之后 interval 秒里一直看画面，满足就返回，没满足就再做一次。
+    timeout: 最多等几秒，超时抛 TimeoutError。
+    what: 在等什么，写进超时的报错里。
+    interval: 做完一次之后，最多看几秒画面再做下一次。
     """
-    timeout = sw.config.wait.timeout if timeout is None else timeout
     deadline = time.monotonic() + timeout
-    attempt = 0
     while True:
+        action()
         image = capture(sw, what)
         if condition(image):
             return image
         if time.monotonic() >= deadline:
             raise TimeoutError(f"等了 {timeout} 秒，画面一直没有出现：{what}")
-        if attempt:
-            logging.debug(f"没有反应，再做一次（在等{what}）")
-        action()
-        attempt += 1
-        poll_deadline = time.monotonic() + interval
-        while True:
+        retry_at = time.monotonic() + interval
+        while time.monotonic() < retry_at:
             image = capture(sw, what)
             if condition(image):
                 return image
-            now = time.monotonic()
-            if now >= deadline:
-                raise TimeoutError(f"等了 {timeout} 秒，画面一直没有出现：{what}")
-            if now >= poll_deadline:
-                break
-            time.sleep(sw.config.wait.interval)

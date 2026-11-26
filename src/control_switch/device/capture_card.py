@@ -26,8 +26,8 @@ class CaptureCard:
         self._video = video
         self._released = False
 
-    def pixel_peek(self) -> bytes:
-        """读一帧，编码成 JPEG 字节。读不到时再读，连续 3 次读不到抛 ConnectionError。"""
+    def pixel_peek(self) -> MatLike:
+        """读一帧，原样返回 BGR 数组，不编码。读不到时再读，连续 3 次读不到抛 ConnectionError。"""
         # 读不到画面时最多读几次
         attempts = 3
         for _ in range(attempts):
@@ -36,10 +36,7 @@ class CaptureCard:
                 break
         else:
             raise ConnectionError("取图：采集卡读不到画面")
-        encoded, buffer = cv2.imencode(".jpg", image)
-        if not encoded:
-            raise ConnectionError("取图：采集卡的画面编码失败")
-        return buffer.tobytes()
+        return image
 
     def close(self) -> None:
         """释放采集卡，调用多次只释放一次。"""

@@ -8,7 +8,7 @@ import logging
 import time
 
 from control_switch import flow
-from control_switch.flow import capture, press_until, wait_for
+from control_switch.flow import capture, press_until, wait_until
 from control_switch.games.sv import actions
 
 from .. import box, fly, screens
@@ -50,7 +50,7 @@ def hatch(sw: EggSession) -> str:
             box.load_column(sw, next_col)
             box.move_cursor(sw, "party", 0, 0)
             count = box.count_party_eggs(sw)
-            box.exit_to_overworld(sw)
+            actions.exit_to_overworld(sw)
             next_col += 1
             continue
         break
@@ -59,7 +59,7 @@ def hatch(sw: EggSession) -> str:
         logging.info("这一盒什么都没留下，重启游戏回档")
         flow.restart(sw)
         # restart 在黑屏时就返回了，看画面等游戏加载完回到野外，再等一会儿让人能动
-        wait_for(
+        wait_until(
             sw,
             lambda s: screens.is_overworld(s, sw.config),
             sw.config.restart_timeout,
@@ -72,7 +72,7 @@ def hatch(sw: EggSession) -> str:
     logging.info("这一盒留下过东西，放生整盒，换回野餐队伍，存档")
     box.release_box(sw)
     box.to_picnic_party(sw)
-    box.exit_to_overworld(sw)
+    actions.exit_to_overworld(sw)
     actions.save_game(sw)
     sw.frames.clear()
     return "fetch"
@@ -113,13 +113,13 @@ def _send_shiny(sw: EggSession, mon: box.Mon) -> None:
 
 def _keep_shiny(sw: EggSession, row: int) -> bool:
     """把队伍第 row 行的闪光放到右边盒子的第一个空格，再回到放蛋的盒子。没有空格返回 False。"""
-    box.to_right_box(sw)
+    box.turn_box(sw, "R")
     for slot_row in range(sw.config.box_rows):
         for col in range(sw.config.box_columns):
             box.move_cursor(sw, "slots", slot_row, col)
             if not box.slot_has_pokemon(sw):
                 box.swap_slots(sw, ("party", row, 0), ("slots", slot_row, col))
-                box.to_left_box(sw)
+                box.turn_box(sw, "L")
                 sw.kept_in_box = True
                 sw.save_pending = True
                 return True
@@ -133,9 +133,9 @@ def _replace_parent(sw: EggSession, row: int, best: int) -> None:
     """
     parent_row, parent_col = (0, 0) if sw.parent_index == 0 else (sw.parent_index - 1, 1)
     logging.info(f"比亲代好（{best} 项对 {sw.parent_best} 项），换亲代")
-    box.to_left_box(sw)
+    box.turn_box(sw, "L")
     box.swap_slots(sw, ("party", row, 0), ("slots", parent_row, parent_col))
-    box.to_right_box(sw)
+    box.turn_box(sw, "R")
     sw.parent_best = best
     sw.kept_in_box = True
     sw.save_pending = True
@@ -187,7 +187,7 @@ def _do_egg_cycle_motion(sw: EggSession) -> None:
     sw.press_stick("RIGHT", full, 0)
     sw.press("LSTICK")
     try:
-        wait_for(
+        wait_until(
             sw,
             lambda s: screens.is_dialog(s, config),
             config.cycle_timeout,
@@ -207,7 +207,9 @@ def _handle_egg_hatching(sw: EggSession, index: int, count: int) -> None:
     sw.push("RIGHT", -1.0, 0.0, config.hatch_turn_seconds)
     press_until(
         sw,
+        lambda: sw.click("A", 0),
         lambda s: screens.is_overworld(s, config),
+        config.hatch_end_timeout,
         "孵化结束回到野外",
-        timeout=config.hatch_end_timeout,
+        interval=sw.config.wait.press_interval,
     )

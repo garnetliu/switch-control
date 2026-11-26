@@ -48,12 +48,15 @@ def _check_screen(devices: "Devices") -> None:
         data = devices.screen.pixel_peek()
     except Exception as error:
         raise DeviceCheckError(f"取图：取不到画面：{error}") from error
-    if not data:
-        raise DeviceCheckError("取图：取到的画面是空的")
-    try:
-        image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
-    except Exception as error:
-        raise DeviceCheckError(f"取图：取到的画面解码失败：{error}") from error
+    if isinstance(data, np.ndarray):
+        image = data
+    else:
+        if not data:
+            raise DeviceCheckError("取图：取到的画面是空的")
+        try:
+            image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+        except Exception as error:
+            raise DeviceCheckError(f"取图：取到的画面解码失败：{error}") from error
     if image is None:
         raise DeviceCheckError("取图：取到的内容不是图片")
     height, width = image.shape[:2]

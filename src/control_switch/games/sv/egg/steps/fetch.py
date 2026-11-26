@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable
 from typing import Literal
 
-from control_switch.flow import act_until, capture, wait_for
+from control_switch.flow import capture, press_until, wait_until
 from control_switch.games.sv import actions
 from control_switch.types import Rect
 from control_switch.vision import ImageChecker
@@ -176,7 +176,7 @@ def _selected_recipe_cell(sw: EggSession) -> int:
     """食谱列表里选中的是这一页第几格，最多等 recipe_arrow_timeout 秒，看不到选中的箭头就报错。"""
     config = sw.config
     try:
-        image = wait_for(
+        image = wait_until(
             sw,
             lambda s: screens.selected_recipe_cell(s, config) >= 0,
             config.recipe_arrow_timeout,
@@ -215,7 +215,7 @@ def _run_sandwich_maker(sw: EggSession) -> None:
     config = sw.config
     logging.info("开始做三明治")
     try:
-        wait_for(
+        wait_until(
             sw,
             lambda s: screens.find_hand(s, "free", config.hand_initial_box, config) is not None,
             config.hand_first_timeout,
@@ -271,13 +271,13 @@ def _finish_sandwich_eating(sw: EggSession) -> None:
     config = sw.config
     deadline = time.monotonic() + config.eat_timeout
     while True:
-        act_until(
+        press_until(
             sw,
             lambda: sw.click("A", 0),
             lambda s: screens.is_picnic(s, config),
+            max(deadline - time.monotonic(), 0.0),
             "吃完三明治回到野餐",
             interval=config.eat_press_interval,
-            timeout=max(deadline - time.monotonic(), 0.0),
         )
         time.sleep(config.eat_settle_wait)
         if screens.is_picnic(capture(sw, "吃完了吗"), config):

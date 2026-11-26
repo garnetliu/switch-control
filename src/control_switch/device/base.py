@@ -2,13 +2,15 @@
 
 from typing import ClassVar, Protocol, runtime_checkable
 
+from control_switch.types import Picture
+
 
 @runtime_checkable
 class Screen(Protocol):
     """取图。"""
 
-    def pixel_peek(self) -> bytes:
-        """截一张当前画面，返回 JPEG 字节。"""
+    def pixel_peek(self) -> Picture:
+        """截一张当前画面：JPEG 字节，或者 BGR 数组。"""
         ...
 
     def close(self) -> None: ...

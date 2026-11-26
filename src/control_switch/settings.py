@@ -1,4 +1,4 @@
-"""集中读配置：每台 Switch 用什么设备、每个脚本用哪台机器写在 runs/switches.toml，
+"""集中读配置：每台 Switch 用什么设备写在 runs/switches.toml，
 Discord 通知的 webhook 和 PKHeX 服务的地址写在 .env。其他地方都用传进来的 Settings，不自己读文件和环境变量。
 """
 
@@ -47,20 +47,8 @@ def switches_file() -> Path:
     return BaseConfig.root / "runs" / "switches.toml"
 
 
-def load_script_settings(script: str, path: Path | None = None) -> Settings:
-    """按脚本名读：[scripts] 里写了这个脚本用哪台机器，再读那台机器的 [switch.名字]。"""
-    path = path or switches_file()
-    document = _read(path)
-    switch = document.get("scripts", {}).get(script)
-    if not isinstance(switch, str) or not switch:
-        raise SettingsError(
-            f'{path.name} 的 [scripts] 要写 "{script}" = "机器名"：这个脚本用哪台机器'
-        )
-    return _settings(document, path, switch)
-
-
 def load_switch_settings(switch: str, path: Path | None = None) -> Settings:
-    """按机器名读 [switch.名字]，不看脚本。重启游戏用。"""
+    """按机器名读 [switch.名字]。"""
     path = path or switches_file()
     return _settings(_read(path), path, switch)
 

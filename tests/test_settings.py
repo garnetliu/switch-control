@@ -1,4 +1,4 @@
-"""control_switch.settings：从 runs/switches.toml 读机器和脚本用哪台，从 .env 读 webhook 和 PKHeX 地址。
+"""control_switch.settings：从 runs/switches.toml 读机器配置，从 .env 读 webhook 和 PKHeX 地址。
 
 build_settings 直接传一台机器的配置；load_* 读 tmp_path 下写好的 toml 文件。
 conftest 的 clean_settings_env 把 .env 和相关环境变量清掉了。
@@ -12,7 +12,6 @@ import tomlkit
 from control_switch.settings import (
     SettingsError,
     build_settings,
-    load_script_settings,
     load_switch_settings,
     set_switch_ip,
     switch_mac,
@@ -31,17 +30,12 @@ screen = "capture"
 controller = "serial"
 serial_port = "/dev/cu.usbserial-1"
 memory = "none"
-
-# 脚本用哪台
-[scripts]
-"swsh/lair" = "living"
-"sv/egg" = "lite"
 """
 
 
 @pytest.fixture
 def switches(tmp_path: Path) -> Path:
-    """tmp_path 下写好的 switches.toml：两台机器，两个脚本。"""
+    """tmp_path 下写好的 switches.toml：两台机器。"""
     path = tmp_path / "switches.toml"
     path.write_text(SWITCHES, encoding="utf-8")
     return path
@@ -133,29 +127,14 @@ def test_text_value_that_is_not_string_raises() -> None:
 # ---------- 读文件 ----------
 
 
-def test_load_script_settings_uses_machine_of_script(switches: Path) -> None:
-    """sv/egg 用 lite：得到 lite 的设备配置，switch 是 lite。"""
-    settings = load_script_settings("sv/egg", switches)
-    assert settings.switch == "lite"
-    assert (settings.screen, settings.controller, settings.memory) == ("capture", "serial", "none")
-    assert settings.serial_port == "/dev/cu.usbserial-1"
-
-
-def test_load_script_settings_without_script_entry_raises_naming_script(switches: Path) -> None:
-    """[scripts] 里没写 sv/outbreak：抛 SettingsError，报错里有这个脚本名。"""
-    with pytest.raises(SettingsError, match="sv/outbreak"):
-        load_script_settings("sv/outbreak", switches)
-
-
-def test_load_script_settings_with_missing_machine_raises_listing_machines(tmp_path: Path) -> None:
-    """脚本写的机器没有那一节：抛 SettingsError，报错里有这台机器和已经写了的机器。"""
-    path = tmp_path / "switches.toml"
-    path.write_text('[switch.living]\n\n[scripts]\n"sv/egg" = "lite"\n', encoding="utf-8")
+def test_load_switch_settings_with_missing_machine_raises_listing_machines(switches: Path) -> None:
+    """没有这台机器：抛 SettingsError，报错里有这台机器和已经写了的机器。"""
     with pytest.raises(SettingsError) as error:
-        load_script_settings("sv/egg", path)
+        load_switch_settings("bedroom", switches)
     message = str(error.value)
-    assert "[switch.lite]" in message
+    assert "[switch.bedroom]" in message
     assert "living" in message
+    assert "lite" in message
 
 
 def test_load_switch_settings_reads_machine_by_name(switches: Path) -> None:
@@ -204,7 +183,6 @@ def test_set_switch_ip_writes_ip_and_keeps_comments(switches: Path) -> None:
     assert load_switch_settings("living", switches).switch_ip == "192.168.1.50"
     text = switches.read_text(encoding="utf-8")
     assert "# 机器" in text
-    assert "# 脚本用哪台" in text
     assert load_switch_settings("lite", switches).serial_port == "/dev/cu.usbserial-1"
 
 

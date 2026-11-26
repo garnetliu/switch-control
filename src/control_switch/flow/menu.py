@@ -3,7 +3,7 @@
 import logging
 from collections.abc import Callable
 
-from control_switch.flow.wait import act_until
+from control_switch.flow.screen import press_until
 from control_switch.session import Session
 from control_switch.types import Rect
 from control_switch.vision import ImageChecker
@@ -70,10 +70,11 @@ def move_menu_option(
             if label is not None:
                 logging.info(f"{what}选中了「{label}」")
             return index
-        image = act_until(
+        image = press_until(
             sw,
             move,
             lambda screen, before=current: screen.selected(rects) not in (before, -1),
+            sw.config.wait.timeout,
             f"{what}的光标移一格",
         )
     raise RuntimeError(f"{what}的光标移了 {len(rects)} 次，还是没到第 {index + 1} 项")

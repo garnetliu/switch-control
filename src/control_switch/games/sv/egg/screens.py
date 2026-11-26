@@ -5,7 +5,6 @@
 """
 
 import re
-import unicodedata
 from functools import cache
 
 import cv2
@@ -250,13 +249,6 @@ def panel_present(image: ImageChecker, config: EggConfig = DEFAULT) -> bool:
     return image.color_ratio(config.panel_header, lower, upper) > config.panel_header_ratio
 
 
-def box_title(image: ImageChecker, config: EggConfig = DEFAULT) -> int | None:
-    """盒子画面的盒子编号，读不到返回 None。"""
-    text = unicodedata.normalize("NFKC", image.read_text(config.box_title_area))
-    match = re.search(r"盒子\s*(\d+)", text)
-    return int(match.group(1)) if match else None
-
-
 def panel_name(image: ImageChecker, config: EggConfig = DEFAULT) -> str:
     """右侧面板顶上的名字：宝可梦名、「蛋」，空格是空字符串。"""
     return image.read_text(config.panel_name_area)
@@ -271,6 +263,56 @@ def panel_shiny(image: ImageChecker, config: EggConfig = DEFAULT) -> bool:
 def panel_stats(image: ImageChecker, config: EggConfig = DEFAULT) -> list[str]:
     """面板上六项能力的文字：在评定页是「最棒」「非常好」这些判定词，在能力页是数值。"""
     return [image.read_text(rect) for rect in config.panel_stats]
+
+
+def is_judge_page(image: ImageChecker, config: EggConfig = DEFAULT) -> bool:
+    """右侧面板在评定页：六项能力里至少 judge_min 项读到「最棒」「非常好」这些判定词。"""
+    texts = panel_stats(image, config)
+    return (
+        sum(any(word in text for word in config.judge_words) for text in texts) >= config.judge_min
+    )
+
+
+def is_stats_page(image: ImageChecker, config: EggConfig = DEFAULT) -> bool:
+    """右侧面板在能力页：特性那一行的标签是「特性」（评定页这里是「性格」）。"""
+    return config.ability_label in image.read_text(config.ability_label_area)
+
+
+def panel_ability(image: ImageChecker, config: EggConfig = DEFAULT) -> str:
+    """右侧面板能力页上的特性。"""
+    return image.read_text(config.ability_area)
+
+
+@cache
+def _egg_template(path: str) -> np.ndarray:
+    """盒子格子里蛋的模板。"""
+    template = cv2.imread(path)
+    if template is None:
+        raise RuntimeError(f"读不到蛋的模板 {path}")
+    return template
+
+
+def box_eggs(image: ImageChecker, config: EggConfig = DEFAULT) -> list[tuple[int, int]]:
+    """盒子里哪些格子是蛋，返回 (行, 列)：每一格和蛋的模板比，匹配度超过 egg_score 的是蛋。"""
+    bgr = image.bgr
+    height, width = bgr.shape[:2]
+    template = _egg_template(str(config.egg_template))
+    scale = height / config.egg_template_height
+    if scale != 1:
+        template = cv2.resize(template, None, fx=scale, fy=scale)
+    (left, top), (right, bottom) = config.box_cell
+    eggs = []
+    for row in range(config.box_rows):
+        for col in range(config.box_columns):
+            dx, dy = config.cell_step[0] * col, config.cell_step[1] * row
+            cell = bgr[
+                round((top + dy) * height) : round((bottom + dy) * height),
+                round((left + dx) * width) : round((right + dx) * width),
+            ]
+            score = float(cv2.matchTemplate(cell, template, cv2.TM_CCOEFF_NORMED).max())
+            if score > config.egg_score:
+                eggs.append((row, col))
+    return eggs
 
 
 def party_slot(image: ImageChecker, row: int, config: EggConfig = DEFAULT) -> str:

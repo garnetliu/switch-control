@@ -52,6 +52,8 @@ target-version = "py311"
 
 [tool.ruff.lint]
 ignore = ["LOG015", "BLE001"]
+# docs 下的脚本是实测和打分算法探索时用的，跟着文档留作记录，不做 lint 检查，格式化照常
+exclude = ["docs/**"]
 
 [tool.uv]
 # Intel Mac 也要能装：新版 onnxruntime 没有它的安装包，uv 会给它单独选一个旧版

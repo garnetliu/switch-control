@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 from rapidocr_onnxruntime import RapidOCR
 
-from control_switch.types import Hsv, Rect
+from control_switch.types import Hsv, Picture, Rect
 
 
 def _clean(text: str) -> str:
@@ -38,17 +38,21 @@ def _crop(img: np.ndarray, rect: Rect) -> np.ndarray:
 class ImageChecker:
     """对一张截图做各种检查。截图只解码一次，同一张图的多次检查共用。"""
 
-    def __init__(self, image: bytes):
-        """image: 截图的 JPEG 或 PNG 字节。解码失败会抛 ValueError。"""
+    def __init__(self, image: Picture):
+        """image: 截图的 JPEG 或 PNG 字节，或者 BGR 数组（采集卡读到的帧，直接用，不解码）。解码失败会抛 ValueError。"""
         self._ocr = _shared_ocr()
         # Switch 的截图本身没有黑边，不去黑边：整屏很暗的画面（比如战败时黑屏上只有一条对话框）
         # 去黑边会把画面内容裁掉，按比例找的范围就全错位了
-        # 空字节 cv2.imdecode 会抛 cv2.error，不是 None
-        img = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR) if image else None
-        if img is None:
-            raise ValueError("无法解码图片")
-        # Switch 给的原始字节留着，存图时直接写进文件，不再压缩第二次
-        self._raw = image
+        if isinstance(image, np.ndarray):
+            img = image
+            self._raw = b""
+        else:
+            # 空字节 cv2.imdecode 会抛 cv2.error，不是 None
+            img = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR) if image else None
+            if img is None:
+                raise ValueError("无法解码图片")
+            # Switch 给的原始字节留着，存图时直接写进文件，不再压缩第二次
+            self._raw = image
         self._bgr = img
         self._hsv = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2HSV)
         self._gray = cv2.cvtColor(self._bgr, cv2.COLOR_BGR2GRAY)

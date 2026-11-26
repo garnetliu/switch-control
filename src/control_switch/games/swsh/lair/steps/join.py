@@ -3,14 +3,7 @@ import time
 import unicodedata
 from typing import cast
 
-from control_switch.flow import (
-    act_until,
-    capture,
-    menu_last_item,
-    move_menu_option,
-    press_until,
-    wait_for,
-)
+from control_switch.flow import capture, menu_last_item, move_menu_option, press_until, wait_until
 from control_switch.games.swsh.lair import upstream
 from control_switch.games.swsh.lair.lair import Lair
 from control_switch.games.swsh.lair.map import MapNode, Maps, MapType
@@ -78,11 +71,14 @@ def _select_target(sw: LairSession):
     else:
         image = press_until(
             sw,
+            lambda: sw.click("A", 0),
             lambda screen: (
                 menu_last_item(screen, rects.menu_search, dialog=rects.white_center_line1)
                 == "不指定"
             ),
+            sw.config.wait.timeout,
             "传说菜单",
+            interval=sw.config.wait.press_interval,
         )
         wanted = "不指定" if boss is None else bosses[boss].name()
         if boss != sw.config.boss:
@@ -101,10 +97,17 @@ def _select_target(sw: LairSession):
         logging.info(f"选择传说Boss选中了第 {index + 1} 项「{wanted}」")
     # 选好传说之后：「要保存目前为止的冒险记录吗？」→「是 / 否」→ 选「是」保存。
     # 一直按 A 到画面变黑（保存中）就停，参考 lib/game.py 的 _enter_game
-    press_until(sw, lambda screen: screen.is_black(), "保存时画面变黑")
+    press_until(
+        sw,
+        lambda: sw.click("A", 0),
+        lambda screen: screen.is_black(),
+        sw.config.wait.timeout,
+        "保存时画面变黑",
+        interval=sw.config.wait.press_interval,
+    )
     # 保存要几秒。大厅里选「发起单人挑战！」，队友由电脑来当
     solo = "发起单人挑战！"
-    image = wait_for(
+    image = wait_until(
         sw,
         lambda screen: menu_last_item(screen, rects.lobby_menu, 1) == solo,
         sw.config.wait.timeout,
@@ -129,7 +132,7 @@ def _select_starter(sw: LairSession, boss: str | None) -> bool:
     选初始界面读不到队伍地址。
     """
     # 不能用面板高亮判断界面是否出来：刚切出来时面板还在淡入，选中位置会看错
-    wait_for(
+    wait_until(
         sw,
         lambda screen: screen.has_text(sw.config.rects.starter_hint, "按顺序选择"),
         sw.config.wait.timeout,
@@ -172,7 +175,7 @@ def _check_map_type(sw: LairSession) -> None:
 
     读到的类型和 seed 算出来的不一样，按画面上的类型、首发不变重新选路线。
     """
-    wait_for(sw, lambda screen: not screen.is_black(), sw.config.wait.timeout, "开场黑屏结束")
+    wait_until(sw, lambda screen: not screen.is_black(), sw.config.wait.timeout, "开场黑屏结束")
     reader = MapTypeReader(sw)
     deadline = time.monotonic() + sw.config.wait.timeout
     seen: str | None = None
@@ -338,7 +341,7 @@ def _move_starter_cursor(sw: LairSession) -> None:
     """读界面上的三只候选，选得分最高的，把黑色光标移过去。"""
 
     rects = sw.config.rects.starter_candidates
-    image = wait_for(
+    image = wait_until(
         sw,
         lambda screen: screen.selected(rects) != -1,
         sw.config.wait.timeout,
@@ -348,10 +351,11 @@ def _move_starter_cursor(sw: LairSession) -> None:
         current = image.selected(rects)
         if current == sw.game.lock_pokemon_index:
             return
-        image = act_until(
+        image = press_until(
             sw,
             lambda: sw.click("DDOWN", 0),
             lambda screen, before=current: screen.selected(rects) not in (before, -1),
+            sw.config.wait.timeout,
             "选宝可梦的光标移一格",
         )
     raise RuntimeError(

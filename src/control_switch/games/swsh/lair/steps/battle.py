@@ -5,7 +5,7 @@ import time
 from dataclasses import replace
 from typing import cast
 
-from control_switch.flow import act_until, capture, wait_for
+from control_switch.flow import capture, press_until, wait_until
 from control_switch.games.swsh.field import Field
 from control_switch.games.swsh.lair.session import LairSession
 from control_switch.games.swsh.lair.war import War
@@ -140,10 +140,11 @@ def _choose_move(sw: LairSession, war: War) -> None:
     极巨招式经常重名，所以按序号移光标，不按名字找。
     """
     war.start_turn()
-    image = act_until(
+    image = press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda screen: _move_cursor(sw, screen) >= 0,
+        sw.config.wait.timeout,
         "招式列表",
     )
     _log_turn(sw, war)
@@ -166,7 +167,7 @@ def _choose_move(sw: LairSession, war: War) -> None:
             raise RuntimeError("四个招式都用不了")
         logging.info(f"{move.name()} 被封住了用不了，换一个招式")
         # 「无法使出」这行字自己会消失，消失后回到招式列表
-        image = wait_for(
+        image = wait_until(
             sw,
             lambda screen: not _move_blocked(sw, screen) and _move_cursor(sw, screen) >= 0,
             sw.config.wait.timeout,
@@ -224,10 +225,11 @@ def _use_move(sw: LairSession) -> bool:
 
     # 招式列表在不在看它上方的「招式说明」，不看光标：选目标界面上我方卡片的名牌正好落在
     # 招式列表第一行的光标框里，会被当成招式光标；招式列表还在时背景里的训练家也会被当成选目标的光标
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not screen.has_text(sw.config.rects.move_hint, "招式说明"),
+        sw.config.wait.timeout,
         "招式列表消失",
     )
 
@@ -235,7 +237,7 @@ def _use_move(sw: LairSession) -> bool:
         return screen.has_text(sw.config.rects.black_full_line1, "使出了")
 
     # 先看「无法使出」再看「使出了」：两句都带「使出」
-    image = wait_for(
+    image = wait_until(
         sw,
         lambda screen: cast(
             bool, _move_blocked(sw, screen) or _target_cursors(sw, screen) or used(screen)
@@ -250,7 +252,7 @@ def _use_move(sw: LairSession) -> bool:
         logging.info("选目标界面上有好几个光标，对象是固定的，不用移")
     else:
         _move_target_cursor(sw)
-    act_until(sw, lambda: sw.click("A", 0), used, "出招")
+    press_until(sw, lambda: sw.click("A", 0), used, sw.config.wait.timeout, "出招")
     return True
 
 
@@ -300,10 +302,11 @@ def _move_target_cursor(sw: LairSession) -> None:
             logging.info("选目标的光标在能选的卡片上")
             return
         before = _target_cursor(sw, capture(sw, "选目标的光标"))
-        act_until(
+        press_until(
             sw,
-            lambda button=button: sw.click(button, 0),
-            lambda screen, before=before: _target_cursor(sw, screen) not in (before, -1),
+            lambda key=button: sw.click(key, 0),
+            lambda screen, last=before: _target_cursor(sw, screen) not in (last, -1),
+            sw.config.wait.timeout,
             "选目标的光标移动",
         )
 
@@ -311,7 +314,7 @@ def _move_target_cursor(sw: LairSession) -> None:
 def _dynamax(sw: LairSession) -> ImageChecker:
     """招式列表上把光标移到「极巨化」按钮上按 A，等列表换成极巨招式，返回换好后的画面。"""
     sw.stick("LEFT", -sw.controller.STICK_MAX, 0, sw.config.wait.stick_tick)
-    wait_for(
+    wait_until(
         sw,
         lambda screen: _marker_shown(sw, screen, sw.config.rects.dynamax_cursor),
         sw.config.wait.timeout,
@@ -319,14 +322,15 @@ def _dynamax(sw: LairSession) -> ImageChecker:
     )
     # 按键偶尔会丢：光标还停在极巨化按钮上就再按。光标一离开按钮就不能再按了，招式列表的光标要过一会儿才画出来，
     # 这时候再按 A 会直接选中第一个招式。不看按钮本身：对手是一大块白色时，按钮那块背景也是白的，会当成按钮还在
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not _marker_shown(sw, screen, sw.config.rects.dynamax_cursor),
+        sw.config.wait.timeout,
         "光标离开极巨化按钮",
         interval=2.0,
     )
-    image = wait_for(
+    image = wait_until(
         sw,
         lambda screen: _move_cursor(sw, screen) >= 0,
         sw.config.wait.timeout,
@@ -354,10 +358,11 @@ def _move_cursor_to(sw: LairSession, image: ImageChecker, target: int) -> None:
         current = _move_cursor(sw, image)
         if current == target:
             return
-        image = act_until(
+        image = press_until(
             sw,
             lambda: sw.stick("LEFT", 0, -sw.controller.STICK_MAX, sw.config.wait.stick_tick),
             lambda screen, before=current: _move_cursor(sw, screen) not in (before, -1),
+            sw.config.wait.timeout,
             "招式光标移动",
         )
     raise RuntimeError(f"招式光标移了 4 次，还是没到第 {target + 1} 行")
@@ -371,7 +376,7 @@ def _storm(sw: LairSession, war: War) -> bool:
     war.faints += 1
     lives = sw.game.lives - war.faints
     logging.info(f"有一只倒下了，这一场倒下 {war.faints} 次，还剩 {lives} 条命")
-    wait_for(
+    wait_until(
         sw,
         lambda screen: not screen.has_text(sw.config.rects.black_full_line1, "倒下了"),
         sw.config.wait.timeout,
@@ -399,10 +404,11 @@ def _record_faints(sw: LairSession, war: War) -> None:
 
 def _cheer(sw: LairSession) -> None:
     """助威：按 A，等助威菜单消失。"""
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not screen.has_text(sw.config.rects.battle_menu_text, "助威"),
+        sw.config.wait.timeout,
         "助威菜单消失",
     )
 

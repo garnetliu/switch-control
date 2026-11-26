@@ -48,7 +48,7 @@ uv sync
 
 ### 第 4 步：写机器配置
 
-打开 `runs/switches.toml`，里面每种接法都有注释掉的例子。照自己的接法取消注释一节 `[switch.名字]`，名字自己起；再在最下面的 `[scripts]` 里写每个脚本用哪台。各项的意思见下面「机器配置」。
+打开 `runs/switches.toml`，里面每种接法都有注释掉的例子。照自己的接法取消注释一节 `[switch.名字]`，名字自己起，启动、重启时用这个名字指定机器。各项的意思见下面「机器配置」。
 
 ```bash
 open -e runs/switches.toml
@@ -86,10 +86,10 @@ docker compose -f docker/pkhex-reader/compose.yaml up -d --build
 在 Switch 上打开要刷的游戏，按脚本目录下 README 写的准备好，然后：
 
 ```bash
-make start script=swsh/lair
+make start script=swsh/lair switch=living
 ```
 
-`script=` 换成要跑的脚本：`swsh/lair`、`sv/outbreak`、`sv/egg`，跑在 `[scripts]` 里写的那台机器上。两个脚本用不同的机器时，开两个终端各跑一个，可以分别停止和启动。启动时会先检查设备，没通过会打印报错并退出，报错的意思见「启动时的检查」。按 `Ctrl+C` 停止。
+`script=` 换成要跑的脚本：`swsh/lair`、`sv/outbreak`、`sv/egg`，`switch=` 写在哪台机器上跑。两个脚本用不同的机器时，开两个终端各跑一个，可以分别停止和启动。启动时会先检查设备，没通过会打印报错并退出，报错的意思见「启动时的检查」。按 `Ctrl+C` 停止。
 
 ## 命令
 
@@ -98,7 +98,7 @@ make start script=swsh/lair
 | 命令 | 作用 |
 |---|---|
 | `make find switch=…` | 按这台机器的 `mac` 找它的 ip，写回 `runs/switches.toml`，再 ping 一下检查延迟 |
-| `make start script=…` | 开始自动刷，`script=` 必须写，例如 `make start script=sv/egg` |
+| `make start script=… switch=…` | 在这台机器上开始自动刷，两个都必须写，例如 `make start script=sv/egg switch=lite` |
 | `make restart switch=…` | 重启这台机器上的游戏，回到游戏里可以操作为止。极巨大冒险途中重启，下次和科学家说话要付极矿石罚款 |
 | `make format` | 格式化代码 |
 | `make lint` | 检查代码 |
@@ -108,7 +108,7 @@ make start script=swsh/lair
 
 ## 机器配置
 
-写在 `runs/switches.toml`，在 `src/control_switch/settings.py` 里读。每台 Switch 一节 `[switch.名字]`，`[scripts]` 里写每个脚本用哪台。写了不在可选值里的值或者不认识的项，启动时报错退出并说明可以写什么。
+写在 `runs/switches.toml`，在 `src/control_switch/settings.py` 里读。每台 Switch 一节 `[switch.名字]`。写了不在可选值里的值或者不认识的项，启动时报错退出并说明可以写什么。
 
 | 项 | 可以写 | 不写时 | 作用 |
 |---|---|---|---|
@@ -205,7 +205,7 @@ src/control_switch/
 │   ├── image.py           ImageChecker：认字、算颜色占比、比对图片、判断光标选中哪一项
 │   └── text.py            认出来的文字和要找的文字做比较
 ├── flow/              所有游戏通用的操作流程：一边按键一边看画面
-│   ├── wait.py            截图、等画面变化、一直按某个键直到画面变化，出错时把这一局的截图写进 failed/
+│   ├── screen.py          截图、等到画面出现、一直按到画面出现，出错时把这一局的截图写进 failed/
 │   ├── menu.py            认出菜单选项，把光标移到目标选项
 │   ├── restart.py         关掉游戏重新打开，等到开场画面
 │   └── check.py           启动时按两次 HOME，确认按键送到了画面上的这台 Switch
@@ -222,15 +222,14 @@ src/control_switch/
     │       └── 其余文件            按 seed 算对手、读路线图、给首发和路线打分
     └── sv/                《宝可梦 朱/紫》
         ├── data/              图片数据（fly_icon.png、sandwich_hand_free.png、sandwich_hand_grabbing.png）
-        ├── config.py          朱紫脚本共用的配置：内存指针、存档块、认画面用的区域和颜色、存档和野餐的等待
+        ├── config.py          朱紫脚本共用的配置：认画面用的区域和颜色、存档和野餐的等待
         ├── screens.py         朱紫脚本共用的画面判断：对话框、选择框、野外、野餐、主菜单
-        ├── blocks.py          在内存里找到存档块，解密读出、加密写回
-        ├── actions.py         存档、开野餐、收野餐、从主菜单进某一项，每一步看画面
-        ├── outbreak/          大量出现刷闪：config、session，steps/ 下每个步骤一个文件
+        ├── actions/           存档、开野餐、收野餐、从主菜单进某一项，每一步看画面，一个操作一个文件
+        ├── outbreak/          大量出现刷闪：config、session，steps/ 下每个步骤一个文件，读写存档块 blocks.py
         └── egg/               孵蛋刷闪：config、session，steps/ 下每个步骤一个文件，画面判断 screens.py，盒子里的操作 box.py，飞到闸口 fly.py
 
 runs/                  只有 switches.toml 进 git，其余是运行时生成的
-├── switches.toml      每台 Switch 用什么设备，每个脚本用哪台
+├── switches.toml      每台 Switch 用什么设备
 ├── logs/              日志，每个脚本一个目录：swsh-lair/、sv-outbreak/、sv-egg/
 │                      出错时这一局的截图写进 failed/；极巨大冒险不是闪光的战果截图在 swsh-lair/results/
 ├── shinys/            闪光宝可梦的截图

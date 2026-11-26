@@ -3,7 +3,7 @@
 import logging
 import re
 
-from control_switch.flow import act_until, wait_for
+from control_switch.flow import press_until, wait_until
 from control_switch.games.swsh.lair import upstream
 from control_switch.games.swsh.lair.lair import Lair
 from control_switch.games.swsh.lair.session import LairSession
@@ -58,21 +58,22 @@ def _decide(sw: LairSession) -> bool:
 def _catch_pokemon(sw: LairSession, boss: bool) -> None:
     """选「捕捉」，在选球界面向左翻到要用的球，扔出去。"""
     ball = sw.config.legendary_ball if boss else sw.config.base_ball
-    wait_for(
+    wait_until(
         sw,
         lambda screen: screen.has_text(sw.config.rects.catch_option, "捕捉"),
         sw.config.wait.timeout,
         "「捕捉 / 不捕捉」",
     )
     logging.info(f"抓第 {sw.game.num_caught + 1} 只")
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not screen.has_text(sw.config.rects.catch_option, "捕捉"),
+        sw.config.wait.timeout,
         "「捕捉」消失",
     )
 
-    image = wait_for(
+    image = wait_until(
         sw,
         lambda screen: screen.has_text(sw.config.rects.ball_use, "使用"),
         sw.config.wait.timeout,
@@ -84,12 +85,13 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
         name = image.read_text(sw.config.rects.ball_name).strip()
         if ball in name:
             break
-        image = act_until(
+        image = press_until(
             sw,
             lambda: sw.click("DLEFT", 0),
             lambda screen, before=name: (
                 screen.read_text(sw.config.rects.ball_name).strip() not in ("", before)
             ),
+            sw.config.wait.timeout,
             "换到左边那种球",
         )
     else:
@@ -102,10 +104,11 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
     if digits:
         sw.game.balls[ball] = int(digits) - 1
 
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not screen.read_text(sw.config.rects.ball_name).strip(),
+        sw.config.wait.timeout,
         "扔出球，选球界面消失",
     )
     sw.game.num_caught += 1
@@ -113,7 +116,7 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
 
 def _swap_pokemon(sw: LairSession, take: bool) -> None:
     """等换不换的界面，按 take 换或不换，等结果并按结果更新队伍。"""
-    image = wait_for(
+    image = wait_until(
         sw,
         lambda screen: screen.has_text(sw.config.rects.swap_options[0], "替换"),
         sw.config.wait.timeout,
@@ -175,10 +178,11 @@ def _apply_swap(sw: LairSession, caught_name: str, take: bool) -> None:
 
     logging.info(f"决定{'换成 ' + caught_name if take else '不换，继续用 ' + own_name}")
     # 换按 A，不换按 B，一直按到画面变黑
-    act_until(
+    press_until(
         sw,
         lambda: sw.click("A" if take else "B", 0),
         lambda screen: screen.is_black(),
+        sw.config.wait.timeout,
         "换不换之后的黑屏",
     )
     if take:

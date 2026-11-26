@@ -6,7 +6,7 @@ from control_switch.device import DeviceCheckError
 from control_switch.session import Session
 
 from .restart import home_shown
-from .wait import capture, wait_for
+from .screen import capture, wait_until
 
 
 def check_controller_reaches_screen(sw: Session) -> None:
@@ -21,7 +21,7 @@ def check_controller_reaches_screen(sw: Session) -> None:
 def _press_and_wait(sw: Session, want_home: bool, which: str) -> None:
     sw.click("HOME", 0)
     try:
-        wait_for(
+        wait_until(
             sw,
             lambda screen: home_shown(sw, screen) == want_home,
             sw.config.check.timeout,
