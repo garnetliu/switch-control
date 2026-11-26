@@ -29,6 +29,9 @@ SandwichState = Literal["picnic", "menu", "recipes", "dialog", "unknown"]
 
 def fetch(sw: EggSession) -> str:
     """开野餐、做三明治、收蛋、换成孵蛋队伍，返回下一步 "hatch"。"""
+    _to_picnic_party(sw)
+    # 从放生过来时人骑着坐骑、在孵蛋的空地上；飞回闸口落地是走路的，从哪一步过来都一样
+    fly.fly_to_gate(sw)
     _picnic_at_zero_gate(sw)
     if not _eat_egg_sandwich(sw):
         raise RuntimeError(
@@ -40,6 +43,21 @@ def fetch(sw: EggSession) -> str:
     sw.eggs_in_party = box.to_hatch_party(sw)
     logging.info(f"队伍里有 {sw.eggs_in_party} 个蛋")
     return "hatch"
+
+
+def _to_picnic_party(sw: EggSession) -> None:
+    """打开盒子看队伍前两只里有没有百变怪：没有就是孵蛋队伍（放生过来的），换回野餐队伍。最后退出盒子。"""
+    config = sw.config
+    box.open_box(sw)
+    names = []
+    for row in range(2):
+        box.move_cursor(sw, "party", row, 0)
+        if box.slot_has_pokemon(sw):
+            names.append(box.read_name(sw))
+    if config.ditto_name not in names:
+        logging.info("队伍是孵蛋队伍，换回野餐队伍")
+        box.to_picnic_party(sw)
+    actions.exit_to_overworld(sw)
 
 
 def _picnic_at_zero_gate(sw: EggSession) -> None:

@@ -110,6 +110,7 @@ def press_until(
         action()
         image = capture(sw, what)
         if condition(image):
+            logging.debug(what)
             return image
         if time.monotonic() >= deadline:
             raise TimeoutError(f"等了 {timeout} 秒，画面一直没有出现：{what}")
@@ -117,4 +118,5 @@ def press_until(
         while time.monotonic() < retry_at:
             image = capture(sw, what)
             if condition(image):
+                logging.debug(what)
                 return image

@@ -15,7 +15,7 @@ def initialize(sw: EggSession) -> str:
 
     队伍是亲代和百变怪，或者第 1 只是火焰之躯、后面是蛋或者孵出来的，都不是抛 RuntimeError。
     找到放亲代和带队的盒子（锚点），放蛋的是它后面那个，记在 sw.egg_box；放蛋的盒子和队伍里的蛋数记在 sw.eggs。
-    有蛋：孵蛋。没有蛋、队伍超过两只：放生。没有蛋、队伍是亲代和百变怪：拿蛋。
+    有蛋：孵蛋。没有蛋、队伍超过两只，或者队伍只有一只、放蛋的盒子里有宝可梦：放生。其他：拿蛋。
     最后盒子停在放蛋的盒子上，退回野外；要拿蛋就存一次档。
     """
     config = sw.config
@@ -60,6 +60,9 @@ def initialize(sw: EggSession) -> str:
     elif len(party) > 2:
         step = "release"
         logging.info(f"放生：放蛋的是盒子 {sw.egg_box}，没有蛋了，队伍里有 {len(party)} 只")
+    elif len(party) == 1 and box.box_has_pokemon(sw):
+        step = "release"
+        logging.info(f"放生：放蛋的是盒子 {sw.egg_box}，没有蛋了，盒子里有孵出来的")
     else:
         step = "fetch"
         logging.info(f"拿蛋：放蛋的是盒子 {sw.egg_box}，没有蛋")

@@ -126,6 +126,18 @@ def slot_has_pokemon(sw: EggSession) -> bool:
     return _read_stable(sw, lambda s: screens.panel_present(s, config), "格子里有没有宝可梦")
 
 
+def box_has_pokemon(sw: EggSession) -> bool:
+    """当前盒子里有没有宝可梦：偶数行从左到右、奇数行从右到左一格一格看，碰到第一只就返回 True。"""
+    config = sw.config
+    for row in range(config.box_rows):
+        columns = range(config.box_columns)
+        for col in columns if row % 2 == 0 else reversed(columns):
+            move_cursor(sw, "slots", row, col)
+            if slot_has_pokemon(sw):
+                return True
+    return False
+
+
 # ---- 读宝可梦 ----
 
 
@@ -490,6 +502,12 @@ def release_one(sw: EggSession) -> None:
         config.wait.timeout,
         "放生后的对话",
         interval=sw.config.wait.press_interval,
+    )
+    wait_until(
+        sw,
+        lambda s: screens.is_dialog(s, config),
+        config.wait.timeout,
+        f"放生{name}对话完成",
     )
     press_until(
         sw,
