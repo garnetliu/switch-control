@@ -35,7 +35,7 @@ class WaitConfig:
     timeout = 60.0
     # 两次截图之间的间隔
     interval = 0.1
-    # press_until 连续按键时两次按键之间的间隔。比游戏的反应快的话，画面还没变就又按了一次，会多按进下一个菜单
+    # press_until 按一下之后最多看几秒画面，没变就再按。所有 press_until 都用这一个
     press_interval = 0.3
     # 推一下摇杆保持多久，光标正好移一格
     stick_tick = 0.08

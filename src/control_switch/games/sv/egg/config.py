@@ -52,7 +52,7 @@ class EggConfig(SvConfig):
     party_rows = 6
 
     # ---- 走路路线（上游的时间；Push 推左摇杆，Press 按键）----
-    # 开野餐前：按 L 让镜头对准人面对的方向，往右前方走让人背对观测站，再按 L，往前走
+    # 开野餐前：按 L 让镜头对准人面对的方向，往左后方走让人背对观测站，再按 L，往前走
     picnic_route: tuple[Push | Press, ...] = (
         Press("L", 0.72),
         Push(1.0, 0.75, 0.4, 0.4),
@@ -83,15 +83,15 @@ class EggConfig(SvConfig):
         Push(0.0, 1.0, 0.08, 0.48),
         Press("L", 0.48),
     )
-    # 孵蛋开始：骑上坐骑，往右前方走让人背对观测站，转镜头，往前走下坡
+    # 孵蛋开始：骑上坐骑，往左后方走让人背对观测站，转镜头，往前走下坡
     ramp_route: tuple[Push | Press, ...] = (
         Press("PLUS", 0.8),
-        Push(1.0, 1.0, 0.4, 0.4),
+        Push(-1.0, -1.0, 0.4, 0.4),
         Press("L", 0.72),
-        Push(0.0, 1.0, 1.6, 0.0),
+        Push(0.0, 1.0, 2, 0.0),
     )
     # 每个蛋之前按 L 转镜头之后等几秒
-    camera_wait = 0.72
+    camera_wait = 1
 
     # ---- 桌子前和食谱 ----
     # 桌子前认出画面最多看几秒；打开食谱列表最多等几秒；列表认出之后再等几秒让它画完
@@ -142,8 +142,7 @@ class EggConfig(SvConfig):
     top_bread_wait = 0.5
     mash_seconds = 5.0
     mash_gap = 0.2
-    # 吃三明治：每隔几秒按一下 A，最多等几秒，回到野餐之后再等几秒
-    eat_press_interval = 4.0
+    # 吃三明治：最多等几秒，回到野餐之后再等几秒
     eat_timeout = 80.0
     eat_settle_wait = 1.0
     # 手：手的框的宽高；下次找手的范围往外扩多少倍、变成几倍（上游 expand_box）
@@ -215,8 +214,6 @@ class EggConfig(SvConfig):
     restart_settle_wait = 2.0
 
     # ---- 盒子 ----
-    # 转盒子：按一下 L、R 之后最多看几秒盒子编号，没变就再按
-    box_turn_wait = 0.5
     # 读盒子编号、面板上的名字、有没有宝可梦、闪光：连着几帧读到一样的才算（光标刚移过去时面板还没换）
     stable_frames = 3
     # 带队的宝可梦的特性；面板能力页上特性的值、「特性」这个标签的位置（切到评定页时这里是「性格」）
@@ -239,8 +236,7 @@ class EggConfig(SvConfig):
     cursor_origin = (0.265, 0.186)
     cell_step = (0.0656, 0.1167)
     party_limit = 0.20
-    # 按一下方向键之后最多看几秒光标，没动就再按；最多按几下
-    cursor_wait = 0.3
+    # 移光标最多按几下
     cursor_max_presses = 30
     # 右边面板：名字栏的黄色（有宝可梦）、名字、闪光的星星、六项能力
     panel_header: Rect = ((0.70, 0.01), (0.99, 0.06))
@@ -261,7 +257,6 @@ class EggConfig(SvConfig):
     # 按了 judge_timeout 秒还切不到说明评定功能没解锁
     judge_words = ("最棒", "了不起", "非常好", "相当好", "一般般", "也许不行")
     judge_min = 4
-    judge_wait = 0.3
     judge_timeout = 3.0
     # 队伍里每一格的范围、名字的范围（第 0 行）；格子里内容少于 empty_slot_std 是空格
     party_cell: Rect = ((0.021, 0.185), (0.208, 0.296))
@@ -271,8 +266,7 @@ class EggConfig(SvConfig):
     bar_area: Rect = ((0.391, 0.939), (0.791, 0.986))
     bar_white: tuple[Hsv, Hsv] = ((0, 0, 200), (180, 40, 255))
     bar_ratio = 0.01
-    # 拿起、放下：按减号、Y、A 之后最多看几秒选择模式，没变就再按；拿着一列移不过去最多重来几次
-    hold_retry = 2.0
+    # 拿着一列移不过去最多重来几次
     column_attempts = 10
     # 放生：盒子里按 A 出来的操作菜单（移动、查看能力、携带持有物、标记、放生、取消）：
     # 找选中行的箭头的范围、箭头黄绿色那一段的宽高比上限、第 0 行的中心、行高、行数、「放生」是第几行
@@ -281,43 +275,15 @@ class EggConfig(SvConfig):
     operation_first_row = 0.222
     operation_step = 0.0556
     operation_rows = 6
+    move_row = 0
     release_row = 4
     # 放生确认框里「是」那一行箭头的位置（光标默认在下面的「否」）
     release_yes_area: Rect = ((0.71, 0.59), (0.78, 0.65))
-    # 操作菜单、确认框里按一下之后最多看几秒，没变就再按；过「再见」的对话每按一下 A 最多看几秒
-    operation_interval = 1.5
-    dialog_retry = 1.5
 
     # ---- 飞到零区闸口（fly.py） ----
     gate_name = "零区闸口"
-    fly_icon = Path(str(files("control_switch.games.sv") / "data" / "fly_icon.png"))
-    fly_icon_score = 0.8
-    # 地图画面：左上角的标题、能看到地图的范围、光标的位置（画面中间）、光标上方的地点名
+    # 地图画面：左上角的标题
     map_title: Rect = ((0.17, 0.12), (0.25, 0.18))
     map_title_text = "地图"
-    map_area: Rect = ((0.13, 0.19), (0.87, 0.81))
-    map_cursor = (0.5, 0.5)
-    map_tooltip: Rect = ((0.40, 0.32), (0.60, 0.42))
-    # 摇杆推满时地图光标每秒移动多少（占画面宽度的比例，真机量的约 0.45）
-    map_cursor_speed = 0.45
-    map_move_min = 0.05
-    map_move_wait = 0.8
-    map_moves = 10
-    map_retry = 2.0
+    # 黑屏之后等回到野外最多几秒；回到野外之后再等几秒，人能动了再按键
     fly_timeout = 30.0
-    # 看不到飞行点时轻推光标的方向（x, y，y 正数向上）、摇杆推多少、推几秒；PokemonAutomation 是往下推 0.252 推 0.16 秒
-    map_probes: tuple[tuple[int, int], ...] = (
-        (0, -1),
-        (0, 1),
-        (0, 1),
-        (0, -1),
-        (1, 0),
-        (-1, 0),
-        (-1, 0),
-    )
-    map_probe_tilt = 0.252
-    map_probe_time = 0.16
-    # 地图上按 A 出的菜单（飞翔、设置为目的地、取消）
-    fly_menu_area: Rect = ((0.50, 0.45), (0.72, 0.80))
-    fly_text = "飞翔"
-    cancel_text = "取消"

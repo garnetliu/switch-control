@@ -196,6 +196,7 @@ def _move_fork_cursor(sw: LairSession, cursors: dict[int, Rect], column: int) ->
             ),
             sw.config.wait.timeout,
             "岔路口光标移动",
+            interval=sw.config.wait.press_interval,
         )
     raise RuntimeError(f"岔路口光标移了 {len(rects)} 次，还是没到第 {column + 1} 列")
 

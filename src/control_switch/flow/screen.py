@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from control_switch.session import Frame, Session
 from control_switch.vision import ImageChecker
@@ -18,14 +19,16 @@ def capture(sw: Session, what: str) -> ImageChecker:
     没出错就在新的一局开始时用 sw.frames.clear() 丢掉。
     """
     data = sw.pixel_peek()
-    sw.frames.append(Frame(time.time(), sw.step, what, data))
-    return ImageChecker(data)
+    image = ImageChecker(data)
+    sw.frames.append(Frame(time.time(), sw.step, what, data, image.rects))
+    return image
 
 
 def save_frames(sw: Session) -> list[Path]:
     """把内存里这一局的截图按顺序写进 failed_dir/这一次的时间/，返回写下的文件。
 
-    文件名是「序号-时分秒-步骤-在看什么」。JPEG 字节原样写，采集卡的帧到这里才编码。
+    文件名是「序号-时分秒-步骤-在看什么」。这张图上检查过的区域用红框画出来；
+    没检查过区域的 JPEG 字节原样写，采集卡的帧到这里才编码。
     """
     directory = sw.config.failed_dir / time.strftime("%Y%m%d-%H%M%S")
     directory.mkdir(parents=True, exist_ok=True)
@@ -34,13 +37,34 @@ def save_frames(sw: Session) -> list[Path]:
         stamp = time.strftime("%H%M%S", time.localtime(frame.time))
         what = frame.what.replace("/", "_")
         path = directory / f"{index:04d}-{stamp}-{frame.step}-{what}.jpg"
-        if isinstance(frame.data, bytes):
+        if isinstance(frame.data, bytes) and not frame.rects:
             path.write_bytes(frame.data)
-        elif not cv2.imwrite(str(path), frame.data):
+        elif not cv2.imwrite(str(path), _draw_rects(frame)):
             raise OSError(f"无法写入图片：{path}")
         paths.append(path)
     logging.warning(f"这一局的 {len(paths)} 张截图存在 {directory}")
     return paths
+
+
+def _draw_rects(frame: Frame) -> np.ndarray:
+    """把截图上检查过的区域用红框画出来，返回画好的图。"""
+    if isinstance(frame.data, bytes):
+        decoded = cv2.imdecode(np.frombuffer(frame.data, np.uint8), cv2.IMREAD_COLOR)
+        if decoded is None:
+            raise ValueError("截图解码失败")
+        image = np.asarray(decoded)
+    else:
+        image = np.array(frame.data)
+    height, width = image.shape[:2]
+    for (left, top), (right, bottom) in frame.rects:
+        cv2.rectangle(
+            image,
+            (round(left * width), round(top * height)),
+            (round(right * width), round(bottom * height)),
+            (0, 0, 255),
+            2,
+        )
+    return image
 
 
 def wait_until(

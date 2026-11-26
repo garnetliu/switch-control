@@ -153,6 +153,7 @@ def find_hand(
     else:
         path, base_area = config.hand_template_grabbing, config.hand_min_area_grabbing
     template = _hand_template(str(path))
+    image.mark(area)
     bgr = image.bgr
     height, width = bgr.shape[:2]
     (left, top), (right, bottom) = area
@@ -213,6 +214,7 @@ def box_cursor(image: ImageChecker, config: EggConfig = DEFAULT) -> Cursor | Non
     光标是格子上方一个黄绿色渐变的向下箭头。格子本身的黄色会一闪一闪，不能用来认。
     箭头黄绿色的那一段是一个扁扁的长方块，位置在格子上边中间。
     """
+    image.mark(config.cursor_search)
     bgr = image.bgr
     height, width = bgr.shape[:2]
     lower, upper = config.cursor_yellow
@@ -294,10 +296,8 @@ def _egg_template(path: str) -> np.ndarray:
 
 def box_eggs(image: ImageChecker, config: EggConfig = DEFAULT) -> list[tuple[int, int]]:
     """盒子里哪些格子是蛋，返回 (行, 列)：每一格和蛋的模板比，匹配度超过 egg_score 的是蛋。"""
-    bgr = image.bgr
-    height, width = bgr.shape[:2]
     template = _egg_template(str(config.egg_template))
-    scale = height / config.egg_template_height
+    scale = image.bgr.shape[0] / config.egg_template_height
     if scale != 1:
         template = cv2.resize(template, None, fx=scale, fy=scale)
     (left, top), (right, bottom) = config.box_cell
@@ -305,10 +305,7 @@ def box_eggs(image: ImageChecker, config: EggConfig = DEFAULT) -> list[tuple[int
     for row in range(config.box_rows):
         for col in range(config.box_columns):
             dx, dy = config.cell_step[0] * col, config.cell_step[1] * row
-            cell = bgr[
-                round((top + dy) * height) : round((bottom + dy) * height),
-                round((left + dx) * width) : round((right + dx) * width),
-            ]
+            cell = image.crop(((left + dx, top + dy), (right + dx, bottom + dy)))
             score = float(cv2.matchTemplate(cell, template, cv2.TM_CCOEFF_NORMED).max())
             if score > config.egg_score:
                 eggs.append((row, col))
@@ -335,6 +332,7 @@ def operation_row(image: ImageChecker, config: EggConfig = DEFAULT) -> int:
     选中那行左边有个向右的渐变箭头，黄绿色那一段是又窄又高的长条。菜单在格子右边，横向位置跟着格子变，
     所以只看箭头在哪一行。
     """
+    image.mark(config.operation_area)
     bgr = image.bgr
     height, width = bgr.shape[:2]
     lower, upper = config.cursor_yellow

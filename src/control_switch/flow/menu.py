@@ -76,5 +76,6 @@ def move_menu_option(
             lambda screen, before=current: screen.selected(rects) not in (before, -1),
             sw.config.wait.timeout,
             f"{what}的光标移一格",
+            interval=sw.config.wait.press_interval,
         )
     raise RuntimeError(f"{what}的光标移了 {len(rects)} 次，还是没到第 {index + 1} 项")

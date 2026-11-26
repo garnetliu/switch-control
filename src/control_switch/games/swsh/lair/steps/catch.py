@@ -71,6 +71,7 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
         lambda screen: not screen.has_text(sw.config.rects.catch_option, "捕捉"),
         sw.config.wait.timeout,
         "「捕捉」消失",
+        interval=sw.config.wait.press_interval,
     )
 
     image = wait_until(
@@ -93,6 +94,7 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
             ),
             sw.config.wait.timeout,
             "换到左边那种球",
+            interval=sw.config.wait.press_interval,
         )
     else:
         name = image.read_text(sw.config.rects.ball_name).strip()
@@ -110,6 +112,7 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
         lambda screen: not screen.read_text(sw.config.rects.ball_name).strip(),
         sw.config.wait.timeout,
         "扔出球，选球界面消失",
+        interval=sw.config.wait.press_interval,
     )
     sw.game.num_caught += 1
 
@@ -184,6 +187,7 @@ def _apply_swap(sw: LairSession, caught_name: str, take: bool) -> None:
         lambda screen: screen.is_black(),
         sw.config.wait.timeout,
         "换不换之后的黑屏",
+        interval=sw.config.wait.press_interval,
     )
     if take:
         sw.game.team[0] = (caught_name, 1.0)

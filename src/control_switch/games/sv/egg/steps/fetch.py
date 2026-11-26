@@ -277,7 +277,7 @@ def _finish_sandwich_eating(sw: EggSession) -> None:
             lambda s: screens.is_picnic(s, config),
             max(deadline - time.monotonic(), 0.0),
             "吃完三明治回到野餐",
-            interval=config.eat_press_interval,
+            interval=sw.config.wait.press_interval,
         )
         time.sleep(config.eat_settle_wait)
         if screens.is_picnic(capture(sw, "吃完了吗"), config):

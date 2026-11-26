@@ -146,6 +146,7 @@ def _choose_move(sw: LairSession, war: War) -> None:
         lambda screen: _move_cursor(sw, screen) >= 0,
         sw.config.wait.timeout,
         "招式列表",
+        interval=sw.config.wait.press_interval,
     )
     _log_turn(sw, war)
     # 这回合试过、被封住用不了的招式
@@ -231,6 +232,7 @@ def _use_move(sw: LairSession) -> bool:
         lambda screen: not screen.has_text(sw.config.rects.move_hint, "招式说明"),
         sw.config.wait.timeout,
         "招式列表消失",
+        interval=sw.config.wait.press_interval,
     )
 
     def used(screen: ImageChecker) -> bool:
@@ -252,7 +254,14 @@ def _use_move(sw: LairSession) -> bool:
         logging.info("选目标界面上有好几个光标，对象是固定的，不用移")
     else:
         _move_target_cursor(sw)
-    press_until(sw, lambda: sw.click("A", 0), used, sw.config.wait.timeout, "出招")
+    press_until(
+        sw,
+        lambda: sw.click("A", 0),
+        used,
+        sw.config.wait.timeout,
+        "出招",
+        interval=sw.config.wait.press_interval,
+    )
     return True
 
 
@@ -308,6 +317,7 @@ def _move_target_cursor(sw: LairSession) -> None:
             lambda screen, last=before: _target_cursor(sw, screen) not in (last, -1),
             sw.config.wait.timeout,
             "选目标的光标移动",
+            interval=sw.config.wait.press_interval,
         )
 
 
@@ -328,7 +338,7 @@ def _dynamax(sw: LairSession) -> ImageChecker:
         lambda screen: not _marker_shown(sw, screen, sw.config.rects.dynamax_cursor),
         sw.config.wait.timeout,
         "光标离开极巨化按钮",
-        interval=2.0,
+        interval=sw.config.wait.press_interval,
     )
     image = wait_until(
         sw,
@@ -364,6 +374,7 @@ def _move_cursor_to(sw: LairSession, image: ImageChecker, target: int) -> None:
             lambda screen, before=current: _move_cursor(sw, screen) not in (before, -1),
             sw.config.wait.timeout,
             "招式光标移动",
+            interval=sw.config.wait.press_interval,
         )
     raise RuntimeError(f"招式光标移了 4 次，还是没到第 {target + 1} 行")
 
@@ -410,6 +421,7 @@ def _cheer(sw: LairSession) -> None:
         lambda screen: not screen.has_text(sw.config.rects.battle_menu_text, "助威"),
         sw.config.wait.timeout,
         "助威菜单消失",
+        interval=sw.config.wait.press_interval,
     )
 
 

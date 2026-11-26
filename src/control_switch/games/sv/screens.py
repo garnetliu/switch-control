@@ -56,6 +56,14 @@ def is_overworld(image: ImageChecker, config: SvConfig = DEFAULT) -> bool:
     """野外：右下角有小地图。看小地图外圈上青、绿、黄三种颜色是不是都有。"""
     bgr = image.bgr
     height, width = bgr.shape[:2]
+    center_x, center_y = config.overworld.minimap_center
+    radius = max(config.overworld.minimap_radii)
+    image.mark(
+        (
+            (center_x - radius * height / width, center_y - radius),
+            (center_x + radius * height / width, center_y + radius),
+        )
+    )
     angles = np.linspace(0, 2 * np.pi, 360, endpoint=False)
     cx, cy = config.overworld.minimap_center[0] * width, config.overworld.minimap_center[1] * height
     points = []

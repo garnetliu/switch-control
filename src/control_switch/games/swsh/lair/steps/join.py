@@ -357,6 +357,7 @@ def _move_starter_cursor(sw: LairSession) -> None:
             lambda screen, before=current: screen.selected(rects) not in (before, -1),
             sw.config.wait.timeout,
             "选宝可梦的光标移一格",
+            interval=sw.config.wait.press_interval,
         )
     raise RuntimeError(
         f"选宝可梦的光标移了 {len(rects)} 次，还是没到第 {cast(int, sw.game.lock_pokemon_index) + 1} 只"

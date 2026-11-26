@@ -1,12 +1,13 @@
 """一次运行的状态：配置、当前步骤、这一局的截图、通知，以及取图、按键、读写内存的设备。"""
 
+from collections.abc import Sequence
 from typing import NamedTuple
 
 from control_switch.config import BaseConfig
 from control_switch.device import Controller, Devices, Memory, Screen
 from control_switch.notifier import Notifier
 from control_switch.settings import Settings
-from control_switch.types import Picture
+from control_switch.types import Picture, Rect
 
 
 class Frame(NamedTuple):
@@ -19,6 +20,8 @@ class Frame(NamedTuple):
     what: str
     # 截图：JPEG 字节，或者采集卡的 BGR 数组（存文件时才编码）
     data: Picture
+    # 在这张图上检查过的区域（和 ImageChecker.rects 是同一个列表，检查时往里加），存图时画出来
+    rects: Sequence[Rect] = ()
 
 
 class Session:

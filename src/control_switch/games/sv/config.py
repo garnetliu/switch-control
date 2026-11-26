@@ -69,11 +69,6 @@ class MenuConfig:
     party: Rect = ((0.045, 0.16), (0.30, 0.25))
     # 「野餐」在第几行（从 0 数）
     picnic_row = 2
-    # 按 X 之后几秒没出主菜单就再按一次
-    retry = 0.5
-    # 按一下方向键、按 A 之后等几秒再看画面
-    move_wait = 0.4
-    enter_interval = 0.5
 
 
 class PicnicConfig:
@@ -93,10 +88,8 @@ class PicnicConfig:
     # 开野餐最多等几秒，认出之后再等几秒（丢精灵球的动画期间人不能动）
     timeout = 120.0
     settle_wait = 8.0
-    # 收起野餐：按 Y 等确认框、按 A 等回到野外，每隔几秒重按，最多等几秒，最后再等几秒
-    leave_prompt_interval = 5.0
+    # 收起野餐：按 Y 等确认框、按 A 等回到野外，最多等几秒，最后再等几秒
     leave_prompt_timeout = 25.0
-    leave_overworld_interval = 1.2
     leave_overworld_timeout = 20.0
     leave_final_wait = 3.0
 

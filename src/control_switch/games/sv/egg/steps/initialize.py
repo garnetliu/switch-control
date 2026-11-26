@@ -1,4 +1,4 @@
-"""开始：退回野外，打开盒子看现在是拿蛋还是孵蛋，找到放亲代和带队的盒子，数蛋，存档。"""
+"""开始：退回野外，打开盒子看现在是拿蛋还是孵蛋，找到放亲代和带队的盒子，数蛋，要拿蛋就存档。"""
 
 import logging
 from collections.abc import Callable
@@ -16,7 +16,7 @@ def initialize(sw: EggSession) -> str:
     队伍是亲代和百变怪，或者第 1 只是火焰之躯、后面是蛋或者孵出来的，都不是抛 RuntimeError。
     找到放亲代和带队的盒子（锚点），放蛋的是它后面那个，记在 sw.egg_box；放蛋的盒子和队伍里的蛋数记在 sw.eggs。
     有蛋：孵蛋。没有蛋、队伍超过两只：放生。没有蛋、队伍是亲代和百变怪：拿蛋。
-    最后盒子停在放蛋的盒子上，退回野外，存一次档。
+    最后盒子停在放蛋的盒子上，退回野外；要拿蛋就存一次档。
     """
     config = sw.config
     # 每一局一个日志文件：新的一局从这里开始，换一个新文件
@@ -64,7 +64,8 @@ def initialize(sw: EggSession) -> str:
         step = "fetch"
         logging.info(f"拿蛋：放蛋的是盒子 {sw.egg_box}，没有蛋")
     actions.exit_to_overworld(sw)
-    actions.save_game(sw)
+    if step == "fetch":
+        actions.save_game(sw)
     return step
 
 
