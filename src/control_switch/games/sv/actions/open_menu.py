@@ -1,7 +1,7 @@
 """在野外按 X 打开主菜单，认到菜单为止。"""
 
 from control_switch.flow import press_until
-from control_switch.games.sv import screens
+from control_switch.games.sv import verify
 from control_switch.games.sv.session import SvSession
 
 
@@ -14,7 +14,7 @@ def open_menu(sw: SvSession) -> None:
     press_until(
         sw,
         lambda: sw.click("X", 0),
-        lambda s: screens.is_main_menu(s, config),
+        lambda s: verify.is_main_menu(s, config),
         "主菜单",
         interval=1,
     )

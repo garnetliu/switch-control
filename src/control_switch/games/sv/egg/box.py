@@ -10,7 +10,7 @@ from typing import NamedTuple, TypeVar
 
 from control_switch.flow import capture, press_until, wait_until
 from control_switch.games.sv import actions
-from control_switch.games.sv import screens as sv_screens
+from control_switch.games.sv import verify as sv_screens
 from control_switch.vision import ImageChecker
 
 from . import screens
@@ -56,11 +56,11 @@ def _read_stable(sw: EggSession, read: Callable[[ImageChecker], T | None], what:
 
     def stable(image: ImageChecker) -> bool:
         values.append(read(image))
-        last = values[-sw.config.stable_frames:]
+        last = values[-sw.config.stable_frames :]
         return (
-                len(last) == sw.config.stable_frames
-                and last[0] is not None
-                and all(value == last[0] for value in last)
+            len(last) == sw.config.stable_frames
+            and last[0] is not None
+            and all(value == last[0] for value in last)
         )
 
     wait_until(sw, stable, what)
@@ -196,10 +196,10 @@ def count_box_eggs(sw: EggSession) -> int:
     eggs = screens.box_eggs(image, config)
     cursor = screens.box_cursor(image, config)
     if (
-            cursor is not None
-            and cursor[0] == "slots"
-            and (cursor[1], cursor[2]) not in eggs
-            and screens.panel_name(image, config).startswith("蛋")
+        cursor is not None
+        and cursor[0] == "slots"
+        and (cursor[1], cursor[2]) not in eggs
+        and screens.panel_name(image, config).startswith("蛋")
     ):
         return len(eggs) + 1
     return len(eggs)

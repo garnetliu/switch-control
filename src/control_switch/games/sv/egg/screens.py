@@ -10,7 +10,7 @@ from functools import cache
 import cv2
 import numpy as np
 
-from control_switch.games.sv.screens import (
+from control_switch.games.sv.verify import (
     gradient_arrow,
     has_dialog_box,
     is_dialog,

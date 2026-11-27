@@ -1,7 +1,6 @@
 
-from control_switch.flow import capture, press_until, wait_until
-
-from control_switch.games.sv import screens
+from control_switch.flow import press_until
+from control_switch.games.sv import verify
 from control_switch.games.sv.session import SvSession
 
 
@@ -14,6 +13,6 @@ def menu_to_option(sw: SvSession):
     press_until(
         sw,
         lambda: sw.click("A", 0),
-        lambda s: screens.has_dialog_box(s, config),
+        lambda s: verify.has_dialog_box(s, config),
         "盒子的操作菜单",
     )

@@ -1,13 +1,10 @@
 """孵蛋刷闪用的 Session：带着孵蛋过程中的状态。"""
 
-import time
-from collections.abc import Sequence
-
 from control_switch.device import Devices
 from control_switch.games.sv.session import SvSession
 from control_switch.settings import Settings
 
-from .config import EggConfig, Press, Push
+from .config import EggConfig
 
 
 class EggSession(SvSession):
@@ -36,17 +33,3 @@ class EggSession(SvSession):
         self.save_pending = False
         # 开了几次野餐，写日志用
         self.picnics = 0
-
-    def push(self, side: str, x: float, y: float, seconds: float) -> None:
-        """摇杆推 seconds 秒再回中。x、y 是占满推的比例，-1 到 1，y 正数向上。"""
-        full = self.controller.STICK_MAX
-        self.stick(side, round(full * x), round(full * y), seconds)
-
-    def follow(self, route: Sequence[Push | Press]) -> None:
-        """按路线走：Push 是左摇杆推一下，Press 是按一下键，每一步之后等 wait 秒。"""
-        for step in route:
-            if isinstance(step, Push):
-                self.push("LEFT", step.x, step.y, step.seconds)
-                time.sleep(step.wait)
-            else:
-                self.click(step.button, step.wait)

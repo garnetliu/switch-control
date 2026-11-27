@@ -4,7 +4,7 @@ import logging
 import time
 
 from control_switch.flow import capture
-from control_switch.games.sv import screens
+from control_switch.games.sv import verify
 from control_switch.games.sv.session import SvSession
 
 
@@ -24,21 +24,21 @@ def save_game(sw: SvSession) -> None:
         now = time.monotonic()
         if confirmed_at is not None and now - confirmed_at > config.save.confirm_timeout:
             confirmed_at = None
-        if screens.is_overworld(image, config):
+        if verify.is_overworld(image, config):
             if saved:
                 return
             sw.click("X", config.save.press_wait)
-        elif screens.is_prompt(image, config):
+        elif verify.is_prompt(image, config):
             sw.click("A", config.save.press_wait)
             confirmed_at = now
-        elif screens.is_dialog(image, config):
+        elif verify.is_dialog(image, config):
             sw.click("B", config.save.press_wait)
             saved = True
             confirmed_at = None
-        elif screens.has_dialog_box(image, config):
+        elif verify.has_dialog_box(image, config):
             # 字还在一个个出来，等它出完
             time.sleep(config.wait.interval)
-        elif screens.is_main_menu(image, config):
+        elif verify.is_main_menu(image, config):
             if confirmed_at is None:
                 sw.click("B" if saved else "R", config.save.press_wait)
             else:

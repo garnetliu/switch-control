@@ -36,25 +36,6 @@ class GradientArrowConfig:
     cyan_min = 0.0001
 
 
-class OverworldConfig:
-    """认野外。"""
-
-    # 小地图外圈：圆心和半径（半径按画面高度的比例），圈上按青、绿、黄分段着色。
-    # 三种颜色在圈上各占至少 minimap_ratio 才算野外。只看一种颜色不行：盒子画面那里是青色，
-    # 野餐画面是绿色；只看地图里的土黄色也不行，沙漠地形孵化动画时整片地面都是土黄色
-    minimap_center = (0.90625, 0.8333)
-    minimap_radii = (0.124, 0.128)
-    minimap_colors: tuple[tuple[Hsv, Hsv], ...] = (
-        ((80, 100, 150), (105, 255, 255)),
-        ((40, 100, 150), (80, 255, 255)),
-        ((20, 100, 150), (35, 255, 255)),
-    )
-    minimap_ratio = 0.1
-    # 退回野外：最多按几次 B，每次之后等几秒
-    exit_presses = 10
-    exit_wait = 0.2
-
-
 class MenuConfig:
     """主菜单（按 X）。"""
 
@@ -69,29 +50,6 @@ class MenuConfig:
     party: Rect = ((0.045, 0.16), (0.30, 0.25))
     # 「野餐」在第几行（从 0 数）
     picnic_row = 2
-
-
-class PicnicConfig:
-    """野餐：认野餐的画面，开野餐、收起野餐。"""
-
-    # 左下角三个白色按键图标（B、减号、Y）的位置，白色像素占比超过 ratio
-    icons: tuple[Rect, ...] = (
-        ((0.024, 0.702), (0.048, 0.747)),
-        ((0.024, 0.866), (0.048, 0.911)),
-        ((0.024, 0.917), (0.048, 0.962)),
-    )
-    white: tuple[Hsv, Hsv] = ((0, 0, 200), (180, 40, 255))
-    ratio = 0.15
-    # 图标底下是暗色的标签：暗色像素也要占一定比例，不然桌布上白色的餐巾、碗沿会被当成按键图标
-    dark: tuple[Hsv, Hsv] = ((0, 0, 0), (180, 255, 90))
-    dark_ratio = 0.3
-    # 开野餐最多等几秒，认出之后再等几秒（丢精灵球的动画期间人不能动）
-    timeout = 120.0
-    settle_wait = 8.0
-    # 收起野餐：按 Y 等确认框、按 A 等回到野外，最多等几秒，最后再等几秒
-    leave_prompt_timeout = 25.0
-    leave_overworld_timeout = 20.0
-    leave_final_wait = 3.0
 
 
 class SaveConfig:
@@ -122,8 +80,6 @@ class SvConfig(BaseConfig):
         super().__init__()
         self.dialog = DialogConfig()
         self.gradient_arrow = GradientArrowConfig()
-        self.overworld = OverworldConfig()
         self.menu = MenuConfig()
-        self.picnic = PicnicConfig()
         self.save = SaveConfig()
         self.box = BoxConfig()

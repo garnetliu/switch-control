@@ -1,5 +1,6 @@
 """一次运行的状态：配置、当前步骤、这一局的截图、通知，以及取图、按键、读写内存的设备。"""
 
+import time
 from collections.abc import Sequence
 from typing import NamedTuple
 
@@ -7,7 +8,7 @@ from control_switch.config import BaseConfig
 from control_switch.device import Controller, Devices, Memory, Screen
 from control_switch.notifier import Notifier
 from control_switch.settings import Settings
-from control_switch.types import Picture, Rect
+from control_switch.types import Picture, Press, Push, Rect
 
 
 class Frame(NamedTuple):
@@ -72,6 +73,20 @@ class Session:
 
     def release_stick(self, side: str) -> None:
         self.controller.release_stick(side)
+
+    def push(self, side: str, x: float, y: float, seconds: float) -> None:
+        """摇杆推 seconds 秒再回中。x、y 是占满推的比例，-1 到 1，y 正数向上。"""
+        full = self.controller.STICK_MAX
+        self.stick(side, round(full * x), round(full * y), seconds)
+
+    def follow(self, route: Sequence[Push | Press]) -> None:
+        """按路线走：Push 是左摇杆推一下，Press 是按一下键，每一步之后等 wait 秒。"""
+        for step in route:
+            if isinstance(step, Push):
+                self.push("LEFT", step.x, step.y, step.seconds)
+                time.sleep(step.wait)
+            else:
+                self.click(step.button, step.wait)
 
     def pixel_peek(self) -> Picture:
         return self.screen.pixel_peek()

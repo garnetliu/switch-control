@@ -3,7 +3,7 @@
 import logging
 
 from control_switch.flow import wait_until
-from control_switch.games.sv import screens
+from control_switch.games.sv import verify
 from control_switch.games.sv.session import SvSession
 
 from .menu_to_row import menu_to_row
@@ -18,7 +18,7 @@ def open_box(sw: SvSession) -> None:
     menu_to_row(sw, config.box.menu_row)
     wait_until(
         sw,
-        lambda s: screens.box_title(s, config) is not None,
+        lambda s: verify.box_title(s, config) is not None,
         "盒子画面",
         timeout=config.box.open_timeout,
     )
