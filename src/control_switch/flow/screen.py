@@ -68,11 +68,11 @@ def _draw_rects(frame: Frame) -> np.ndarray:
 
 
 def wait_until(
-    sw: Session,
-    condition: Callable[[ImageChecker], bool],
-    timeout: float,
-    what: str,
-    interval: float = 0.0,
+        sw: Session,
+        condition: Callable[[ImageChecker], bool],
+        what: str,
+        interval: float = 0.0,
+        timeout: float=60.0,
 ) -> ImageChecker:
     """一直截图，直到 condition(截图) 为真，返回那张截图。
 
@@ -91,12 +91,12 @@ def wait_until(
 
 
 def press_until(
-    sw: Session,
-    action: Callable[[], None],
-    condition: Callable[[ImageChecker], bool],
-    timeout: float,
-    what: str,
-    interval: float = 0.0,
+        sw: Session,
+        action: Callable[[], None],
+        condition: Callable[[ImageChecker], bool],
+        what: str,
+        interval: float = 0.3,
+        timeout: float = 60.0,
 ) -> ImageChecker:
     """一直做 action（按键、推摇杆），直到 condition(截图) 为真，返回那张截图。
 

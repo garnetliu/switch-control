@@ -26,17 +26,13 @@ def initialize(sw: LairSession) -> str:
             menu_last_item(screen, rects.menu_search, dialog=rects.white_center_line1)
             == "还是先算了"
         ),
-        sw.config.wait.timeout,
         "开场白的菜单",
-        interval=sw.config.wait.press_interval,
     )
     press_until(
         sw,
         lambda: sw.click("B", 0),
         lambda screen: not screen.read_text(rects.white_center_line1),
-        sw.config.wait.timeout,
         "对话框消失",
-        interval=sw.config.wait.press_interval,
     )
     # 罚款在上面的对话里已经付过了，这时读到的是付完之后的数量
     sw.game.dynite_ore = sw.ore_count()

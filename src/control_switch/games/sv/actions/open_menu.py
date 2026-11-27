@@ -15,7 +15,6 @@ def open_menu(sw: SvSession) -> None:
         sw,
         lambda: sw.click("X", 0),
         lambda s: screens.is_main_menu(s, config),
-        sw.config.wait.timeout,
         "主菜单",
         interval=1,
     )

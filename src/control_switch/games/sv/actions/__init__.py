@@ -11,6 +11,7 @@ from .open_box import open_box
 from .open_menu import open_menu
 from .open_picnic import open_picnic
 from .save_game import save_game
+from .menu_to_option import menu_to_option
 
 __all__ = [
     "close_picnic",
@@ -20,4 +21,5 @@ __all__ = [
     "open_menu",
     "open_picnic",
     "save_game",
+    "menu_to_option",
 ]

@@ -16,16 +16,14 @@ def close_picnic(sw: SvSession) -> None:
         sw,
         lambda: sw.click("Y", 0),
         lambda s: screens.is_prompt(s, config),
-        config.picnic.leave_prompt_timeout,
         "结束野餐的确认",
-        interval=sw.config.wait.press_interval,
+        timeout=config.picnic.leave_prompt_timeout,
     )
     press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda s: screens.is_overworld(s, config),
-        config.picnic.leave_overworld_timeout,
         "回到野外",
-        interval=sw.config.wait.press_interval,
+        timeout=config.picnic.leave_overworld_timeout,
     )
     time.sleep(config.picnic.leave_final_wait)

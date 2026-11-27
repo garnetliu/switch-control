@@ -29,7 +29,10 @@ def open_picnic(sw: SvSession) -> None:
             menu_to_row(sw, config.menu.picnic_row)
             # 进野餐的动画里画面还像野外，不能再按 X，等野餐的画面出来
             wait_until(
-                sw, lambda s: screens.is_picnic(s, config), config.picnic.timeout, "野餐的画面"
+                sw,
+                lambda s: screens.is_picnic(s, config),
+                "野餐的画面",
+                timeout=config.picnic.timeout,
             )
             break
         else:

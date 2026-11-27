@@ -61,7 +61,6 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
     wait_until(
         sw,
         lambda screen: screen.has_text(sw.config.rects.catch_option, "捕捉"),
-        sw.config.wait.timeout,
         "「捕捉 / 不捕捉」",
     )
     logging.info(f"抓第 {sw.game.num_caught + 1} 只")
@@ -69,15 +68,12 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not screen.has_text(sw.config.rects.catch_option, "捕捉"),
-        sw.config.wait.timeout,
         "「捕捉」消失",
-        interval=sw.config.wait.press_interval,
     )
 
     image = wait_until(
         sw,
         lambda screen: screen.has_text(sw.config.rects.ball_use, "使用"),
-        sw.config.wait.timeout,
         "选球界面",
     )
 
@@ -92,9 +88,7 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
             lambda screen, before=name: (
                 screen.read_text(sw.config.rects.ball_name).strip() not in ("", before)
             ),
-            sw.config.wait.timeout,
             "换到左边那种球",
-            interval=sw.config.wait.press_interval,
         )
     else:
         name = image.read_text(sw.config.rects.ball_name).strip()
@@ -110,9 +104,7 @@ def _catch_pokemon(sw: LairSession, boss: bool) -> None:
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not screen.read_text(sw.config.rects.ball_name).strip(),
-        sw.config.wait.timeout,
         "扔出球，选球界面消失",
-        interval=sw.config.wait.press_interval,
     )
     sw.game.num_caught += 1
 
@@ -122,7 +114,6 @@ def _swap_pokemon(sw: LairSession, take: bool) -> None:
     image = wait_until(
         sw,
         lambda screen: screen.has_text(sw.config.rects.swap_options[0], "替换"),
-        sw.config.wait.timeout,
         "换不换的界面",
     )
 
@@ -185,9 +176,7 @@ def _apply_swap(sw: LairSession, caught_name: str, take: bool) -> None:
         sw,
         lambda: sw.click("A" if take else "B", 0),
         lambda screen: screen.is_black(),
-        sw.config.wait.timeout,
         "换不换之后的黑屏",
-        interval=sw.config.wait.press_interval,
     )
     if take:
         sw.game.team[0] = (caught_name, 1.0)

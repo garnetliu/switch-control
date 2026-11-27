@@ -25,30 +25,28 @@ def restart_to_title(sw: Session) -> None:
     # 已经在 HOME 上就不能再按 HOME：HOME 上按 HOME 是回到游戏（真机上因此重启失败过）
     if not home_shown(sw, capture(sw, "是不是在 HOME 菜单")):
         sw.click("HOME", 0)
-        wait_until(sw, lambda screen: home_shown(sw, screen), sw.config.wait.timeout, "HOME 菜单")
+        wait_until(sw, lambda screen: home_shown(sw, screen), "HOME 菜单")
     # HOME 菜单刚出来时按的 Y 会被吞掉（真机上出现过，画面停在 HOME），所以一直按到确认框出来
     press_until(
         sw,
         lambda: sw.click("Y", 0),
         lambda screen: screen.has_text(restart.close_dialog, "将关闭软件"),
-        sw.config.wait.timeout,
         "切换用户前关闭软件的确认框",
-        interval=sw.config.wait.press_interval,
     )
     sw.click("A", 0)
     wait_until(
         sw,
         lambda screen: screen.has_text(restart.user_picker, "由谁来游玩软件"),
-        sw.config.restart.load_timeout,
         "选用户的界面",
+        timeout=sw.config.restart.load_timeout,
     )
     sw.click("A", 0)
     logging.info("游戏已关闭，重新启动")
     wait_until(
         sw,
         lambda screen: _colorful(sw, screen),
-        sw.config.restart.boot_timeout,
         "开场的彩色画面",
+        timeout=sw.config.restart.boot_timeout,
     )
 
 

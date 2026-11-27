@@ -76,9 +76,7 @@ def _select_target(sw: LairSession):
                 menu_last_item(screen, rects.menu_search, dialog=rects.white_center_line1)
                 == "不指定"
             ),
-            sw.config.wait.timeout,
             "传说菜单",
-            interval=sw.config.wait.press_interval,
         )
         wanted = "不指定" if boss is None else bosses[boss].name()
         if boss != sw.config.boss:
@@ -101,16 +99,13 @@ def _select_target(sw: LairSession):
         sw,
         lambda: sw.click("A", 0),
         lambda screen: screen.is_black(),
-        sw.config.wait.timeout,
         "保存时画面变黑",
-        interval=sw.config.wait.press_interval,
     )
     # 保存要几秒。大厅里选「发起单人挑战！」，队友由电脑来当
     solo = "发起单人挑战！"
     image = wait_until(
         sw,
         lambda screen: menu_last_item(screen, rects.lobby_menu, 1) == solo,
-        sw.config.wait.timeout,
         "极巨大冒险的大厅",
     )
     move_menu_option(
@@ -135,7 +130,6 @@ def _select_starter(sw: LairSession, boss: str | None) -> bool:
     wait_until(
         sw,
         lambda screen: screen.has_text(sw.config.rects.starter_hint, "按顺序选择"),
-        sw.config.wait.timeout,
         "选宝可梦的界面",
     )
 
@@ -175,7 +169,7 @@ def _check_map_type(sw: LairSession) -> None:
 
     读到的类型和 seed 算出来的不一样，按画面上的类型、首发不变重新选路线。
     """
-    wait_until(sw, lambda screen: not screen.is_black(), sw.config.wait.timeout, "开场黑屏结束")
+    wait_until(sw, lambda screen: not screen.is_black(), "开场黑屏结束")
     reader = MapTypeReader(sw)
     deadline = time.monotonic() + sw.config.wait.timeout
     seen: str | None = None
@@ -344,7 +338,6 @@ def _move_starter_cursor(sw: LairSession) -> None:
     image = wait_until(
         sw,
         lambda screen: screen.selected(rects) != -1,
-        sw.config.wait.timeout,
         "选宝可梦的光标",
     )
     for _ in range(len(rects)):
@@ -355,9 +348,7 @@ def _move_starter_cursor(sw: LairSession) -> None:
             sw,
             lambda: sw.click("DDOWN", 0),
             lambda screen, before=current: screen.selected(rects) not in (before, -1),
-            sw.config.wait.timeout,
             "选宝可梦的光标移一格",
-            interval=sw.config.wait.press_interval,
         )
     raise RuntimeError(
         f"选宝可梦的光标移了 {len(rects)} 次，还是没到第 {cast(int, sw.game.lock_pokemon_index) + 1} 只"

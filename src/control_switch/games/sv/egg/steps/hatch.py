@@ -110,9 +110,9 @@ def _do_egg_cycle_motion(sw: EggSession) -> None:
         wait_until(
             sw,
             lambda s: screens.is_dialog(s, config),
-            config.cycle_timeout,
             "孵化的对话",
             interval=config.cycle_interval,
+            timeout=config.cycle_timeout,
         )
     finally:
         sw.release("LSTICK")
@@ -129,7 +129,6 @@ def _handle_egg_hatching(sw: EggSession) -> None:
         sw,
         lambda: sw.click("A", 0),
         lambda s: screens.is_overworld(s, config),
-        config.hatch_end_timeout,
         "孵化结束回到野外",
-        interval=sw.config.wait.press_interval,
+        timeout=config.hatch_end_timeout,
     )

@@ -63,7 +63,7 @@ def _read_stable(sw: EggSession, read: Callable[[ImageChecker], T | None], what:
                 and all(value == last[0] for value in last)
         )
 
-    wait_until(sw, stable, sw.config.wait.timeout, what)
+    wait_until(sw, stable, what)
     value = values[-1]
     assert value is not None
     return value
@@ -109,9 +109,7 @@ def move_cursor(sw: EggSession, place: str, row: int, col: int) -> None:
             sw,
             lambda key=button: sw.click(key, 0),
             lambda s, last=current: screens.box_cursor(s, config) != last,
-            config.wait.timeout,
             "盒子的光标移一格",
-            interval=sw.config.wait.press_interval,
         )
         current = screens.box_cursor(image, config)
     if current != target:
@@ -166,9 +164,8 @@ def _read_best(sw: EggSession) -> int | None:
                 sw,
                 lambda: sw.click("PLUS", 0),
                 lambda s: screens.is_judge_page(s, config),
-                config.judge_timeout,
                 "评定页",
-                interval=sw.config.wait.press_interval,
+                timeout=config.judge_timeout,
             )
         except TimeoutError:
             return None
@@ -184,9 +181,7 @@ def read_ability(sw: EggSession) -> str:
             sw,
             lambda: sw.click("PLUS", 0),
             lambda s: screens.is_stats_page(s, config),
-            config.wait.timeout,
             "面板的能力页",
-            interval=sw.config.wait.press_interval,
         )
     return screens.panel_ability(image, config)
 
@@ -250,9 +245,7 @@ def _hold(sw: EggSession, button: str) -> None:
         sw,
         lambda: sw.click(button, 0),
         lambda s: screens.is_box_selecting(s, config),
-        sw.config.wait.timeout,
         "盒子的选择模式",
-        interval=sw.config.wait.press_interval,
     )
 
 
@@ -263,9 +256,7 @@ def _drop(sw: EggSession) -> None:
         sw,
         lambda: sw.click("A", 0),
         lambda s: not screens.is_box_selecting(s, config),
-        sw.config.wait.timeout,
         "放下宝可梦",
-        interval=sw.config.wait.press_interval,
     )
 
 
@@ -276,9 +267,7 @@ def _cancel(sw: EggSession) -> None:
         sw,
         lambda: sw.click("B", 0),
         lambda s: not screens.is_box_selecting(s, config),
-        sw.config.wait.timeout,
         "取消选择",
-        interval=sw.config.wait.press_interval,
     )
 
 
@@ -296,9 +285,7 @@ def _hold_column(sw: EggSession, source: Slot) -> None:
         sw,
         lambda: sw.click("DDOWN", 0),
         lambda s: screens.box_cursor(s, config) == bottom,
-        config.wait.timeout,
         "选到一列的最下面",
-        interval=sw.config.wait.press_interval,
     )
     # 这一下 A 拿没拿起来看不出来，后面移光标时移不过去会取消再来
     sw.click("A", 0)
@@ -354,9 +341,7 @@ def turn_box(sw: EggSession, button: str) -> int:
         sw,
         lambda: sw.click(button, 0),
         lambda s: sv_screens.box_title(s, config) == target,
-        config.wait.timeout,
         f"转到盒子 {target}",
-        interval=sw.config.wait.press_interval,
     )
     return target
 
@@ -401,15 +386,12 @@ def _choose_operation(sw: EggSession, target: int) -> None:
         sw,
         lambda: sw.click("A", 0),
         lambda s: screens.has_dialog_box(s, config),
-        sw.config.wait.timeout,
         "盒子的操作菜单",
-        interval=sw.config.wait.press_interval,
     )
     # 往下移到「放生」：每按一下看选中的行变了没有，没变（菜单刚出来时按键会被吞）就再按
     image = wait_until(
         sw,
         lambda s: screens.operation_row(s, config) != -1,
-        config.wait.timeout,
         "操作菜单选中的一项",
     )
     current = screens.operation_row(image, config)
@@ -419,9 +401,7 @@ def _choose_operation(sw: EggSession, target: int) -> None:
             sw,
             lambda key=button: sw.click(key, 0),
             lambda s, last=current: screens.operation_row(s, config) not in (last, -1),
-            config.wait.timeout,
             "操作菜单的光标移一格",
-            interval=sw.config.wait.press_interval,
         )
         current = screens.operation_row(image, config)
 
@@ -452,9 +432,7 @@ def move_to_next_box(sw: EggSession, source: Slot) -> None:
         sw,
         lambda: sw.click("A", 0),
         lambda s: screens.is_box_selecting(s, config),
-        config.wait.timeout,
         "盒子的选择模式",
-        interval=sw.config.wait.press_interval,
     )
     turn_box(sw, "R")
     move_cursor(sw, *target)
@@ -482,45 +460,36 @@ def release_one(sw: EggSession) -> None:
         sw,
         lambda: sw.click("A", 0),
         lambda s: screens.is_prompt(s, config),
-        config.wait.timeout,
         "放生确认",
-        interval=0.5
+        interval=0.5,
     )
     # 确认框的光标默认在「否」，往上一格选「是」
     press_until(
         sw,
         lambda: sw.click("DUP", 0),
         lambda s: screens.gradient_arrow(s, config.release_yes_area, config),
-        config.wait.timeout,
         "放生确认选中「是」",
-        interval=sw.config.wait.press_interval,
     )
     press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda s: not screens.is_prompt(s, config),
-        config.wait.timeout,
         "放生后的对话",
-        interval=sw.config.wait.press_interval,
     )
     wait_until(
         sw,
         lambda s: screens.is_dialog(s, config),
-        config.wait.timeout,
         f"放生{name}对话完成",
     )
     press_until(
         sw,
         lambda: sw.click("A", 0),
         lambda s: not screens.has_dialog_box(s, config),
-        sw.config.wait.timeout,
         "放生后的盒子",
-        interval=sw.config.wait.press_interval,
     )
     wait_until(
         sw,
         lambda s: not screens.panel_present(s, config),
-        config.wait.timeout,
         f"放生{name}之后格子空了",
     )
     logging.info(f"放生了{name}")

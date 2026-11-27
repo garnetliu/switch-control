@@ -17,5 +17,8 @@ def open_box(sw: SvSession) -> None:
     open_menu(sw)
     menu_to_row(sw, config.box.menu_row)
     wait_until(
-        sw, lambda s: screens.box_title(s, config) is not None, config.box.open_timeout, "盒子画面"
+        sw,
+        lambda s: screens.box_title(s, config) is not None,
+        "盒子画面",
+        timeout=config.box.open_timeout,
     )

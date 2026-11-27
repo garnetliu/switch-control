@@ -17,6 +17,12 @@ def release(sw: EggSession) -> str:
     """
     config = sw.config
     box.open_box(sw)
+
+
+
+    for agg in range(config.max_eggs):
+        actions.menu_to_option(sw)
+
     for row in range(config.box_rows):
         columns = range(config.box_columns)
         for col in columns if row % 2 == 0 else reversed(columns):

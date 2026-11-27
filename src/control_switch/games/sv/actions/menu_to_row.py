@@ -17,9 +17,7 @@ def menu_to_row(sw: SvSession, row: int) -> None:
             sw,
             lambda: sw.click("DRIGHT", 0),
             lambda s: screens.menu_row(s, config) != -1,
-            sw.config.wait.timeout,
             "主菜单光标到右边",
-            interval=sw.config.wait.press_interval,
         )
     current = screens.menu_row(image, config)
     while current != row:
@@ -29,9 +27,7 @@ def menu_to_row(sw: SvSession, row: int) -> None:
             sw,
             lambda key=button: sw.click(key, 0),
             lambda s, last=before: screens.menu_row(s, config) not in (last, -1),
-            sw.config.wait.timeout,
             "主菜单的光标移一格",
-            interval=sw.config.wait.press_interval,
         )
         current = screens.menu_row(image, config)
     # A 有时被吞掉（菜单还在），隔一会儿没进去就再按一次
@@ -39,7 +35,5 @@ def menu_to_row(sw: SvSession, row: int) -> None:
         sw,
         lambda: sw.click("A", 0),
         lambda s: not screens.is_main_menu(s, config),
-        sw.config.wait.timeout,
         "进主菜单的这一行",
-        interval=sw.config.wait.press_interval,
     )

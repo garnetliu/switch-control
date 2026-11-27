@@ -45,7 +45,7 @@ def fetch(sw: EggSession) -> str:
     return "hatch"
 
 
-def _to_picnic_party(sw: EggSession) -> None:
+def _to_picnic_party(sw: EggSession) ->None:
     """打开盒子看队伍前两只里有没有百变怪：没有就是孵蛋队伍（放生过来的），换回野餐队伍。最后退出盒子。"""
     config = sw.config
     box.open_box(sw)
@@ -197,8 +197,8 @@ def _selected_recipe_cell(sw: EggSession) -> int:
         image = wait_until(
             sw,
             lambda s: screens.selected_recipe_cell(s, config) >= 0,
-            config.recipe_arrow_timeout,
             "食谱列表里选中的箭头",
+            timeout=config.recipe_arrow_timeout,
         )
     except TimeoutError as error:
         raise RuntimeError("食谱列表里看不到选中食谱的箭头") from error
@@ -236,8 +236,8 @@ def _run_sandwich_maker(sw: EggSession) -> None:
         wait_until(
             sw,
             lambda s: screens.find_hand(s, "free", config.hand_initial_box, config) is not None,
-            config.hand_first_timeout,
             "做三明治时最开始的手",
+            timeout=config.hand_first_timeout,
         )
     except TimeoutError as error:
         raise RuntimeError("做三明治一开始就没找到手") from error
@@ -293,9 +293,8 @@ def _finish_sandwich_eating(sw: EggSession) -> None:
             sw,
             lambda: sw.click("A", 0),
             lambda s: screens.is_picnic(s, config),
-            max(deadline - time.monotonic(), 0.0),
             "吃完三明治回到野餐",
-            interval=sw.config.wait.press_interval,
+            timeout=max(deadline - time.monotonic(), 0.0),
         )
         time.sleep(config.eat_settle_wait)
         if screens.is_picnic(capture(sw, "吃完了吗"), config):

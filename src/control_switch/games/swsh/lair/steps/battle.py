@@ -144,9 +144,7 @@ def _choose_move(sw: LairSession, war: War) -> None:
         sw,
         lambda: sw.click("A", 0),
         lambda screen: _move_cursor(sw, screen) >= 0,
-        sw.config.wait.timeout,
         "招式列表",
-        interval=sw.config.wait.press_interval,
     )
     _log_turn(sw, war)
     # 这回合试过、被封住用不了的招式
@@ -171,7 +169,6 @@ def _choose_move(sw: LairSession, war: War) -> None:
         image = wait_until(
             sw,
             lambda screen: not _move_blocked(sw, screen) and _move_cursor(sw, screen) >= 0,
-            sw.config.wait.timeout,
             "回到招式列表",
         )
     war.use_move(best)
@@ -230,9 +227,7 @@ def _use_move(sw: LairSession) -> bool:
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not screen.has_text(sw.config.rects.move_hint, "招式说明"),
-        sw.config.wait.timeout,
         "招式列表消失",
-        interval=sw.config.wait.press_interval,
     )
 
     def used(screen: ImageChecker) -> bool:
@@ -244,7 +239,6 @@ def _use_move(sw: LairSession) -> bool:
         lambda screen: cast(
             bool, _move_blocked(sw, screen) or _target_cursors(sw, screen) or used(screen)
         ),
-        sw.config.wait.timeout,
         "无法使出、选目标的界面或者出招",
     )
     if _move_blocked(sw, image):
@@ -258,9 +252,7 @@ def _use_move(sw: LairSession) -> bool:
         sw,
         lambda: sw.click("A", 0),
         used,
-        sw.config.wait.timeout,
         "出招",
-        interval=sw.config.wait.press_interval,
     )
     return True
 
@@ -315,9 +307,7 @@ def _move_target_cursor(sw: LairSession) -> None:
             sw,
             lambda key=button: sw.click(key, 0),
             lambda screen, last=before: _target_cursor(sw, screen) not in (last, -1),
-            sw.config.wait.timeout,
             "选目标的光标移动",
-            interval=sw.config.wait.press_interval,
         )
 
 
@@ -327,7 +317,6 @@ def _dynamax(sw: LairSession) -> ImageChecker:
     wait_until(
         sw,
         lambda screen: _marker_shown(sw, screen, sw.config.rects.dynamax_cursor),
-        sw.config.wait.timeout,
         "光标移到极巨化按钮上",
     )
     # 按键偶尔会丢：光标还停在极巨化按钮上就再按。光标一离开按钮就不能再按了，招式列表的光标要过一会儿才画出来，
@@ -336,14 +325,11 @@ def _dynamax(sw: LairSession) -> ImageChecker:
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not _marker_shown(sw, screen, sw.config.rects.dynamax_cursor),
-        sw.config.wait.timeout,
         "光标离开极巨化按钮",
-        interval=sw.config.wait.press_interval,
     )
     image = wait_until(
         sw,
         lambda screen: _move_cursor(sw, screen) >= 0,
-        sw.config.wait.timeout,
         "换成极巨招式",
     )
     logging.info("极巨化")
@@ -372,9 +358,7 @@ def _move_cursor_to(sw: LairSession, image: ImageChecker, target: int) -> None:
             sw,
             lambda: sw.stick("LEFT", 0, -sw.controller.STICK_MAX, sw.config.wait.stick_tick),
             lambda screen, before=current: _move_cursor(sw, screen) not in (before, -1),
-            sw.config.wait.timeout,
             "招式光标移动",
-            interval=sw.config.wait.press_interval,
         )
     raise RuntimeError(f"招式光标移了 4 次，还是没到第 {target + 1} 行")
 
@@ -390,7 +374,6 @@ def _storm(sw: LairSession, war: War) -> bool:
     wait_until(
         sw,
         lambda screen: not screen.has_text(sw.config.rects.black_full_line1, "倒下了"),
-        sw.config.wait.timeout,
         "「倒下了」消失",
     )
     return lives <= 0
@@ -419,9 +402,7 @@ def _cheer(sw: LairSession) -> None:
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not screen.has_text(sw.config.rects.battle_menu_text, "助威"),
-        sw.config.wait.timeout,
         "助威菜单消失",
-        interval=sw.config.wait.press_interval,
     )
 
 

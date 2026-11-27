@@ -40,7 +40,6 @@ def _check_shiny(sw: LairSession) -> tuple[list[int], list[float]]:
     wait_until(
         sw,
         lambda screen: screen.has_text(sw.config.rects.result_title, "选1只要带回去的宝可梦"),
-        sw.config.wait.timeout,
         "带走宝可梦的界面",
     )
     values = _find_shiny(sw)
@@ -50,9 +49,7 @@ def _check_shiny(sw: LairSession) -> tuple[list[int], list[float]]:
         sw,
         lambda: sw.click("B", 0),
         lambda screen: screen.has_text(sw.config.rects.result_title, "选1只要带回去的宝可梦"),
-        sw.config.wait.timeout,
         "回到带走宝可梦的界面",
-        interval=sw.config.wait.press_interval,
     )
     _save_list_screenshots(sw, results)
     return [index for index, shiny in enumerate(results) if shiny], values
@@ -80,7 +77,6 @@ def _save_list_screenshots(sw: LairSession, results: list[bool]) -> None:
                     )
                     > sw.config.result_preview_ratio
                 ),
-                sw.config.wait.timeout,
                 "列表左边的宝可梦",
             )
             _save_screenshot(sw, image, "list", shiny)
@@ -271,9 +267,7 @@ def _move_list_cursor(sw: LairSession, index: int) -> None:
         sw,
         lambda: sw.stick("LEFT", 0, direction * sw.controller.STICK_MAX, sw.config.wait.stick_tick),
         lambda screen: screen.selected(rows) == index,
-        sw.config.wait.timeout,
         f"列表光标移到第 {index + 1} 只",
-        interval=sw.config.wait.press_interval,
     )
 
 
@@ -285,9 +279,7 @@ def _find_shiny(sw: LairSession) -> list[float]:
         sw,
         lambda: sw.click("A", 0),
         lambda screen: screen.has_text(rects.result_view_ability, "查看能力"),
-        sw.config.wait.timeout,
         "「选择 / 查看能力 / 取消」",
-        interval=sw.config.wait.press_interval,
     )
     move_menu_option(
         sw,
@@ -301,9 +293,7 @@ def _find_shiny(sw: LairSession) -> list[float]:
         sw,
         lambda: sw.click("A", 0),
         lambda screen: not screen.has_text(rects.result_view_ability, "查看能力"),
-        sw.config.wait.timeout,
         "进资料页",
-        interval=sw.config.wait.press_interval,
     )
     # 日志里的名字按抓到的顺序从这一局的记录里取；数据里的中文名可能和游戏里不一样，不拿来比画面
     names = [sw.data.pokemon_object(name_id).name(sw.config.language) for name_id in sw.game.caught]
@@ -312,7 +302,6 @@ def _find_shiny(sw: LairSession) -> list[float]:
         image = wait_until(
             sw,
             lambda screen: bool(_summary_name(sw, screen)),
-            sw.config.wait.timeout,
             f"资料页上第 {index + 1} 只（{name}）的名字",
         )
         shown = _summary_name(sw, image)
@@ -325,7 +314,6 @@ def _find_shiny(sw: LairSession) -> list[float]:
                 lambda screen: (
                     screen.edge_ratio(rects.summary_sprite) > sw.config.summary_sprite_edge
                 ),
-                sw.config.wait.timeout,
                 "资料页右边的宝可梦",
             )
             path = _save_screenshot(sw, image, "summary", True)
@@ -340,9 +328,7 @@ def _find_shiny(sw: LairSession) -> list[float]:
             sw,
             lambda: sw.stick("LEFT", 0, -sw.controller.STICK_MAX, sw.config.wait.stick_tick),
             lambda screen, before=shown: _summary_name(sw, screen) not in ("", before),
-            sw.config.wait.timeout,
             "资料页换到下一只",
-            interval=sw.config.wait.press_interval,
         )
     return results
 
@@ -364,9 +350,7 @@ def _back_to_scientist(sw: LairSession) -> None:
             screen.has_text(sw.config.rects.white_center_line1, "不带宝可梦回去")
             and screen.selected(list(sw.config.rects.yes_no)) >= 0
         ),
-        sw.config.wait.timeout,
         "不带走的确认",
-        interval=sw.config.wait.press_interval,
     )
 
 
@@ -399,7 +383,6 @@ def _press_until_black(sw: LairSession) -> None:
         sw,
         lambda: sw.click("A", 0),
         lambda screen: screen.is_black(),
-        sw.config.wait.timeout * 2,
         "转场黑屏",
-        interval=sw.config.wait.press_interval,
+        timeout=sw.config.wait.timeout * 2,
     )
