@@ -5,7 +5,7 @@ from control_switch.games.sv import verify
 from control_switch.games.sv.session import SvSession
 
 
-def menu_to_row(sw: SvSession, row: int) -> None:
+def main_menu_to_row(sw: SvSession, row: int) -> None:
     """主菜单里把光标移到右边第 row 行（从 0 数），按 A 进去。
 
     光标可能在左边的队伍栏上（上次是从队伍栏退出来的），先按 DRIGHT 到右边。
@@ -18,6 +18,7 @@ def menu_to_row(sw: SvSession, row: int) -> None:
             lambda: sw.click("DRIGHT", 0),
             lambda s: verify.menu_row(s, config) != -1,
             "主菜单光标到右边",
+            1
         )
     current = verify.menu_row(image, config)
     while current != row:
@@ -28,6 +29,7 @@ def menu_to_row(sw: SvSession, row: int) -> None:
             lambda key=button: sw.click(key, 0),
             lambda s, last=before: verify.menu_row(s, config) not in (last, -1),
             "主菜单的光标移一格",
+            1
         )
         current = verify.menu_row(image, config)
     # A 有时被吞掉（菜单还在），隔一会儿没进去就再按一次
@@ -36,4 +38,5 @@ def menu_to_row(sw: SvSession, row: int) -> None:
         lambda: sw.click("A", 0),
         lambda s: not verify.is_main_menu(s, config),
         "进主菜单的这一行",
+        1
     )

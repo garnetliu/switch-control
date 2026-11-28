@@ -1,15 +1,18 @@
-"""看画面：截图、出错时存图、等到画面出现、一直按到画面出现。"""
+"""看画面：截图、出错时存图、等到画面出现、一直按到画面出现、读到稳定的结果。"""
 
 import logging
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar
 
 import cv2
 import numpy as np
 
 from control_switch.session import Frame, Session
 from control_switch.vision import ImageChecker
+
+T = TypeVar("T")
 
 
 def capture(sw: Session, what: str) -> ImageChecker:
@@ -68,11 +71,11 @@ def _draw_rects(frame: Frame) -> np.ndarray:
 
 
 def wait_until(
-        sw: Session,
-        condition: Callable[[ImageChecker], bool],
-        what: str,
-        interval: float = 0.0,
-        timeout: float=60.0,
+    sw: Session,
+    condition: Callable[[ImageChecker], bool],
+    what: str,
+    interval: float = 0.0,
+    timeout: float = 60.0,
 ) -> ImageChecker:
     """一直截图，直到 condition(截图) 为真，返回那张截图。
 
@@ -91,12 +94,12 @@ def wait_until(
 
 
 def press_until(
-        sw: Session,
-        action: Callable[[], None],
-        condition: Callable[[ImageChecker], bool],
-        what: str,
-        interval: float = 0.3,
-        timeout: float = 60.0,
+    sw: Session,
+    action: Callable[[], None],
+    condition: Callable[[ImageChecker], bool],
+    what: str,
+    interval: float = 0.3,
+    timeout: float = 60.0,
 ) -> ImageChecker:
     """一直做 action（按键、推摇杆），直到 condition(截图) 为真，返回那张截图。
 
@@ -120,3 +123,26 @@ def press_until(
             if condition(image):
                 logging.debug(what)
                 return image
+
+
+def read_stable(
+    sw: Session,
+    read: Callable[[ImageChecker], T | None],
+    what: str,
+    timeout: float = 60.0,
+) -> T:
+    """一直截图读，直到连着 3 帧读到一样的、不是 None 的结果，返回它。
+
+    画面刚变的时候（比如盒子光标刚移到一格，右边的面板还没换）只看一帧会读到上一个画面的内容。
+    等了 timeout 秒还没稳定抛 TimeoutError。
+    """
+    frames = 3
+    values: list[T | None] = []
+    deadline = time.monotonic() + timeout
+    while True:
+        values.append(read(capture(sw, what)))
+        last = values[-frames:]
+        if len(last) == frames and last[0] is not None and all(v == last[0] for v in last):
+            return last[0]
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"等了 {timeout} 秒，读到的一直不稳定：{what}")

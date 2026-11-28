@@ -7,8 +7,8 @@ from control_switch.flow import capture, wait_until
 from control_switch.games.sv import verify
 from control_switch.games.sv.session import SvSession
 
-from .menu_to_row import menu_to_row
-from .open_menu import open_menu
+from .main_menu_to_row import main_menu_to_row
+from .main_menu_open import main_menu_open
 
 
 def open_picnic(sw: SvSession) -> None:
@@ -26,9 +26,10 @@ def open_picnic(sw: SvSession) -> None:
         if verify.is_picnic(image, config):
             break
         if verify.is_overworld(image, config):
-            open_menu(sw)
+            main_menu_open(sw)
         elif verify.is_main_menu(image, config):
-            menu_to_row(sw, config.menu.picnic_row)
+            # 主菜单里「野餐」是第 2 行（从 0 数）
+            main_menu_to_row(sw, 2)
             # 进野餐的动画里画面还像野外，不能再按 X，等野餐的画面出来
             wait_until(
                 sw,

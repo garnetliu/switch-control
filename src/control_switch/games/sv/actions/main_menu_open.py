@@ -5,7 +5,7 @@ from control_switch.games.sv import verify
 from control_switch.games.sv.session import SvSession
 
 
-def open_menu(sw: SvSession) -> None:
+def main_menu_open(sw: SvSession) -> None:
     """在野外按 X 打开主菜单，认到菜单为止。
 
     按 X 有时没反应（真机上刚退回野外时按的那次被吞掉过），所以没出菜单就再按一次。

@@ -5,7 +5,7 @@ from control_switch.games.sv.session import SvSession
 from control_switch.settings import Settings
 
 from .config import IncubatorConfig
-from .types import TeamType
+from .types import Boxes, TeamType
 
 
 class IncubatorSession(SvSession):
@@ -18,18 +18,12 @@ class IncubatorSession(SvSession):
         # 当前队伍是孵蛋还是拿蛋、亲代「最棒」的项数，initialize 读出来
         self.team_type = TeamType.FETCH
         self.parent_best = 0
-        # 放蛋的盒子编号：第一次打开盒子时读出开着的是哪个，放蛋的是它后面那个
-        self.egg_box: int | None = None
+        # 用到的三个盒子：锚点、放蛋的、放留下来的，initialize 找出来
+        self.boxes = Boxes(-1, -1, -1)
         # 现在有几个蛋，initialize 数出来：拿蛋时是放蛋的盒子里的蛋（还差 max_eggs 减它），
         # 孵蛋时是放蛋的盒子和队伍里的蛋（就是还要孵的数）
         self.eggs = 0
         # 队伍里还剩几个蛋：换蛋时数出来，每孵出一个减 1
         self.eggs_in_party = 0
-        # 这一盒有没有出闪光，是盒子里面的第几个，-1 代表没有
-        self.shiny_in_box = -1
-        # 这一盒有没有需要和亲代换的，是盒子的第几个，-1 代表没有
-        self.parent_in_box = -1
-        # 留下东西之后还没存档
-        self.save_pending = False
         # 开了几次野餐，写日志用
         self.picnics = 0

@@ -31,7 +31,9 @@ def fly_to_gate(sw: EggSession) -> None:
         lambda s: s.is_black(),
         "飞走的黑屏",
     )
-    wait_until(sw, lambda s: screens.is_overworld(s, config), "飞到零区闸口", timeout=config.fly_timeout)
+    wait_until(
+        sw, lambda s: screens.is_overworld(s, config), "飞到零区闸口", timeout=config.fly_timeout
+    )
     # 刚认出野外画面时人还动不了，马上按键会被吃掉
     time.sleep(1)
     logging.info(f"飞到了{config.gate_name}")

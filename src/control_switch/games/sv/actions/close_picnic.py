@@ -1,7 +1,6 @@
 """收起野餐，回到野外：按 Y 直到出确认框，按 A 直到回到野外，最后再等一会儿。"""
 
 import logging
-import time
 
 from control_switch.flow import press_until
 from control_switch.games.sv import verify
@@ -27,4 +26,3 @@ def close_picnic(sw: SvSession) -> None:
         "回到野外",
         timeout=timeout,
     )
-    time.sleep(3.0)

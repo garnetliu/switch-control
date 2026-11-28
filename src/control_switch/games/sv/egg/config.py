@@ -91,12 +91,12 @@ class EggConfig(SvConfig):
     recipe_press_wait = 1.04
     recipe_start_look = 3.0
     # 桌子的菜单：选中第一项（做料理）的箭头
-    table_arrow_area: Rect = ((0.551, 0.311), (0.861, 0.417))
+    table_arrow_area: Rect = ((0.7161, 0.3213), (0.7625, 0.4139))
     # 食谱列表：两列三行；每格的箭头（左上角、宽高）、编号（左上角、宽高）、两格之间的间距
     recipe_columns = 2
     recipe_rows = 3
-    recipe_arrow_origin = (0.103, 0.074)
-    recipe_arrow_size = (0.068, 0.085)
+    recipe_arrow_origin = (0.112, 0.0731)
+    recipe_arrow_size = (0.0521, 0.0825)
     recipe_id_origin = (0.015, 0.240)
     recipe_id_size = (0.042, 0.048)
     recipe_step = (0.26, 0.277)
@@ -106,7 +106,7 @@ class EggConfig(SvConfig):
     recipe_id_border = 10
     recipe_max = 151
     # 选签子的界面：选中第一根签子的箭头
-    pick_arrow_area: Rect = ((0.013, 0.167), (0.069, 0.251))
+    pick_arrow_area: Rect = ((0.0208, 0.1611), (0.0672, 0.2537))
 
     # ---- 做三明治 ----
     # 做三明治的画面一出来就等手出现，最多几秒；盘子的标签要等几秒才出来
@@ -260,7 +260,7 @@ class EggConfig(SvConfig):
     move_row = 0
     release_row = 4
     # 放生确认框里「是」那一行箭头的位置（光标默认在下面的「否」）
-    release_yes_area: Rect = ((0.71, 0.59), (0.78, 0.65))
+    release_yes_area: Rect = ((0.7161, 0.5713), (0.7625, 0.6639))
 
     # ---- 飞到零区闸口（fly.py） ----
     gate_name = "零区闸口"

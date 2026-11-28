@@ -18,8 +18,6 @@ def release(sw: EggSession) -> str:
     config = sw.config
     box.open_box(sw)
 
-
-
     for agg in range(config.max_eggs):
         actions.menu_to_option(sw)
 

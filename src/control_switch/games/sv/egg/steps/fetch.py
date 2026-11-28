@@ -45,7 +45,7 @@ def fetch(sw: EggSession) -> str:
     return "hatch"
 
 
-def _to_picnic_party(sw: EggSession) ->None:
+def _to_picnic_party(sw: EggSession) -> None:
     """打开盒子看队伍前两只里有没有百变怪：没有就是孵蛋队伍（放生过来的），换回野餐队伍。最后退出盒子。"""
     config = sw.config
     box.open_box(sw)

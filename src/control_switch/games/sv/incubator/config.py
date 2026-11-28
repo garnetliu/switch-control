@@ -21,3 +21,10 @@ class IncubatorConfig(SvConfig):
     # 一次野餐最多收几个蛋，收蛋最多等几秒（三明治的效果 30 分钟）
     max_eggs = 30
     fetch_limit = 1800
+    # 一共有多少个盒子，最后一个往后是第一个
+    box_count = 32
+    # 盒子有多少行多少列
+    box_rows = 5
+    box_columns = 6
+    # 队伍一共有多少个
+    party_rows = 6

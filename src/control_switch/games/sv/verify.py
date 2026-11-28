@@ -1,4 +1,4 @@
-"""朱紫几个脚本共用的画面判断：只看传进来的截图，不按键、不截图。区域和阈值在 SvConfig 里。"""
+"""朱紫几个脚本共用的画面判断。大多只看传进来的截图；要连着几帧读到稳定的（box_title）会自己截图。"""
 
 import re
 import unicodedata
@@ -8,47 +8,50 @@ from importlib.resources import files
 import cv2
 import numpy as np
 
+from control_switch.flow import read_stable
 from control_switch.types import Hsv, Rect
 from control_switch.vision import ImageChecker
 
 from .config import SvConfig
+from .session import SvSession
 
 
 def has_dialog_box(image: ImageChecker, config: SvConfig) -> bool:
     """下方有对话框：左上角是黄色，框里大部分是暗色。"""
-    lower, upper = config.dialog.yellow
-    if image.color_ratio(config.dialog.corner, lower, upper) <= config.dialog.corner_ratio:
+    # 对话框左上角的黄色小角标，黄色占比超过 0.3
+    if image.color_ratio(((0.251, 0.724), (0.271, 0.741)), (20, 150, 180), (35, 255, 255)) <= 0.3:
         return False
-    body = image.crop(config.dialog.body)
-    dark = body.max(axis=2) < config.dialog.dark_max
-    return float(dark.mean()) > config.dialog.dark_ratio
+    # 框里的暗色底（BGR 三个通道都小于 60）占比超过 0.8。左边从文字左边缘之前开始，
+    # 右边停在右下角翻页的小三角之前，左右离暗色底的边缘一样远（1080p 下暗色底 0.255 到 0.744）
+    body = image.crop(((0.279, 0.75), (0.721, 0.88)))
+    dark = body.max(axis=2) < 60
+    return float(dark.mean()) > 0.8
 
 
 def is_dialog(image: ImageChecker, config: SvConfig) -> bool:
     """有对话框，并且右下角有翻页的小三角：按 A 或 B 能往下翻。"""
     if not has_dialog_box(image, config):
         return False
-    lower, upper = config.dialog.arrow_white
-    return image.color_ratio(config.dialog.arrow, lower, upper) > config.dialog.arrow_ratio
+    # 右下角翻页的小三角（▽）：白色像素占比超过 0.03
+    return image.color_ratio(((0.705, 0.845), (0.745, 0.900)), (0, 0, 200), (180, 60, 255)) > 0.03
 
 
 def gradient_arrow(image: ImageChecker, area: Rect, config: SvConfig) -> bool:
     """区域里有选中用的渐变箭头：黄绿色和青色的像素都够多。"""
     (left, top), (right, bottom) = area
     size = (right - left) * (bottom - top)
-    yellow_lower, yellow_upper = config.gradient_arrow.yellow
-    cyan_lower, cyan_upper = config.gradient_arrow.cyan
+    # 黄绿色、青色的像素数占整张截图的比例，黄绿色超过 0.0002、青色超过 0.0001 才算有箭头
     return (
-        image.color_ratio(area, yellow_lower, yellow_upper) * size
-        > config.gradient_arrow.yellow_min
-        and image.color_ratio(area, cyan_lower, cyan_upper) * size > config.gradient_arrow.cyan_min
+        image.color_ratio(area, (30, 150, 200), (48, 255, 255)) * size > 0.0002
+        and image.color_ratio(area, (75, 100, 150), (105, 255, 255)) * size > 0.0001
     )
 
 
 def is_prompt(image: ImageChecker, config: SvConfig) -> bool:
     """对话框带选择框（「是 / 否」）：选择框里有选中的箭头。"""
+    # 选择框的箭头在这个范围里
     return has_dialog_box(image, config) and gradient_arrow(
-        image, config.dialog.prompt_area, config
+        image, ((0.7156, 0.5435), (0.762, 0.7194)), config
     )
 
 
@@ -134,16 +137,15 @@ def is_picnic(image: ImageChecker, config: SvConfig) -> bool:
 
 def menu_row(image: ImageChecker, config: SvConfig) -> int:
     """主菜单光标在右边第几行（从 0 数）；光标不在右边的菜单上返回 -1。"""
+    # 右边六行：第一行的上边、行高、左右；光标在这一行上时整行是黄色，黄色占比超过 ratio
+    rows, top, row_height, left, right = 6, 0.224, 0.0736, 0.693, 0.953
     lower, upper = config.menu.yellow
     ratios = []
-    for i in range(config.menu.rows):
-        top = config.menu.top + config.menu.row_height * i
-        rect: Rect = (
-            (config.menu.left, top),
-            (config.menu.right, top + config.menu.row_height),
-        )
+    for i in range(rows):
+        row_top = top + row_height * i
+        rect: Rect = ((left, row_top), (right, row_top + row_height))
         ratios.append(image.color_ratio(rect, lower, upper))
-    best = max(range(config.menu.rows), key=lambda i: ratios[i])
+    best = max(range(rows), key=lambda i: ratios[i])
     return best if ratios[best] > config.menu.ratio else -1
 
 
@@ -151,12 +153,28 @@ def is_main_menu(image: ImageChecker, config: SvConfig) -> bool:
     """主菜单：光标在右边的某一行上，或者在左边队伍栏的第一格上。"""
     if menu_row(image, config) != -1:
         return True
+    # 光标在左边队伍栏上时，队伍第一格是黄色
     lower, upper = config.menu.yellow
-    return image.color_ratio(config.menu.party, lower, upper) > config.menu.ratio
+    return image.color_ratio(((0.045, 0.16), (0.30, 0.25)), lower, upper) > config.menu.ratio
 
 
-def box_title(image: ImageChecker, config: SvConfig) -> int | None:
-    """盒子画面的盒子编号，读不到返回 None。"""
-    text = unicodedata.normalize("NFKC", image.read_text(config.box.title_area))
-    match = re.search(r"盒子\s*(\d+)", text)
-    return int(match.group(1)) if match else None
+def box_title(sw: SvSession) -> int:
+    """盒子画面的盒子编号：连着 3 帧读到一样的才返回。
+
+    打开盒子时画面先半透明地闪一下、黑屏，才真正出来，半透明时也读得出编号，只看一帧会读早了。
+    等了 timeout 秒还没稳定抛 TimeoutError。
+    """
+    return read_stable(
+        sw,
+        lambda image: (
+            int(match.group(1))
+            if (
+                match := re.search(
+                    r"盒子\s*(\d+)",
+                    unicodedata.normalize("NFKC", image.read_text(((0.34, 0.11), (0.56, 0.165)))),
+                )
+            )
+            else None
+        ),
+        "盒子编号",
+    )

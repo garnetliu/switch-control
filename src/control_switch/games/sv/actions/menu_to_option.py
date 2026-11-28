@@ -1,4 +1,3 @@
-
 from control_switch.flow import press_until
 from control_switch.games.sv import verify
 from control_switch.games.sv.session import SvSession
